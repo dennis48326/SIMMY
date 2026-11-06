@@ -1,9 +1,12 @@
-// @class CameraDirector after E3DWindow EACNodeState EMat4 EVec3
+// @class CameraDirector after E3DWindow EACNodeState EMat4 EVec3 Quad
+// @class CameraMotionSystem
+// @class NewControlParms
 // @class ESimsCam
 // @class ESimsCam__CameraMode
 // @class ESimsCam__CameraParameters
 // @class SimsCameraParameters
 // @class CamDirInterpType
+// @class anim__PropKind
 // The game camera (game/camera.cpp). ESimsCam is a player's camera: a 3D window plus the eye, target
 // and up it looks along, a zoom (distance), rotation and tilt with "actual" values that follow the
 // targets, and camera noise. Its tuning comes from ESimsCam::s_params (one SimsCameraParameters per
@@ -12,9 +15,17 @@
 // cuts and interpolations, then hands the camera back.
 #pragma once
 
+#include "simmy/classes/quad.hpp"  // (ESimsCam holds two)
+
 // How CameraDirector interpolates: 0 at the speed the distance needs over the time, 1 over the time.
 struct CamDirInterpType {
   SIMMY_ENUM_BODY(CamDirInterpType)
+};
+
+// An animation note's kind (anim::PropKind; EAnimNote +0x04): 5 a sound, 6 an event number, 0xD bloom,
+// 0xE motion blur, 0xF depth of field, ...
+struct anim__PropKind {
+  SIMMY_ENUM_BODY(anim__PropKind)
 };
 
 // Camera tuning (0x1C8 bytes; GC vtable at +0x1C4).
@@ -84,6 +95,55 @@ struct SimsCameraParameters {
   int m_field1C0 = 0;             // +0x1C0
 };
 
+// Moves the real camera toward the rig the camera computes (0x5C bytes). Type 0 snaps, 1 rubber-bands
+// (each of eye and target eases by the tuning's +0x50 far from it / +0x54 within +0x4C). Nothing in the
+// game sets the type, so the camera always snaps.
+struct CameraMotionSystem {
+  explicit CameraMotionSystem(SimsCameraParameters* params);  // 8001606C
+  ~CameraMotionSystem();  // 80016080
+  void SetMotionType(int type);  // 800160A8
+  int GetMotionType();  // 800160B0
+  void SetRig(EVec3& eye, EVec3& target, EVec3& up);  // 800160B8
+  void SnapCamera();  // 80016110
+  void MoveCamera(float dt);  // 8001621C
+  void RubberBandInterpolate(EVec3* value, EVec3 target, float dt);  // 80016258
+  void RubberBandMove(float dt);  // 8001639C
+
+  int m_type = 0;                          // +0x00 CameraMotionType
+  SimsCameraParameters* m_params = nullptr;  // +0x04
+  EVec3 m_rigEye;                          // +0x08 where the camera should be
+  EVec3 m_rigTarget;                       // +0x14
+  EVec3 m_rigUp;                           // +0x20
+  EVec3 m_eye;                             // +0x2C where it is
+  EVec3 m_target;                          // +0x38
+  EVec3 m_up;                              // +0x44
+  EVec3 m_forward;                         // +0x50 normalized m_target - m_eye
+};
+
+// The classic cursor's camera tuning (ESimsCam::s_newControlParms, 0xC4 bytes, GC vtable at +0xC0). Only
+// the fields the camera reads are kept; the constructor's other values (+0x00..+0x78) are unused.
+struct NewControlParms {
+  NewControlParms();  // 8001E6DC
+  virtual ~NewControlParms();  // 8039DADC
+  void Validate();  // 8001E878
+
+  int m_followArea = 1;          // +0x2C 1: the camera follows a cursor that leaves its area (+0x360); 0: the cursor is pinned to it
+  float m_followRate = 0.6f;     // +0x7C the share of the cursor's overshoot the target moves per frame
+  float m_trap[4] = {};          // +0x80 the area on screen: top y, top width (by zoom: +0x90..+0x94), bottom y, bottom width
+  float m_topWidthNear = 0.5f;   // +0x90
+  float m_topWidthFar = 0.45f;   // +0x94
+  float m_depthNear = 3.0f;      // +0x98 the area's depth on the ground (the top corners), by zoom
+  float m_depthFar = 5.0f;       // +0x9C
+  int m_centerArea = 1;          // +0xA0 CenterOnSelectedSim: without an interactor, pull the target into +0x390
+  int m_fieldA4 = 0;             // +0xA4
+  float m_centerPull = 0.3f;     // +0xA8 CenterOnSelectedSim: the share of the overshoot the target moves
+  float m_areaScale = 1.0f;      // +0xAC UpdateWin's ground area (+0x390): along the view, front and back offsets
+  float m_areaFront = 0.5f;      // +0xB0
+  float m_areaFrontWidth = 1.25f;  // +0xB4
+  float m_areaBack = -0.5f;      // +0xB8
+  float m_areaBackWidth = 1.25f;   // +0xBC
+};
+
 // 0x570 bytes (GC vtable at +0x56C).
 // 0: the camera follows the player's cursor, 1: the selected sim, 2 (SetMode): the previous mode.
 struct ESimsCam__CameraMode {
@@ -113,7 +173,7 @@ struct ESimsCam {
   void ForceFullScreenViewport();  // 80016A1C
   void Init();  // 80016A8C
   void Reset();  // 80016AB8
-  void SetState(Panelstateman__Panelstate);  // 80016B54
+  void SetState(int panelState);  // 80016B54 (Panelstateman::Panelstate)
   void SetMode(ESimsCam__CameraMode);  // 80016BD4
   void FollowPlayerInteractor();  // 80016C34
   virtual void Update();  // 80016DB8
@@ -122,6 +182,7 @@ struct ESimsCam {
   void SetZoom(float zoom);  // 80017070
   int HandleRotation();  // 8001709C
   int HandleZoom();  // 800172E8
+  void PullTargetToCursor(float rate);  // PC helper: the cursor pull shared by HandleRotation / HandleZoom
   int PcKeyboardMouseCamera();  // PC: the mouse's turn and zoom, the pan keys (pc_kbm.cpp)
   void UpdateWin();  // 80017490
   double CalcTiltFromZoom(float);  // 80017A90
@@ -140,24 +201,24 @@ struct ESimsCam {
   void SetPos(EVec3& eye, EVec3& target, EVec3& up);  // 80018FE4
   void ForcePosition(EVec3 &, EVec3 &, EVec3 &);  // 8001916C
   void ForceTarget(EVec3 &);  // 800192FC
-  static void PointOffScreen(EVec3 &);  // 80019364
-  void PointOutsideScreenRect(EVec3 &, float, float, float, float);  // 80019398
-  RET_UNKNOWN ValidateCursorPosition(int, EVec3 *);  // 8001942C
+  int PointOffScreen(EVec3& p);  // 80019364
+  int PointOutsideScreenRect(EVec3& p, float left, float top, float right, float bottom);  // 80019398
+  void ValidateCursorPosition(int player, EVec3* pos);  // 8001942C
   unsigned short CalRoomId(EVec3& pos);  // 80019628
-  RET_UNKNOWN GetContainingRoomId(EVec3 &);  // 8001976C
+  unsigned short GetContainingRoomId(EVec3& pos);  // 8001976C
   RET_UNKNOWN CursorMoved(int, EVec3 &);  // 80019A00
   void SetWinPos(E3DWindow& win);  // 80019A04
   static float CalcPitch(EVec3& dir);  // 80019DFC
   static float CalcZAxisTheta(EVec3& dir);  // 80019EA8
-  RET_UNKNOWN GetCursorPos();  // 80019F6C
+  EVec3 GetCursorPos();  // 80019F6C
   double GetCursorSpeed();  // 8001A00C
-  double GetCursorLimitTopWidth();  // 8001A03C
-  double GetCursorLimitDepth();  // 8001A074
+  float GetCursorLimitTopWidth();  // 8001A03C
+  float GetCursorLimitDepth();  // 8001A074
   void GetObjectPosition(EVec3 *, cXObject *);  // 8001A0AC
   void GetObjectOrientation(EVec3 *, cXObject *);  // 8001A168
   void SetAnimationMode(CameraAnimationMode, cXObject *, cXObject *, bool);  // 8001A22C
   RET_UNKNOWN DrawDebug(ERC *);  // 8001A24C
-  RET_UNKNOWN CursorNotActive();  // 8001A2B8
+  int CursorNotActive();  // 8001A2B8
   void SetActiveNoiseSetting(int setting);  // 8001A328
   EVec3 ApplyNoise(EVec3 eye, EVec3 target, EVec3 up);  // 8001A424
   void DrawCameraInfo(ERC *);  // 8001AA74
@@ -190,12 +251,15 @@ struct ESimsCam {
 
   static SimsCameraParameters s_params[2];  // 804735D8
   static int m_modeDef;  // 804FD974 the mode cameras start in
+  static NewControlParms s_newControlParms;  // 80473514
 
   SimsCameraParameters* m_params = nullptr;  // +0x000
   int m_player = 0;                    // +0x004
   int m_moved = 0;                     // +0x008 rotated or zoomed this frame
   E3DWindow m_win;                     // +0x010
-  EVec3 m_cursorQuad[4];               // +0x390 the ground area the cursor may move in (UpdateWin)
+  Quad m_cursorLimit;                  // +0x360 the ground under the screen area the classic cursor moves in
+                                       //        without moving the camera (ValidateCursorPosition)
+  Quad m_cursorQuad;                   // +0x390 a ground area around the target (UpdateWin; CenterOnSelectedSim)
   int m_mode = 1;                      // +0x3CC ESimsCam::CameraMode (0 follow the cursor, 1 the sim)
   int m_prevMode = 1;                  // +0x3D0
   int m_field3D4 = 0;                  // +0x3D4
@@ -261,7 +325,7 @@ struct CameraDirector {
   RET_UNKNOWN ReleaseToGameCamera();  // 8001C540
   RET_UNKNOWN InterpToGameCamera(float, CamDirInterpType);  // 8001C69C
   void SetHoldState(float);  // 8001C830
-  void InterpToCancelCamera(float, CamDirInterpType, bool);  // 8001C840
+  void InterpToCancelCamera(float time, CamDirInterpType type, bool again);  // 8001C840
   RET_UNKNOWN CalcSimsCam();  // 8001C8D4
   FrameEffectsManager* GetFrameEffectsManager();  // 8001CAF8
   void CalcCancelCam();  // 8001CB00
@@ -275,9 +339,9 @@ struct CameraDirector {
   void UpdateAnimNoteTrack();  // 8001DB94
   void UpdateCameraPosAndFOV();  // 8001DC68
   void LetterBox(bool);  // 8001DFC8
-  void Draw(ERC *);  // 8001DFE0
+  void Draw(ERC* rc);  // 8001DFE0 the letterbox
   void ProcessPropertyEventTags();  // 8001E1FC
-  static RET_UNKNOWN ProcessAnimEvents(AnimRef *, int, int);  // 8001E2E0
+  RET_UNKNOWN ProcessAnimEvents(AnimRef* ref, int from, int length);  // 8001E2E0 (GC: called with `this`)
   RET_UNKNOWN AnimEventHandler(AnimRef *, EAnimNote &, int);  // 8001E3E0
   void BeginCameraBloomInterp(CameraBloomDataElement *);  // 8001E4C0
   void BloomInterp();  // 8001E540
@@ -333,6 +397,10 @@ struct CameraDirector {
   FrameEffectsManager* m_frameEffects = nullptr;  // +0x2D0
   float m_bloomTime = 0;               // +0x2D4
   float m_blurTime = 0;                // +0x2D8
+  float m_bloomFrom[4] = {};           // +0x2DC the camera bloom an interpolation starts from (EGraphics)
+  float m_bloomTo[4] = {};             // +0x2EC and goes to (BeginCameraBloomInterp)
+  float m_blurFrom[4] = {};            // +0x2FC the same for the motion blur parameters
+  float m_blurTo[4] = {};              // +0x30C
   unsigned int m_effectFlags = 0;      // +0x31C 1: bloom, 2: blur interpolating
   int m_field320 = 0;                  // +0x320
   int m_field324 = 0;                  // +0x324

@@ -4,6 +4,7 @@
 #include "simmy/types_gen.hpp"
 #include "simmy/unported_globals.hpp"
 
+#include <cmath>
 #include <cstring>
 
 namespace {
@@ -99,4 +100,98 @@ RET_UNKNOWN E3DWindow::TransformToScreen(EVec3& p, EVec3& out, float zOffset) {
   out.y = v[1] * k * m_vpIn.m_scale[1] + m_vpIn.m_center[1];
   out.z = (v[2] + zOffset) * k;
   return 1;
+}
+
+// ---- Screen to ground (the camera's cursor area, ESimsCam::ValidateCursorPosition) ----------------
+
+// 802E67F4
+// The view's half extents at unit distance: 1 / the projection's x and y scales.
+void E3DWindow::GetFOVLengths(float* x, float* y) {
+  *y = 1.0f / m_projection.m[1][1];
+  *x = 1.0f / m_projection.m[0][0];
+}
+
+// 802E65D8
+// The world direction (normalized) through a point of the window (input coordinates); false outside it.
+RET_UNKNOWN E3DWindow::TransformToWorld(EVec2& p, EVec3& dir) {
+  float sx = (p.x - m_vpIn.m_center[0]) / m_vpIn.m_scale[0];
+  float sy = (p.y - m_vpIn.m_center[1]) / m_vpIn.m_scale[1];
+  if (sx < -1.0f || 1.0f < sx || sy < -1.0f || 1.0f < sy) return 0;
+  float fx, fy;
+  GetFOVLengths(&fx, &fy);
+  sy *= fy;
+  sx *= fx;
+  const EMat4& m = m_lookAtPos;
+  dir.x = (m.m[0][0] * sx + m.m[1][0] * sy) - m.m[2][0];
+  dir.y = (m.m[0][1] * sx + m.m[1][1] * sy) - m.m[2][1];
+  dir.z = (m.m[0][2] * sx + m.m[1][2] * sy) - m.m[2][2];
+  if (dir.x != 0.0f || dir.y != 0.0f || dir.z != 0.0f) {
+    const float k = 1.0f / std::sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
+    dir.x *= k, dir.y *= k, dir.z *= k;
+  }
+  return 1;
+}
+
+// 802E6D90
+// Where the line from the eye through `point` meets the plane z = `z`, when it looks down at least ~10
+// degrees (sin 0.1736); else its direction across the ground (negated, as seen back from the point) with
+// z = `z` - 1 marking it as a direction.
+void E3DWindow::ProjectToZPlane(EVec3* out, float z, EVec3& point) {
+  EVec3 v{m_lookPos.x - point.x, m_lookPos.y - point.y, m_lookPos.z - point.z};
+  if (v.x != 0.0f || v.y != 0.0f || v.z != 0.0f) {
+    const float k = 1.0f / std::sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+    v.x *= k, v.y *= k, v.z *= k;
+  }
+  if (0.1736f <= v.z) {
+    const float t = (z - m_lookPos.z) / v.z;
+    out->x = m_lookPos.x + t * v.x;
+    out->y = m_lookPos.y + t * v.y;
+    out->z = z;
+    return;
+  }
+  v.z = 0.0f;
+  if (v.x != 0.0f || v.y != 0.0f) {
+    const float k = 1.0f / std::sqrt(v.x * v.x + v.y * v.y);
+    v.x *= k, v.y *= k;
+  }
+  out->x = -v.x;
+  out->y = -v.y;
+  out->z = z - 1.0f;
+}
+
+// 802E6F64
+// The direction from the eye to `point` across the ground (x, y normalized), z = `z` - 1.
+void E3DWindow::MakeLineOnPlane(EVec3* out, float z, EVec3& point) {
+  EVec3 v{m_lookPos.x - point.x, m_lookPos.y - point.y, 0.0f};
+  if (v.x != 0.0f || v.y != 0.0f) {
+    const float k = 1.0f / std::sqrt(v.x * v.x + v.y * v.y);
+    v.x *= k, v.y *= k;
+  }
+  out->z = z - 1.0f;
+  out->x = -v.x;
+  out->y = -v.y;
+}
+
+// 802E7210
+// The ground under a trapezoid of the window: trap = {top y, top width, bottom y, bottom width} (input
+// coordinates, centred on x = 0.5). The top corners (0: right, 1: left) are directions across the ground
+// (MakeLineOnPlane), the bottom ones (2: left, 3: right) points on the plane z = `z` (ProjectToZPlane).
+// (GC also computes each ray turned by the camera matrix and traces it; both unused.)
+void E3DWindow::Get3DQuadFromScreenTrapAtZ(float z, float* trap, Quad* quad) {
+  auto rayPoint = [this](float sx, float sy) {
+    EVec2 s{sx, sy};
+    EVec3 dir{0.0f, 0.0f, 0.0f};
+    TransformToWorld(s, dir);
+    return EVec3{dir.x + m_lookPos.x, dir.y + m_lookPos.y, dir.z + m_lookPos.z};
+  };
+  float half = trap[1] * 0.5f;
+  EVec3 p = rayPoint(half + 0.5f, trap[0]);
+  MakeLineOnPlane(&quad->m_points[0], z, p);
+  p = rayPoint(0.5f - half, trap[0]);
+  MakeLineOnPlane(&quad->m_points[1], z, p);
+  half = trap[3] * 0.5f;
+  p = rayPoint(0.5f - half, trap[2]);
+  ProjectToZPlane(&quad->m_points[2], z, p);
+  p = rayPoint(half + 0.5f, trap[2]);
+  ProjectToZPlane(&quad->m_points[3], z, p);
 }

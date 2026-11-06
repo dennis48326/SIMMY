@@ -952,22 +952,204 @@ int ELiveMode::IsReadyForUpdate() {
   return 1;
 }
 
+namespace {
+// 80423E6C s_introCameraName: each lot's move-in camera animation (AnimRef rows), by house - 1.
+const char* const s_introCameraName[16] = {
+    "cam_intro_lot01_story_part01", "cam_intro_lot02_story_part01", "cam_intro_lot03_story_part01",
+    "cam_intro_lot04_story_part01", "cam_intro_lot05_story_part01", "cam_intro_lot06_story_part01",
+    "cam_intro_lot07_story_part01", "cam_intro_lot08_story_part01", "cam_intro_lot09_story_part01",
+    "cam_intro_lot10_story_part01", "cam_intro_lot11_story_part01", "cam_intro_lot12_story_part01",
+    nullptr, nullptr, nullptr, nullptr};
+}  // namespace
+
 // 8008DF28
-// GC: the camera animation over the lot when a new family moves in (CameraDirector), after which the
-// loading screen goes. PC: skipped (the house is shown at once).
+// The camera shot when a family arrives on a lot (TriggerIntroCamera; both players' directors in
+// two-player games). It runs when the family has just moved in or comes back from CAS (EGlobal +0xB0,
+// the CAS mode), not for a CAS return in two-player games, and (on its first step) only while the lot is
+// "recently unlocked" (type 2 unlocks of the player family): each lot's story intro plays once.
+// Steps (+0x0C): 1 wait until a family member is awake and visible, the camera's player has a selected
+// sim and its instance is placed; then the lot is no longer recently unlocked, the loading screen goes
+// (free play: straight to 6); 2 start the shot (StartIntroCamera; failing: the directors reset); 3 wait
+// for the animation to reach its hold; 4 hold for 10 s of unpaused simulation, then let go
+// (EndIntroCamera); a director that is playing something else instead (another shot took it) has the game
+// camera put back later (+0x320) and the intro ends; 5 wait for the directors to finish; 6 done.
+// Otherwise everything is reset (both directors, the letterbox, both cameras) and the loading screen goes.
 void ELiveMode::UpdateIntroCamera() {
-  SIMMY_STUB("ELiveMode::UpdateIntroCamera (the move-in camera animation)", 0x8008DF28);
-  m_introCamera = 0;
-  // GC (state 6): both players' directors let go of their cameras in two-player mode.
-  for (int i = 0; i < (_gd.m_fieldEC ? 2 : 1); ++i)
-    if (CameraDirector* d = _globals.CameraDirectorOf(i)) d->m_state = 0;
-  // GC (its end): both directors reset, no letterbox (which also lets the object fades work).
-  for (int i = 0; i < 2; ++i)
-    if (CameraDirector* d = _globals.CameraDirectorOf(i)) d->LetterBox(false);
-  m_dontDraw = 0;
-  gbDrawUI = 1;
-  gbUpdateUI = 1;
-  LoadingScreenStateMachine::LoadFinishing();
+  FamilyImpl* family = Globs_pNeighborhood ? Globs_pNeighborhood->GetFamily(1) : nullptr;
+  // The house (GC: NghResFile +0x24 + 1; PC: the house's own number, as the PC house load puts the
+  // file's current house back afterwards).
+  const short lotUnlock = static_cast<short>(_globals.m_house ? _globals.m_house->m_house : 0);
+  int skip = 0;
+  if (m_introCamera == 1 && family) {
+    GoalUnlock unlocks = FamilyGoalUnlock(1);
+    skip = unlocks.m_bits && unlocks.IsRecentlyUnlocked(IGoalUnlock__UnlockType{2}, lotUnlock) ? 0 : 1;
+  }
+  CameraDirector* d0 = _globals.CameraDirectorOf(0);
+  CameraDirector* d1 = _globals.CameraDirectorOf(1);
+  ESimsCam* cam0 = _gd.m_players[0].m_cam;
+  ESimsCam* cam1 = _gd.m_players[1].m_cam;
+  const bool run = (!_gd.m_fieldEC || !_globals.m_fieldB0) && (s_familyJustMovedIn || _globals.m_fieldB0) && !skip;
+  // PC dev trace: SIMMY_CAM_TRACE=1 prints the intro camera's steps.
+  static const bool trace = std::getenv("SIMMY_CAM_TRACE") != nullptr;
+  if (trace) {
+    static int s_lastStep = -1;
+    if (s_lastStep != m_introCamera || !run)
+      std::printf("[cam] f%d intro step %d run %d (moved in %d, cas %d, lot %d recently unlocked %d)\n", _framecount,
+                  m_introCamera, run ? 1 : 0, s_familyJustMovedIn, _globals.m_fieldB0, lotUnlock, skip ? 0 : 1);
+    s_lastStep = m_introCamera;
+  }
+  auto finish = [&]() {
+    gbDrawUI = 1;
+    gbUpdateUI = 1;
+    LoadingScreenStateMachine::LoadFinishing();
+  };
+  if (!run) {
+    m_introCamera = 0;
+    m_introTime = 0.0f;
+    _globals.m_fieldAC = 0;
+    _globals.m_fieldB0 = 0;
+    if (d0) d0->Reset();
+    if (d1) d1->Reset();
+    if (d0) d0->LetterBox(false);
+    if (d1) d1->LetterBox(false);
+    if (cam0) cam0->Reset();
+    if (cam1) cam1->Reset();
+    m_dontDraw = 0;
+    finish();
+    return;
+  }
+  switch (m_introCamera) {
+    case 1: {
+      bool ready = false;
+      ESimsCam* cam = _globals.m_cam;
+      cXPerson* person = cam ? _globals.GetSelectedPerson(cam->m_player) : nullptr;
+      if (Globs_pObjectModule && Globs_pObjectModule->IsFamilyMemberAwakeAndVisible() && _globals.m_cameraDirector && person) {
+        cXObject* object = person->AsObject();
+        cXObjectImpl* impl = object ? object->GetObjectImplementation() : nullptr;
+        if (auto* sim = impl ? static_cast<ESim*>(impl->m_instance) : nullptr) {
+          const EMat4& m = sim->m_orient;  // (GC: the instance's +0xC0: placed once its position row is set)
+          ready = m.m[3][0] != 0.0f || m.m[3][1] != 0.0f || m.m[3][2] != 0.0f || m.m[3][3] != 1.0f;
+        }
+      }
+      if (!ready) return;
+      m_introCamera = _gd.m_fieldE8 ? 6 : 2;
+      if (family) {
+        GoalUnlock unlocks = FamilyGoalUnlock(1);
+        if (unlocks.m_bits) unlocks.SetRecentlyUnlocked(IGoalUnlock__UnlockType{2}, lotUnlock, false);
+      }
+      finish();
+      return;
+    }
+    case 2:
+      if (StartIntroCamera(d0, cam0)) {
+        if (_gd.m_fieldEC && d1) d1->RegisterCurrentCamera(cam1, false);
+        m_introCamera = 3;
+      } else {
+        m_introCamera = 0;
+        _globals.m_fieldB0 = 0;
+        _globals.m_fieldAC = 0;
+        if (d0) d0->Reset();
+        if (_gd.m_fieldEC && d1) d1->Reset();
+      }
+      m_dontDraw = 0;
+      return;
+    case 3:
+      if (!d0) return;
+      if (d0->IsActive() && d0->m_state != CameraDirector::kHold) return;
+      m_introCamera = 4;
+      d0->SetHoldState(0.0f);
+      d0->m_flags &= ~1u;
+      m_introTime = 10.0f;
+      return;
+    case 4:
+      if (!d0) return;
+      if (d0->IsActive() && d0->m_state != CameraDirector::kHoldTimed) {
+        d0->m_field320 = 1;
+        if (_gd.m_fieldEC && d1) d1->m_field320 = 1;
+        m_introCamera = 6;
+        return;
+      }
+      if (Globs_pSimulator && Globs_pSimulator->IsStalled()) return;
+      m_introTime -= _dtlim15;
+      if (0.0f <= m_introTime) return;
+      m_introTime = 0.0f;
+      if (!EndIntroCamera(d0, cam0)) return;
+      if (_gd.m_fieldEC) EndIntroCamera(d1, cam1);
+      m_introCamera = 5;
+      return;
+    case 5:
+      if (!d0 || d0->IsActive()) return;
+      m_introCamera = 6;
+      return;
+    case 6:
+      if (d0) d0->m_flags &= ~1u;
+      if (_gd.m_fieldEC && d1) d1->m_flags &= ~1u;
+      m_introCamera = 0;
+      _globals.m_fieldAC = 0;
+      _globals.m_fieldB0 = 0;
+      return;
+    default:
+      m_introCamera = 0;
+      _globals.m_fieldAC = 0;
+      _globals.m_fieldB0 = 0;
+      return;
+  }
+}
+
+// 8008FBFC
+// The game camera reset, then (unless EGlobal +0xAC) the world bloom and motion blur set and the shot
+// played on the director: the lot's intro (by house; the lot number kept at +0x54) or, back from CAS,
+// "cam_transition_cas_exit" attached to the selected sim's instance. The director is then disabled (no
+// other shot can take it) and, in two-player games, the camera drawn full screen.
+RET_UNKNOWN ELiveMode::StartIntroCamera(CameraDirector* director, ESimsCam* cam) {
+  if (cam) cam->Reset();
+  if (_globals.m_fieldAC) return 0;
+  _pGfx->SetWorldBloom(2.0f, 0.25f, 2.0f, 1.0f / 3.0f);
+  _pGfx->SetMotionBlur(0.0f, 0.0f, 1.0f, 0.15f);
+  if (!director) return 0;
+  director->m_flags &= ~1u;
+  if (cam) director->RegisterCurrentCamera(cam, true);
+  EResource* qd = _quickdataman.AddRef(0x0C33DB41u, nullptr, 0);
+  auto* quick = static_cast<ERQuickdata*>(qd);
+  const void* table = quick ? quick->getTable("AnimRef") : nullptr;
+  const char* name;
+  if (!_globals.m_fieldB0) {
+    const int lot = _globals.m_house ? _globals.m_house->m_house - 1 : 0;  // (GC: NghResFile +0x24; see UpdateIntroCamera)
+    m_field54 = lot;
+    name = lot >= 0 && lot < 16 ? s_introCameraName[lot] : nullptr;
+  } else {
+    name = "cam_transition_cas_exit";
+  }
+  const void* row = name && table ? quick->getRow(table, name) : nullptr;
+  if (!row) return 0;
+  bool attached = false;
+  if (_globals.m_fieldB0 && cam) {
+    cXPerson* person = _globals.GetSelectedPerson(cam->m_player);
+    cXObject* object = person ? person->AsObject() : nullptr;
+    cXObjectImpl* impl = object ? object->GetObjectImplementation() : nullptr;
+    if (auto* sim = impl ? static_cast<ESim*>(impl->m_instance) : nullptr) {
+      director->AttachDummy(nullptr, &sim->m_orient);
+      attached = true;
+    }
+  }
+  if (!director->StartAnim(const_cast<AnimRef*>(static_cast<const AnimRef*>(row)), attached, false)) return 0;
+  if (cam) cam->SetActiveNoiseSetting(0);
+  director->Update();
+  director->m_flags |= 1u;
+  if (_gd.m_fieldEC && cam) cam->m_fullScreen = 1;
+  return 1;
+}
+
+// 8008FE28
+// Once a family member is awake and visible: the director gives the camera back (ReleaseToGameCamera),
+// the noise stops and the camera shares the screen again.
+RET_UNKNOWN ELiveMode::EndIntroCamera(CameraDirector* director, ESimsCam* cam) {
+  if (!director || !Globs_pObjectModule || !Globs_pObjectModule->IsFamilyMemberAwakeAndVisible()) return 0;
+  director->m_flags &= ~1u;
+  director->ReleaseToGameCamera();
+  if (cam) cam->SetActiveNoiseSetting(-1);
+  if (_gd.m_fieldEC && cam) cam->m_fullScreen = 0;
+  return 1;
 }
 
 // 8008FBD0
@@ -1135,7 +1317,7 @@ void ELiveMode::DrawMain(ERC* rc) {
       ESpriteRenderMan::Instance()->DrawIntoOrderTable();
       _globals.m_house->Draw(rc);
     }
-    if (CameraDirector* d = _globals.CameraDirectorOf(0)) (void)d;  // GC: CameraDirector::Draw (debug)
+    if (CameraDirector* d = _globals.m_cameraDirector) d->Draw(rc);  // the letterbox of this view's shot
     RenderPostProcessEffects(i, rc);
   }
   if (!single) {

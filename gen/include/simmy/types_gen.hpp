@@ -2697,6 +2697,7 @@ struct CameraBloomDataElement {
 struct CameraBlurDataElement {
     CameraBlurDataElement() = default;  // generated: lets derived stubs construct the base
 };
+#include "simmy/classes/quad.hpp"  // hand-written
 #include "simmy/classes/camera.hpp"  // hand-written
 struct CameraManager {
     CameraManager();  // 8001EB3C
@@ -2708,18 +2709,7 @@ struct CameraManager {
     void SetCamera(int, ESimsCam *);  // 8001EC94
     RET_UNKNOWN GetCamera(int);  // 8001ECA0
 };
-struct CameraMotionSystem {
-    CameraMotionSystem() = default;  // generated: lets derived stubs construct the base
-    CameraMotionSystem(SimsCameraParameters *);  // 8001606C
-    ~CameraMotionSystem();  // 80016080
-    void SetMotionType(CameraMotionType);  // 800160A8
-    RET_UNKNOWN GetMotionType();  // 800160B0
-    void SetRig(EVec3 &, EVec3 &, EVec3 &);  // 800160B8
-    RET_UNKNOWN SnapCamera();  // 80016110
-    static void MoveCamera(float);  // 8001621C
-    static void RubberBandInterpolate(EVec3 *, EVec3, float);  // 80016258
-    void RubberBandMove(float);  // 8001639C
-};
+#include "simmy/classes/camera.hpp"  // hand-written
 struct CameraMotionType {
     CameraMotionType() = default;  // generated: lets derived stubs construct the base
 };
@@ -5970,10 +5960,7 @@ struct NeighborhoodConstants : public GlobalConstantsClient {
     NeighborhoodConstants();  // 800D196C
 };
 #include "simmy/classes/neighborhood.hpp"  // hand-written
-struct NewControlParms {
-    NewControlParms();  // 8001E6DC
-    static void Validate();  // 8001E878
-};
+#include "simmy/classes/camera.hpp"  // hand-written
 struct NewLevelLightingLevel {
     NewLevelLightingLevel() = default;  // generated: lets derived stubs construct the base
 };
@@ -6322,12 +6309,6 @@ struct ProtectedAllocPool {
     void Free(void *);  // 802D72C8
 };
 #include "simmy/classes/interestfade.hpp"  // hand-written
-struct Quad {
-    Quad() = default;  // generated: lets derived stubs construct the base
-    RET_UNKNOWN IsInQuad(EVec3 *) const;  // 8030AA9C
-    RET_UNKNOWN PinToQuad(EVec3 *) const;  // 8030ABC4
-    void Draw(ERC *, unsigned int) const;  // 8030AD30
-};
 struct QuickDataBehaviorConstants : public ObjectDataBehaviorConstants {
     virtual RET_UNKNOWN LoadFromIndex(unsigned int, int);  // 80159EE4
     virtual RET_UNKNOWN LoadFromDataID(ObjectDataID &);  // 80159FBC
@@ -7398,9 +7379,7 @@ struct anim {
     using PropKind = ::anim__PropKind;
     anim() = default;  // generated: lets derived stubs construct the base
 };
-struct anim__PropKind {
-    anim__PropKind() = default;  // generated: lets derived stubs construct the base
-};
+#include "simmy/classes/camera.hpp"  // hand-written
 struct anon {
     anon() = default;  // generated: lets derived stubs construct the base
     static void OverrideMotionBlurSettingsFromTokens(FrameEffectsMotionBlurDataElement *, EString *, int);  // 800034C0

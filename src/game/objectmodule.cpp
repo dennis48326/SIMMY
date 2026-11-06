@@ -694,3 +694,19 @@ void ObjectModuleImpl::KillQueueFlush() {
     }
   }
 }
+
+int ObjIsInWorld(cXObjectImpl* o);  // 800DCB50 (objectplace.cpp)
+
+// 800F69BC
+// A person on the lot whose object data 0x22 is clear, awake (cXPersonImpl::IsSleeping), in the world
+// and selectable by a player. (The intro camera waits for one.) PC: the module's people are found by id
+// (GC: its people list, +0x2058; the answer does not depend on the order).
+RET_UNKNOWN ObjectModuleImpl::IsFamilyMemberAwakeAndVisible() {
+  for (int id = 1; id <= GetNumObjects(); ++id) {
+    cXObject* object = GetObjectFromID(static_cast<short>(id));
+    auto* person = object ? dynamic_cast<cXPersonImpl*>(object->GetObjectImplementation()) : nullptr;
+    if (!person) continue;
+    if (person->m_data[0x22] == 0 && !person->IsSleeping() && ObjIsInWorld(person) && person->IsSelectableByPlayer(-1)) return 1;
+  }
+  return 0;
+}

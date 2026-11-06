@@ -16,7 +16,7 @@ unreachable in this build (PDA, EyeToy, Urbz leftovers, Xbox/PS2 code) or replac
   `InteractorModule::CheckNewSimInSocialMode` is ported in [`familyselect.cpp`](../src/game/familyselect.cpp)
   and `DirectInteractor` calls it.
 - Stale header comments (they say "not ported" for ported code): person.hpp/person.cpp, livemode.cpp,
-  camera.cpp, hudtarget.hpp, aptviewer.cpp, objects.hpp, interaction.cpp/hpp, `thesims.cpp`'s NewState
+  hudtarget.hpp, aptviewer.cpp, objects.hpp, interaction.cpp/hpp, `thesims.cpp`'s NewState
   comment, person.cpp's `PlayerSimDescription` comment (roommate insertion is ported in pregame.cpp).
 
 ## Simulation
@@ -61,10 +61,13 @@ unreachable in this build (PDA, EyeToy, Urbz leftovers, Xbox/PS2 code) or replac
   anchor with their own instance).
 - 16:9 follows the window's own aspect (aurora has no `VILockAspectRatio`): no letterboxing in 16:10.
 - Text placed in screen space from 3D positions would be in the 4:3 mapping.
-- Camera: `CameraMotionSystem`, camera noise, cursor pull/area, opaque-room limits, several director
-  details ([camera.md](camera.md)). CAS morph/portrait paths depend on aurora readback (headless: blank).
+- Camera: ported; left are paths the release build never reaches (unsmoothed follow, object animation
+  modes, `ENCamera` cuts) and the camera's room opacity (`ERoom::IsRoomWallsOpaque/IsRoomRoofOpaque`,
+  written but never read) ([camera.md](camera.md)). `cXPersonImpl::IsSleeping` is a stub, so the intro
+  camera's "a family member is awake" wait treats sleepers as awake. CAS morph/portrait paths depend on
+  aurora readback (headless: blank).
 - ESim: the model cache / family info in `initModel`, costume skin-change flushing, the green ghost light.
-- Walls: `ERoom::InitRoomLookupTab` (wallpaper preview/cost, camera's opaque room), deleting a wall
+- Walls: `ERoom::InitRoomLookupTab` (wallpaper preview/cost; the camera's opaque-room flag has no reader), deleting a wall
   does not kill its door/window (`KillArchitecturalObject`). Bound-tree level files (versions 0/1).
 - A minimised window may accumulate GX work written outside `CanDraw` (untested on Windows).
 

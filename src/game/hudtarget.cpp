@@ -362,11 +362,14 @@ void HUDTarget::InstallHUDIcons(int player) {
 
 // 80188348
 // The simulator runs, the game is in a live state (GameData +0x8C/+0x90), the movie has the HUD up,
-// no quit is going and neither of EGlobal's +0x454/+0x458 requests is (DAT_80476220/80476224).
-// GC: also hidden while the player's camera director is in a cinematic mode that hides the HUD
-// (+0x160/+0x234, IsForceDisableHud).
-int HUDTarget::ShouldHUDBeVisible(int) const {
+// no quit is going and neither of EGlobal's +0x454/+0x458 requests is (DAT_80476220/80476224); hidden
+// while the player's camera director plays a letterboxed shot or forces the HUD off.
+int HUDTarget::ShouldHUDBeVisible(int player) const {
   if (!SimulatorRunning() || !_gd.m_field90 || !_gd.m_field8C) return 0;
+  if (CameraDirector* d = _globals.CameraDirectorOf(player)) {
+    if (d->IsActive() && d->m_field234) return 0;
+    if (d->IsForceDisableHud()) return 0;
+  }
   if (_globals.m_field458 || _globals.m_field454) return 0;
   return m_initialized && m_quit == 0 ? 1 : 0;
 }
@@ -898,7 +901,10 @@ void H2DTarget::SetMoodMeterValue(int player, float value, bool sound) {
 // As HUDTarget::ShouldHUDBeVisible (the HUD target must exist).
 int H2DTarget::ShouldH2DBeVisible(int player) const {
   if (!_gd.m_hudTarget || !SimulatorRunning() || !_gd.m_field90 || !_gd.m_field8C) return 0;
-  (void)player;  // GC: the player's camera director (see HUDTarget::ShouldHUDBeVisible)
+  if (CameraDirector* d = _globals.CameraDirectorOf(player)) {
+    if (d->IsActive() && d->m_field234) return 0;
+    if (d->IsForceDisableHud()) return 0;
+  }
   if (_globals.m_field458 || _globals.m_field454) return 0;  // DAT_80476224 / DAT_80476220
   return _gd.m_hudTarget->m_quit == 0 ? 1 : 0;
 }

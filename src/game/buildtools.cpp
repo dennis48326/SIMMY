@@ -66,7 +66,8 @@ void StickToGround(ESimsCam* cam, float sx, float sy, float& gx, float& gy) {
 // 80210C58
 // A tile in the stick's direction (as the camera sees the ground): snapped first; snap 2 moves a whole
 // tile on each axis the direction leans on by more than 22.5 degrees, snap 1 1.42 tiles along it.
-// GC: then ESimsCam::ValidateCursorPosition keeps it in the view (PC: not ported).
+// GC: then ESimsCam::ValidateCursorPosition (PC: once per frame after the interactors,
+// UpdateDirectInteractors; with the shipped tuning it only recomputes the cursor area, pinning nothing).
 void MoveCursorOneTileAlongCameraTargetVector(EVec3& pos, const EVec2& stick, ESimsCam* cam, int snap) {
   if (!cam) return;
   float sx = stick.x, sy = stick.y;

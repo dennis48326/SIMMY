@@ -510,16 +510,11 @@ void InteractorModule__SimInteractor::ReturnPlumbBobToOwner() {
 }
 
 // 8021E6E0
-// The cursor there at once and the camera's target with it (ESimsCam::ForceTarget; PC: the target and
-// the camera's cursor are set, the eye follows on the camera's next update).
+// The cursor there at once and the camera with it (ESimsCam::ForceTarget).
 void InteractorModule__SimInteractor::ImmediatelyCutCursorAndCameraToPos(EVec3& pos) {
   m_cut = 1;
   m_pos = pos;
-  if (m_cam) {
-    m_cam->m_target.x = pos.x;
-    m_cam->m_target.y = pos.y;
-    m_cam->m_field430 = EVec3{pos.x, pos.y, 0.0f};
-  }
+  if (m_cam) m_cam->ForceTarget(pos);
 }
 
 // 8021E72C
@@ -537,10 +532,7 @@ void InteractorModule__SimInteractor::TryCutToSim() {
   m_plumbBob->m_target = p;
   m_plumbBob->m_pos = p;
   m_pos = p;
-  if (ESimsCam* cam = _gd.m_players[m_player & 1].m_cam) {
-    cam->m_target.x = p.x;
-    cam->m_target.y = p.y;
-  }
+  if (ESimsCam* cam = _gd.m_players[m_player & 1].m_cam) cam->ForceTarget(m_pos);
   ReturnPlumbBobToOwner();
 }
 
@@ -739,7 +731,7 @@ bool UpdateSimInteractor(int player, float dt) {
   in->AttachCamera(cam);
   in->Update(dt);
   if (EHouse* house = _globals.m_house) in->UpdateObjectHighlights(house->m_objectMan);
-  // GC: ESimsCam::ValidateCursorPosition keeps the cursor on screen (not ported).
+  // (InteractorManager then has the camera recompute the cursor area: UpdateDirectInteractors.)
   in->AttachCamera(nullptr);
   // PC dev trace: SIMMY_CTL_TRACE=1 prints the cursor, the plumb bob and the lit objects every 60 frames.
   static const bool trace = std::getenv("SIMMY_CTL_TRACE") != nullptr;

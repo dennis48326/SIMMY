@@ -56,7 +56,7 @@ the same address log only once). The log of a run is the to-do list for that pat
 
 **Header comments go stale.** Many file and class header comments still say "not ported" for things
 ported since (e.g. [`person.hpp`](../include/simmy/classes/person.hpp), [`livemode.cpp`](../src/game/livemode.cpp),
-[`camera.cpp`](../src/game/camera.cpp), [`hudtarget.hpp`](../include/simmy/classes/hudtarget.hpp),
+[`hudtarget.hpp`](../include/simmy/classes/hudtarget.hpp),
 [`aptviewer.cpp`](../src/game/aptviewer.cpp)). Trust function bodies, `SIMMY_STUB` calls and
 `gen/functions.tsv` over file headers.
 

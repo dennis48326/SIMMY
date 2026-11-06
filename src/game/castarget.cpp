@@ -149,6 +149,7 @@ void CASTarget::Init(bool skipUI) {
   m_roommate = new CASRoommateTarget;
   m_keyboard = new K2YTarget;
   m_mediator.SetCasMode(UIDB::UIDBGetInt(const_cast<char*>("CAS_mode")));
+  _globals.m_fieldB0 = m_mode;  // DAT_80475E7C: back in live mode, the intro camera plays the CAS exit shot
   if (m_mode == 0) {
     _app.SetStartLot(9);
   } else {

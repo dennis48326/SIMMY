@@ -559,7 +559,25 @@ bool PlayerInSocialMode(int player);  // socialmode.cpp
 bool H2DRewardMomentActive();         // rmdtarget.cpp
 bool PcModalDialogWaiting();          // objectsim.cpp
 
+namespace {
+void UpdateDirectInteractorsOf(int count, float dt);
+}  // namespace
+
+// The players' interactors (below), then, as InteractorManager::UpdateActivePlayerInteractors does after
+// each active interactor's update, the camera's cursor area (ESimsCam::ValidateCursorPosition).
 void UpdateDirectInteractors(int count, float dt) {
+  UpdateDirectInteractorsOf(count, dt);
+  for (int player = 0; player < count && player < 2; ++player) {
+    ESimsCam* cam = _gd.m_players[player].m_cam;
+    InteractorModule__InteractorInfo info;
+    if (!cam || !GetPlayerInteractorInfo(player, info)) continue;
+    EVec3 pos{info.m_x, info.m_y, 0.0f};
+    cam->ValidateCursorPosition(player, &pos);
+  }
+}
+
+namespace {
+void UpdateDirectInteractorsOf(int count, float dt) {
   EController* pads[2] = {};
   for (int player = 0; player < count && player < 2; ++player) {
     if (UpdatePlaceManipulator(player, dt)) continue;  // the player's active interactor is the place manipulator
@@ -641,9 +659,17 @@ void UpdateDirectInteractors(int count, float dt) {
     }
   }
 }
+}  // namespace
 
 InteractorModule__DirectInteractor* PlayerDirectInteractor(int player) {
   return PlayerInteractorType(player) == 1 ? nullptr : s_direct[player & 1];  // GetPlayerInteractor(player, 0)
+}
+
+InteractorModule__Interactor* PcPlayerInteractor(int player) {
+  InteractorModule__InteractorInfo info;
+  if (PlaceManipulatorInfo(player, info)) return nullptr;  // (the build/buy manipulators are PC structs)
+  if (PlayerInteractorType(player) == 1) return PlayerSimInteractor(player);
+  return s_direct[player & 1];
 }
 
 bool GetPlayerInteractorInfo(int player, InteractorModule__InteractorInfo& info) {

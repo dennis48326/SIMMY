@@ -151,7 +151,7 @@ struct ELiveMode : public EGameState {
   void SetDontDraw(bool dontDraw);  // 800900A0
 
   int m_introCamera = 0;          // +0x0C the intro camera runs
-  int m_field10 = 0;              // +0x10
+  float m_introTime = 0;          // +0x10 the intro camera's hold after its shot (seconds)
   float m_field14 = 0;            // +0x14
   float m_field18 = 0;            // +0x18
   int m_storyStart = 0;           // +0x1C 1: "press start" before the story starts

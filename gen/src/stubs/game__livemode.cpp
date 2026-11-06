@@ -5,8 +5,6 @@ void LiveModeInitState::DatasetGetRef() { SIMMY_STUB("LiveModeInitState::Dataset
 void ChangeHouseLoadHouse::DatasetGetRef() { SIMMY_STUB("ChangeHouseLoadHouse::DatasetGetRef(void)", 0x8008CF3C); }
 void ChangeHouseLoadHouse::DatasetFinishAddRefAsync() { SIMMY_STUB("ChangeHouseLoadHouse::DatasetFinishAddRefAsync(void)", 0x8008CF94); }
 void ELiveMode::DrawSplitScreenMask(ERC *, E3DWindow &, int) { SIMMY_STUB("ELiveMode::DrawSplitScreenMask(ERC *, E3DWindow &, int)", 0x8008EF1C); }
-RET_UNKNOWN ELiveMode::StartIntroCamera(CameraDirector *, ESimsCam *) { SIMMY_STUB("ELiveMode::StartIntroCamera(CameraDirector *, ESimsCam *)", 0x8008FBFC); return {}; }
-RET_UNKNOWN ELiveMode::EndIntroCamera(CameraDirector *, ESimsCam *) { SIMMY_STUB("ELiveMode::EndIntroCamera(CameraDirector *, ESimsCam *)", 0x8008FE28); return {}; }
 RET_UNKNOWN LiveModeInitState::DatasetPendingAddRefAsync() { SIMMY_STUB("LiveModeInitState::DatasetPendingAddRefAsync(void)", 0x8008FF18); return {}; }
 LiveModeChangeHouseStateMachine::LiveModeChangeHouseStateMachine(int, int) { SIMMY_STUB("LiveModeChangeHouseStateMachine::LiveModeChangeHouseStateMachine(int, int)", 0x8008FF30); }
 bool ELiveMode::IsIntroCameraTriggered() { SIMMY_STUB("ELiveMode::IsIntroCameraTriggered(void)", 0x80090040); return {}; }
