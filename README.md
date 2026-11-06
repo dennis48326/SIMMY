@@ -3,6 +3,12 @@
 A native PC port of The Sims 2 (GameCube), written as a non-matching decompilation on top of
 [aurora](https://github.com/encounter/aurora). See `PORTING.md` for the full plan.
 
+## Documentation
+
+How the engine works, by system (architecture, simulation, UI, rendering, input, co-op, saves,
+determinism, testing, known gaps): [docs/README.md](docs/README.md). Read it before changing the code;
+update it with every fix or feature ([docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)).
+
 **Status: the game boots to its start screen.** 1886 functions are ported. ESimsApp starts the game's
 state machines ('SIMS', 'MUST', 'LdSc'), and the boot sequence runs through the game's own code:
 "Licensed by Nintendo" (drawn with the game font), the memory-card check, the EA logo movie, the
