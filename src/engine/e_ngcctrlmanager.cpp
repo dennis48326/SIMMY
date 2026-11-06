@@ -46,6 +46,7 @@ void ENgcControllerManager::Shutdown() {}
 // 8032DD60
 void ENgcControllerManager::Update() {
   PADRead(m_pads);
+  simmy::kbm_pads(m_pads);        // PC: player 1's keyboard and mouse (pc_kbm.cpp)
   simmy::dev_pad_script(m_pads);  // PC: scripted presses for headless tests
   simmy::dev_pad_gate(m_pads);    // PC: ... held until the game is ready (SIMMY_PAD_GATE)
   simmy::dev_pad_soak(m_pads);    // PC: random play for soak tests (SIMMY_SOAK)

@@ -4,9 +4,12 @@
 // noise animations, cuts and interpolations, and the director's frame effects and note-track events.
 #include "simmy/types_gen.hpp"
 #include "simmy/unported_globals.hpp"
+#include "simmy/platform.hpp"
+#include "simmy/classes/buildtools.hpp"
 
 bool PlayerInSocialMode(int player);  // socialmode.cpp
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 
@@ -1087,14 +1090,16 @@ void ESimsCam::Update() {
   if (!director || director->m_state != 8) {
     if (m_mode == 1) {
       FollowSimStiff();
-    } else if (m_mode == 0) {
+    } else if (m_mode == 0 && !PcMouseClassic(m_player)) {
+      // (PC: not while the mouse leads the cursor: it points at what is on screen, so the camera stays.)
       FollowPlayerInteractor();
     }
   }
   if (!m_animMode && !m_animObject) {
     const int rotated = HandleRotation();
     const int zoomed = HandleZoom();
-    m_moved = (rotated || zoomed) ? 1 : 0;
+    const int mouse = PcKeyboardMouseCamera();
+    m_moved = (rotated || zoomed || mouse) ? 1 : 0;
   } else {
     m_moved = 0;
   }
@@ -1140,6 +1145,40 @@ int ESimsCam::HandleZoom() {
   if (delta == 0.0f) return 0;
   ApplyZoom(delta);
   return 1;
+}
+
+// PC keyboard and mouse (pc_kbm.cpp, the frame's simmy::KbmTick): for the player whose controller is
+// port 1, while the C stick reaches the camera (no menu has it), the mouse's turn (degrees) and zoom (tenths
+// of the zoom range) go through ApplyPan / ApplyZoom as the C stick's do; while the mouse leads the classic
+// cursor, the pan keys and screen edges move the camera's target over the lot at the cursor's speed.
+int ESimsCam::PcKeyboardMouseCamera() {
+  if (m_player != KbmPlayer() || !m_params) return 0;
+  const simmy::KbmTick& t = simmy::kbm_tick();
+  if (t.rot == 0.0f && t.zoom == 0.0f && t.panX == 0.0f && t.panY == 0.0f) return 0;
+  EController* pad = _pCtrlMan->GetController(static_cast<unsigned int>(_pCtrlMan->GetPlayerControllerIndex(m_player)));
+  if (!pad || pad->IsStickFiltered(1, 0, m_filterId)) return 0;
+  int moved = 0;
+  if (t.rot != 0.0f) {
+    m_field474 = 0;  // turned by the player (HandleRotation)
+    ApplyPan(t.rot);
+    moved = 1;
+  }
+  if (t.zoom != 0.0f) {
+    ApplyZoom(t.zoom * 0.1f * (m_params->m_zoomMax - m_params->m_zoomMin));
+    moved = 1;
+  }
+  if ((t.panX != 0.0f || t.panY != 0.0f) && PcMouseClassic(m_player)) {
+    EVec3 p{m_target.x, m_target.y, 0.0f};
+    EVec2 stick{t.panX, t.panY};
+    ibuild::MoveCursorAlongCameraTargetVector(static_cast<float>(GetCursorSpeed()), p, stick, this);
+    if (cFixedWorldImpl* w = Globs_pFixedWorld) {
+      p.x = std::min(std::max(p.x, 1.0f), static_cast<float>(w->m_ySize) - 1.0f);
+      p.y = std::min(std::max(p.y, 1.0f), static_cast<float>(w->m_xSize) - 1.0f);
+    }
+    m_target.x = p.x, m_target.y = p.y;
+    moved = 1;
+  }
+  return moved;
 }
 
 // 80017A90

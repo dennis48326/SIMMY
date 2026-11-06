@@ -5,7 +5,8 @@
 //   iso = <path>      the disc image, before the first [section] (the game reads it, also --iso)
 //   [launcher]        the launcher's own settings (skip_intro, quick_coop, coop_display, sounds); the
 //                     section goes before [graphics], so keys the game appends land in [graphics]
-//   [graphics] keys   window, fullscreen, ... written like the game's own F1 "Save" does
+//   [keys]            player 1's key bindings (the game's): left alone, never taken for a setting
+//   [graphics] keys   window, fullscreen, p1_input, ... written like the game's own F1 "Save" does
 //                     (pc_settings.cpp SaveNames): every active line of the key gets the new value; a
 //                     key without one replaces its commented-out example line, else it is appended. A
 //                     key set back to its default is only rewritten where the file already sets it.

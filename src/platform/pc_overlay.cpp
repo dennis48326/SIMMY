@@ -12,6 +12,7 @@
 // presses are also used here (B: back, Start: close, L/R: page), so the game's own button layout
 // works whatever the controller.
 #include "pc_overlay.hpp"
+#include "pc_kbm.hpp"
 #include "pc_window2.hpp"
 #include "pc_settings.hpp"
 #include "simmy/platform.hpp"
@@ -602,11 +603,33 @@ void ControlsPage() {
     ImGui::EndTable();
   }
   ImGui::Spacing();
+  ImGui::TextUnformatted("In the game (player 1, keyboard and mouse):");
+  if (BeginRows("gamekeys", font * 15.0f)) {
+    auto row = [](const char* what, const std::string& keys) {
+      ImGui::TableNextRow();
+      ImGui::TableSetColumnIndex(0);
+      ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetStyle().FramePadding.x);
+      ImGui::TextUnformatted(what);
+      ImGui::TableSetColumnIndex(1);
+      ImGui::TextUnformatted(keys.c_str());
+    };
+    if (graphics_settings().p1Input == 1) {
+      row("Keyboard and mouse", "off (p1_input = controller)");
+    } else {
+      for (int a = 0; a < kbm_action_count(); ++a) row(kbm_action_label(a), kbm_binding_text(a));
+      row("Classic cursor", "move the mouse over the room");
+      row("A at the cursor / B", "left click / right click");
+      row("Turn camera", "drag with the middle or right button");
+      row("Zoom (menus: up / down)", "mouse wheel");
+    }
+    ImGui::EndTable();
+  }
+  ImGui::Spacing();
   ImGui::PushTextWrapPos(0.0f);
   ImGui::TextColored(kNote,
-                     "The game itself is played with a controller (GameCube layout: A, B, X, Y, Z, Start, L, R, "
-                     "both sticks and the D-pad). Up to four controllers; the second one joins for two players. "
-                     "While this menu is open the game is paused and gets no controller input.");
+                     "Controllers use the GameCube layout (A, B, X, Y, Z, Start, L, R, both sticks and the D-pad). "
+                     "Keys can be changed in the [keys] section of simmy.ini; p1_input chooses keyboard and mouse, "
+                     "a controller, or both for player 1. While this menu is open the game is paused and gets no input.");
   ImGui::PopTextWrapPos();
   ImGui::Spacing();
   if (o.focusFirst) {

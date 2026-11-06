@@ -59,7 +59,8 @@ Ported so far:
   - `e_standard_heap` (host-backed heaps)
   - threads, semaphores and sleep on std::thread
   - the file system on std::FILE, with a case-insensitive data root (`base/e_ngcfile`, `e_ngcfilesystem`)
-  - `e_ngcctrlmanager`: the four pads on aurora PAD (keyboard and SDL gamepads)
+  - `e_ngcctrlmanager`: the four pads on aurora PAD (SDL gamepads); player 1's keyboard and mouse join
+    port 1 there (`pc_kbm.cpp`, see "Controls: keyboard and mouse")
   - `e_ngcmemorycard`: memory cards on aurora CARD
 - **File system, ported as written:** `base/e_file`, `e_filesystem`, including the file-creator registry.
 - **Resource system:** `EResource`, `EResourceManager`, `EResourceMap`, `FreeResourceManager`,
@@ -226,6 +227,64 @@ Test switch: `SIMMY_OVERLAY_TEST="<frame>:<action>,..."` (actions `f1`, `open`, 
 `left`, `right`, `a`, `b`, `start`, `l`, `r`, `set:<key>=<value>`, `save`) drives the menu in offscreen
 runs and paints it into `--screenshot`/`SIMMY_SHOTS` images (offscreen there is no window for aurora's
 ImGui, so the overlay then runs in its own ImGui context and is drawn into the shot on the CPU).
+
+## Controls: keyboard and mouse
+
+Player 1 can play with the keyboard and the mouse, a controller, or both (`p1_input`, below). The
+keyboard is a GameCube controller on port 1 (every function of the game is reachable); the mouse drives
+the camera and the game's own *classic* (cursor) control.
+
+| Key / mouse | GameCube | What it does |
+|---|---|---|
+| W A S D | main stick | walk / run (direct control); move in menus |
+| Shift (held with W A S D) | half stick | walk instead of run |
+| Space, Enter | A | choose, interact, OK |
+| Backspace | B | back, cancel (held: the action queue's cancel mode) |
+| F | X | X |
+| Tab | Y | next sim of the family (classic control: also the cursor back to the sim) |
+| C | Z | classic (cursor) control on / off |
+| Esc | Start | pause menu |
+| Q / E | L / R | as on the GameCube (e.g. turn the object being placed in buy mode) |
+| Arrow keys | D-pad | menus; in live mode the side panels (left motives, up skills, right wants and fears, down closes) |
+| I / K, J / L | C stick | zoom in / out, turn the camera (Create-a-Sim: turn the sim) |
+| Numpad 8 / 2 / 4 / 6 | - | pan the camera (while the mouse leads the cursor) |
+| Mouse over the room | - | classic control: the cursor (the beam) goes to the floor point or object under the mouse |
+| Left click | A | A at the cursor (opens the object's or sim's action menu); A everywhere else |
+| Right click | B | B (closes menus, cancels; in live mode with nothing open it cancels the sim's actions) |
+| Middle drag, right drag | - | turn the camera (left/right) and zoom (up/down) |
+| Mouse wheel | - | zoom; in menus D-pad up / down |
+| F1 | - | options (the game gets no keyboard or mouse input while they are open) |
+
+Moving the mouse over the 3D view switches player 1 to the classic control (as Z does) and the cursor
+then follows the mouse exactly; the camera stays where it is (pan with the numpad keys or, with
+`mouse_edge_pan`, at the screen edges). Using W A S D (or a controller's stick) goes back to direct
+control. A click while in direct control first switches, then presses A at the cursor. Over objects
+the cursor goes to the object the mouse points at (its box), else to the floor. Menus, dialogs, the
+pause pages, Create-a-Sim and the catalogs are used with the keys and the click = A / B; clicking on
+a particular button is not supported (the game has no mouse pointer of its own). The system mouse
+pointer is hidden while it leads the game's cursor over the room.
+
+| Setting | Values | Default |
+|---|---|---|
+| `p1_input` | `auto` (keyboard + mouse and the first controller), `keyboard_mouse` (the first controller goes to port 2, i.e. player 2 in co-op), `controller` (no keyboard / mouse in the game) | `auto` |
+| `mouse_edge_pan` | `off`, `on`, `fullscreen` (only in fullscreen) | `fullscreen` |
+| `mouse_rotate_speed`, `mouse_zoom_speed` | 0.1 .. 10 | 1 |
+| `mouse_invert_x`, `mouse_invert_y`, `mouse_invert_wheel` | `on`, `off` | `off` |
+| `[keys]` section | `action = key, key` per action (see `simmy.ini.example`; unknown names are reported) | the table above |
+
+Co-op: with `p1_input=keyboard_mouse` the keyboard and mouse are player 1's and the first controller is
+player 2's (it is on port 2; any button on the start screen still maps player 1 to the keyboard). With
+`auto`, the keyboard joins the first controller as player 1 and the second controller is player 2. The
+mouse counts only inside player 1's window (`split=windows`) or player 1's half of the screen. The
+mouse-driven input is part of the per-frame input: `SIMMY_DET_RECORD` writes it with the pads (an `m`
+field: cursor point, camera turn / zoom / pan) and `SIMMY_DET_REPLAY` replays it.
+Test switches: `SIMMY_KBM_TEST="<frame>:<action>;..."` (synthetic keys and mouse in offscreen runs: `key:`,
+`keyup:`, `tap:`, `move:x,y`, `glide:x,y/n`, `at:<object id>`, `lclick`, `rclick`, `mdown`/`mup`, `drag:dx,dy/n`,
+`wheel:n`; the mouse is drawn as a cross in screenshots), `SIMMY_KBM_TRACE=1` (the input made each frame),
+`SIMMY_KBM_NOPICK=1` (the cursor goes to the floor only, never onto an object's box).
+Not done with the mouse: build and buy mode's cursors (placing objects, walls, floors) still move with
+W A S D / the stick as on the GameCube (clicks are A / B there; in the catalogues the wheel moves the selection).
+SimmyLauncher's Options page has *Player 1 controls* (`p1_input`) and *Edge scrolling*.
 
 Verified so far with Clang 18 on Linux. The first MSVC build may need small fixes in the generated
 code; send me the errors.

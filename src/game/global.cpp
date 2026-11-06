@@ -1,6 +1,7 @@
 // Port of game/global.cpp (partial): EGlobal construction and the resources loaded before the intro.
 #include "simmy/types_gen.hpp"
 #include "simmy/unported_globals.hpp"
+#include "simmy/platform.hpp"
 
 #include <cstring>
 
@@ -296,10 +297,15 @@ int EGlobal::IsPlayerCheatOn(int cheat) const {
 int EGlobal::TryAutoMapPlayer(int player) {
   if (_pCtrlMan->GetPlayerMapped(static_cast<unsigned int>(player)))
     return _pCtrlMan->GetPlayerMapped(static_cast<unsigned int>(player));
+  // PC p1_input=keyboard_mouse (pc_kbm.cpp): the keyboard is pad 1 and is player 1's, whichever pad pressed;
+  // the controllers (from pad 2 on) are for player 2.
+  const bool keyboardP1 = simmy::kbm_p1_input() == 2;
   for (unsigned int i = 0; i < 4; ++i) {
     EController* pad = _pCtrlMan->GetController(i);
     if (!pad || !pad->GetCmdResult(5, pad->GetBtnPressedMask(0xffffffffu), pad->GetBtnDownMask(0xffffffffu), false))
       continue;
+    if (keyboardP1 && player == 0) i = 0;
+    else if (keyboardP1 && i == 0) continue;
     bool taken = false;
     for (unsigned int p = 0; p < 2; ++p)
       if (_pCtrlMan->GetPlayerMapped(p) && _pCtrlMan->GetPlayerControllerIndex(p) == static_cast<int>(i)) taken = true;

@@ -47,6 +47,8 @@ std::string IniFile::normalizeKey(const std::string& key) {
   if (out == "window2position") return "window2pos";
   if (out == "window2monitor" || out == "display2" || out == "monitor2") return "window2display";
   if (out == "window2fullscreen") return "fullscreen2";
+  if (out == "player1input" || out == "p1controls" || out == "player1controls" || out == "input") return "p1input";
+  if (out == "edgepan" || out == "edgepanning" || out == "mouseedgepanning") return "mouseedgepan";
   return out;
 }
 
@@ -118,7 +120,7 @@ std::string IniFile::get(const std::string& key) const {
   const std::vector<Parsed> p = parse();
   std::string value;
   for (size_t i = 0; i < p.size(); ++i)
-    if (p[i].active && p[i].key == k && p[i].section != "launcher") value = ValueOf(lines_[i]);
+    if (p[i].active && p[i].key == k && p[i].section != "launcher" && p[i].section != "keys") value = ValueOf(lines_[i]);
   return value;
 }
 
@@ -161,7 +163,7 @@ void IniFile::setGraphics(const std::string& name, const std::string& value, boo
   bool found = false;
   int commented = -1;
   for (size_t i = 0; i < p.size(); ++i) {
-    if (p[i].key != k || p[i].section == "launcher") continue;
+    if (p[i].key != k || p[i].section == "launcher" || p[i].section == "keys") continue;
     if (p[i].active) replaceValue(i, value), found = true;
     else if (p[i].commented && commented < 0) commented = static_cast<int>(i);
   }
@@ -170,12 +172,13 @@ void IniFile::setGraphics(const std::string& name, const std::string& value, boo
     lines_[static_cast<size_t>(commented)] = name + " = " + value;
     return;
   }
-  // Appended at the end, which must not be inside [launcher] (the game skips that section).
+  // Appended at the end, which must not be inside [launcher] (the game skips that section) or [keys]
+  // (player 1's key bindings).
   if (lines_.empty()) {
     lines_.push_back("; SIMMY settings (written by SimmyLauncher). See simmy.ini.example.");
     lines_.push_back("");
     lines_.push_back("[graphics]");
-  } else if (firstHeader(p, false) < 0 || (!p.empty() && p.back().section == "launcher")) {
+  } else if (firstHeader(p, false) < 0 || (!p.empty() && (p.back().section == "launcher" || p.back().section == "keys"))) {
     if (!Trim(lines_.back()).empty()) lines_.push_back("");
     lines_.push_back("[graphics]");
   }

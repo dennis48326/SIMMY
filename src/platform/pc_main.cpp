@@ -17,6 +17,7 @@
 #include "simmy/platform.hpp"
 #include "simmy/unported_globals.hpp"
 #include "pc_settings.hpp"
+#include "pc_kbm.hpp"
 #include "pc_overlay.hpp"
 #include "pc_window2.hpp"
 
@@ -108,6 +109,7 @@ bool platform_pump_events() {
       // The second player's window (split=windows) handles its own events (pc_window2.cpp).
       if (e->type == AURORA_SDL_EVENT && window2_handle_event(e->sdl)) continue;
       if (e->type == AURORA_SDL_EVENT) overlay_handle_event(e->sdl);  // F1: options overlay (pc_overlay.cpp)
+      if (e->type == AURORA_SDL_EVENT) kbm_handle_event(e->sdl);      // player 1's keyboard and mouse (pc_kbm.cpp)
       // Alt+Enter: windowed <-> fullscreen (pc_settings.cpp).
       if (e->type == AURORA_SDL_EVENT && e->sdl.type == SDL_EVENT_KEY_DOWN && !e->sdl.key.repeat &&
           (e->sdl.key.key == SDLK_RETURN || e->sdl.key.key == SDLK_KP_ENTER) && (e->sdl.key.mod & SDL_KMOD_ALT))
@@ -258,6 +260,7 @@ void PollMsaaShot() {
       }
     shot->buffer.Unmap();
     overlay_composite_shot(rgba.data(), shot->width, shot->height);
+    kbm_composite_shot(rgba.data(), shot->width, shot->height);
     if (src) write_bmp(shot->path, rgba.data(), shot->width, shot->height);
     if (src) window2_write_shots(shot->path, rgba.data(), shot->width, shot->height, g_shotWindows, &write_bmp);
   } else {
@@ -276,6 +279,7 @@ void poll_screenshot() {
   AuroraReadbackDest dest{1, pixels.data(), static_cast<u32>(pixels.size()), GX_FALSE};
   if (AuroraReadbackGet(g_shotStream, &dest, 1) && dest.found) {
     overlay_composite_shot(pixels.data(), g_shotWidth, g_shotHeight);
+    kbm_composite_shot(pixels.data(), g_shotWidth, g_shotHeight);
     write_bmp(g_shotPath, pixels.data(), g_shotWidth, g_shotHeight);
     window2_write_shots(g_shotPath, pixels.data(), g_shotWidth, g_shotHeight, g_shotWindows, &write_bmp);
     g_shotPending = false;
@@ -365,6 +369,7 @@ void platform_end_frame() {
     g_shotWindows = split_windows_frame();
     if (!g_shotPending) std::fprintf(stderr, "[simmy] screenshot capture was refused\n");
     else overlay_shot_requested();  // SIMMY_OVERLAY_TEST: paint the overlay into this shot
+    if (g_shotPending) kbm_shot_requested();  // SIMMY_KBM_TEST: the mouse cross where the mouse is now
   }
   FrameStats& st = Stats();
   const auto handOver = std::chrono::steady_clock::now();
@@ -503,6 +508,7 @@ int main(int argc, char* argv[]) {  // aurora/main.h renames this to aurora_main
   }
 
   simmy::settings_load(argc > 0 ? argv[0] : nullptr);  // also --iso / iso= (pc_settings.cpp)
+  simmy::kbm_init();  // player 1's keys ([keys] in simmy.ini, pc_kbm.cpp)
   if (!open_game_data(dataDir)) return 1;
   if (!simmy::g_headless) {
     AuroraConfig config{};
@@ -584,6 +590,23 @@ int main(int argc, char* argv[]) {  // aurora/main.h renames this to aurora_main
     for (uint32_t port = 1; port < 4; ++port) {
       if (aurora::pad::port_preference(port).state == aurora::pad::PortAssignment::None)
         aurora::pad::set_port_auto(port);
+    }
+    // PC keyboard and mouse (pc_kbm.cpp): the keyboard is player 1's pad there, so aurora's own
+    // keyboard-to-pad bindings (from its input profiles) are cleared, or a key would press twice. With
+    // p1_input=keyboard_mouse, port 1 takes no controller: the first one goes to port 2 (player 2 in co-op).
+    for (uint32_t port = 0; port < 4; ++port) {
+      const auto target = aurora::pad::ProfileTarget::keyboard(port);
+      if (const aurora::pad::Profile* prof = aurora::pad::profile(target)) {
+        bool any = false;
+        for (const auto& kv : prof->bindings) any = any || !kv.second.empty();
+        if (any) std::fprintf(stderr, "[kbm] aurora keyboard bindings on port %u cleared (SIMMY's [keys] apply)\n", port + 1);
+      }
+      aurora::pad::clear_bindings(target);
+    }
+    if (simmy::kbm_p1_input() == 2) {
+      aurora::pad::clear_port(0);
+      if (aurora::pad::port_preference(1).state == aurora::pad::PortAssignment::None) aurora::pad::set_port_auto(1);
+      std::fprintf(stderr, "[kbm] p1_input=keyboard_mouse: controllers start at port 2\n");
     }
   }
 

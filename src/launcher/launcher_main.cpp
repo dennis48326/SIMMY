@@ -133,6 +133,14 @@ std::string Canonical(const std::string& key, const std::string& raw) {
   } else if (key == "resampler") {
     if (v == "linear") return "bilinear";
     if (v == "box") return "area";
+  } else if (key == "p1input") {
+    if (v == "both" || v == "default") return "auto";
+    if (v == "pad" || v == "gamepad") return "controller";
+    if (v == "keyboardmouse" || v == "keyboard" || v == "kbm" || v == "mouse" || v == "keyboard+mouse") return "keyboard_mouse";
+  } else if (key == "mouseedgepan") {
+    if (v == "auto") return "fullscreen";
+    if (isTrue()) return "on";
+    if (isFalse()) return "off";
   } else if (key == "coopdisplay" || key == "split") {
     if (v == "original" || v == "4:3") return "gc";
     if (v == "coop4x3") return "4x3";
@@ -190,7 +198,15 @@ std::vector<Setting> MakeSettings() {
   add("backend", "Graphics API", "Automatic picks the best one. Try another if the game shows a black screen.", 1, false,
       {{"auto", "Automatic"}, {"vulkan", "Vulkan"}, {"opengl", "OpenGL"}, {"opengles", "OpenGL ES"}}, 0);
 #endif
-  // Game and launcher.
+  // Game, controls and launcher.
+  add("p1_input", "Player 1 controls",
+      "Both: keyboard + mouse and a controller. Keyboard + mouse: your first controller is player 2's in co-op.",
+      2, false,
+      {{"auto", "Both"}, {"keyboard_mouse", "Keyboard + mouse"}, {"controller", "Controller"}},
+      0);
+  add("mouse_edge_pan", "Edge scrolling",
+      "With the mouse cursor control, pushing the mouse against a screen edge moves the camera.", 2, false,
+      {{"fullscreen", "In fullscreen"}, {"on", "Always"}, {"off", "Off"}}, 0);
   add("skip_intro", "Skip intro movies", "Goes straight from the Maxis screen to the start screen.", 2, true,
       {{"0", "Off"}, {"1", "On"}}, 0, true);
   add("quick_coop", "Quick co-op start",
@@ -1269,17 +1285,18 @@ void App::drawCoop() {
 
 void App::drawOptions() {
   drawHeader("Options", "Saved to simmy.ini next to the game. Press F1 in the game for even more.");
-  const Rect display{60, 120, 490, 302}, graphics{570, 120, 470, 260}, game{570, 392, 470, 176};
+  const Rect display{60, 120, 490, 302}, graphics{570, 120, 470, 260}, game{570, 390, 470, 240};
   panel(display, "DISPLAY");
   panel(graphics, "GRAPHICS");
-  panel(game, "GAME & LAUNCHER");
+  panel(game, "CONTROLS, GAME & LAUNCHER");
   const Rect boxes[3] = {display, graphics, game};
   int row[3] = {0, 0, 0};
   const Setting* focused = nullptr;
   for (size_t i = 0; i < settings_.size(); ++i) {
     Setting& s = settings_[i];
     const Rect& b = boxes[s.group];
-    const Rect r{b.x + 12, b.y + 40 + static_cast<float>(row[s.group]++) * 42, b.w - 24, 40};
+    const float pitch = s.group == 2 ? 39.0f : 42.0f;  // (the controls panel is the tallest: rows a little closer)
+    const Rect r{b.x + 12, b.y + (s.group == 2 ? 37.0f : 40.0f) + static_cast<float>(row[s.group]++) * pitch, b.w - 24, pitch - 2.0f};
     settingRow(kIdSetting0 + static_cast<int>(i), r, s);
     if (focus_ == kIdSetting0 + static_cast<int>(i)) focused = &s;
   }

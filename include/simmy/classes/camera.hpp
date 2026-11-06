@@ -122,6 +122,7 @@ struct ESimsCam {
   void SetZoom(float zoom);  // 80017070
   int HandleRotation();  // 8001709C
   int HandleZoom();  // 800172E8
+  int PcKeyboardMouseCamera();  // PC: the mouse's turn and zoom, the pan keys (pc_kbm.cpp)
   void UpdateWin();  // 80017490
   double CalcTiltFromZoom(float);  // 80017A90
   void CalcEyePosition(EVec3& eye, ESimsCam__CameraParameters& params);  // 80017ABC

@@ -295,6 +295,16 @@ int PlayerInteractorType(int player);
 // InteractorManager::ChangeActiveInteractor (inline on GC: the request bit at +0x3C and the pending
 // pair at +0x2C): `type` takes over at the next update.
 void ChangeActiveInteractor(int player, int type);
+// PC keyboard and mouse (simmy::KbmTick, platform.hpp): the player whose controller is port 1 (-1 none),
+// whose controls the mouse's record is for.
+int KbmPlayer();
+// The player's classic control is led by the mouse (it took the player there, or moved its cursor):
+// the camera stops following the cursor (the mouse points where it wants), the stick goes back to
+// direct control.
+bool PcMouseClassic(int player);
+void PcSetMouseClassic(int player, bool on);
+// The floor point the mouse puts the classic cursor on this frame (taken once; SimInteractor::Update).
+bool PcTakeMouseCursor(int player, EVec3& pos);
 // The classic interactor's part of InteractorManager::UpdateActivePlayerInteractors: applies a pending
 // change (OnStop / OnStart) and, when the player's interactor is the SimInteractor, feeds it the pad (its
 // input session: 803FDC74 buttons, 803FDC9C sticks) and updates it. True when the classic interactor

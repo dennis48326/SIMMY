@@ -10,6 +10,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace simmy {
 
@@ -47,6 +48,20 @@ struct GraphicsSettings {
   // Not graphics: the game's disc image (iso=, --iso; written by SimmyLauncher). Kept as given (case,
   // spaces, ';' and '#' are part of the path), surrounding quotes removed. Empty: none.
   std::string isoPath;
+  // Not graphics: player 1's controls (pc_kbm.cpp). p1_input: 0 auto (keyboard and mouse together with
+  // the first controller), 1 controller only, 2 keyboard_mouse (the first controller goes to player 2).
+  int p1Input = 0;
+  int mouseEdgePan = 2;          // mouse_edge_pan: 0 off, 1 on, 2 in fullscreen only
+  float mouseRotateSpeed = 1.0f;  // mouse_rotate_speed: drag rotation (and vertical drag zoom), 0.1 .. 10
+  float mouseZoomSpeed = 1.0f;    // mouse_zoom_speed: the wheel's zoom, 0.1 .. 10
+  bool mouseInvertX = false;      // mouse_invert_x: drag left/right turns the other way
+  bool mouseInvertY = false;      // mouse_invert_y: drag up/down zooms the other way
+  bool mouseInvertWheel = false;  // mouse_invert_wheel: the wheel zooms the other way
+  // The [keys] section: "action = key, key" lines as read (pc_kbm.cpp parses and warns).
+  struct KeyLine {
+    std::string action, keys, where;  // where: "file:line"
+  };
+  std::vector<KeyLine> keyLines;
 };
 
 GraphicsSettings& graphics_settings();

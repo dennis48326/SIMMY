@@ -1084,6 +1084,16 @@ void RenderPostProcessEffects(int player, ERC* rc) {
 }
 }  // namespace
 
+namespace {
+// PC keyboard and mouse (pc_kbm.cpp): a player's 3D view as drawn, for the mouse's floor point.
+void PcNoteView(int player, E3DWindow& win) {
+  const float eye[3] = {win.m_lookPos.x, win.m_lookPos.y, win.m_lookPos.z};
+  const float dir[3] = {win.m_lookDir.x, win.m_lookDir.y, win.m_lookDir.z};
+  const float vp[4] = {win.m_viewportOut.x0, win.m_viewportOut.y0, win.m_viewportOut.x1, win.m_viewportOut.y1};
+  simmy::kbm_note_view(player, win.m_lookAtProj.m, eye, dir, vp);
+}
+}  // namespace
+
 // 8008F7AC
 // Each player's view (both side by side in two-player mode unless one is full screen, or only the
 // build/buy player's): the window from its camera, then the house.
@@ -1112,6 +1122,7 @@ void ELiveMode::DrawMain(ERC* rc) {
       TRect<float> full{0.0f, 0.0f, 1.0f, 1.0f};
       win.SetViewport(full);
       win.Select(rc);
+      PcNoteView(i, win);
     } else {
       InitPlayerXWindow(rc, win, i);
     }
@@ -1194,6 +1205,7 @@ void ELiveMode::InitPlayerXWindow(ERC* rc, E3DWindow& win, int player) {
   win.SetViewport(half);
   win.SetClip(half);
   win.Select(rc);
+  PcNoteView(player, win);
 }
 
 // 80090090

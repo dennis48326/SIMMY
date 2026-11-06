@@ -93,6 +93,47 @@ void det_pads(PADStatus* pads);     // ENgcControllerManager::Update, after the 
 bool det_replaying();               // a SIMMY_DET_REPLAY file drives the pads now
 bool det_frame_end();               // platform_frame_tick; true: no pacing (SIMMY_DET_NOPACE)
 
+// ---- Keyboard and mouse for player 1 (pc_kbm.cpp) ----
+// The keyboard is a GameCube pad on port 1 (merged with the first controller when p1_input=auto, alone
+// with p1_input=keyboard_mouse); the mouse adds what a pad cannot give, once per game frame, in this
+// record (taken with the pads: SIMMY_DET_RECORD / _REPLAY keep it, so the game stays a function of its
+// per-frame input). It belongs to the player whose controller is port 1 (KbmPlayer in siminteractor.cpp).
+struct KbmTick {
+  unsigned flags = 0;        // kKbmCursor, kKbmKeysMoved
+  float cx = 0.0f, cy = 0.0f;  // kKbmCursor: the floor point under the mouse (tiles, the cursor's plane)
+  float rot = 0.0f;          // camera turn this frame, degrees (mouse drag)
+  float zoom = 0.0f;         // camera zoom this frame, in tenths of the zoom range (wheel, drag)
+  float panX = 0.0f, panY = 0.0f;  // camera pan, -1..1 (right, away from the camera; keys, screen edges)
+  bool operator==(const KbmTick& o) const {
+    return flags == o.flags && cx == o.cx && cy == o.cy && rot == o.rot && zoom == o.zoom && panX == o.panX && panY == o.panY;
+  }
+};
+enum : unsigned {
+  kKbmCursor = 1,     // the mouse points at the floor in the player's 3D view: the classic cursor goes there
+  kKbmKeysMoved = 2,  // the keyboard's stick keys are held: a mouse-driven classic control goes back to direct
+};
+const KbmTick& kbm_tick();      // this frame's
+KbmTick& kbm_tick_for_det();    // pc_det.cpp records / replaces it with the pads
+void kbm_pads(PADStatus* pads);  // ENgcControllerManager::Update, right after PADRead
+// ELiveMode's draw, after a player's 3D view is selected: what the mouse is mapped through.
+void kbm_note_view(int player, const float lookAtProj[4][4], const float eye[3], const float dir[3],
+                   const float viewport[4]);
+// The game's side (siminteractor.cpp), asked once a frame before the input is made.
+struct KbmGame {
+  int player = -1;          // the player whose controller is port 1 (-1: none)
+  bool live = false;        // live mode shows that player's 3D view (a house, the camera, not paused)
+  bool cameraFree = false;  // ... and the C stick reaches the camera (no menu has it)
+  bool cursorFree = false;  // ... and the left stick reaches the direct / classic control (no menu)
+  bool classicReady = false;  // the classic control runs and takes A
+  bool mouseClassic = false;  // the classic control was taken over by the mouse
+  float cursorZ = 0.0f;     // the classic cursor's plane
+};
+void kbm_game_state(KbmGame& out);
+// The nearest object the ray (eye, direction) meets before the floor (z = floorZ), by its bounding box
+// (not `player`'s own sim); its point under the ray goes to (x, y). False: the floor is first. Reads only.
+bool kbm_pick(int player, const float eye[3], const float dir[3], float floorZ, float& x, float& y);
+int kbm_p1_input();         // 0 auto, 1 controller, 2 keyboard_mouse (p1_input=)
+
 // ---- Co-op split screen (pc_splitscreen.cpp) ----
 // `--split=gc|4x3|wide|windows` (split= in simmy.ini, SIMMY_SPLIT): how two-player live mode's two
 // halves are shown.

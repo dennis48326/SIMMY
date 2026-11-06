@@ -7,6 +7,7 @@
 #include "simmy/unported_globals.hpp"
 #include "simmy/classes/siminteractor.hpp"
 #include "simmy/classes/buildtools.hpp"
+#include "simmy/platform.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -58,6 +59,10 @@ struct PlayerInteractors {
   InteractorModule__SimInteractor* sim = nullptr;
 };
 PlayerInteractors s_players[2];
+// PC keyboard and mouse: the classic control led by the mouse, and this frame's floor point for it.
+bool s_mouseClassic[2] = {};
+bool s_mouseTargetSet[2] = {};
+EVec3 s_mouseTarget[2];
 InteractorModule__InteractorVisualizer* s_visualizer = nullptr;  // InteractorManager::s_pVisualizer
 bool s_initialized = false;
 
@@ -305,7 +310,15 @@ void InteractorModule__SimInteractor::Update(float dt) {
   for (FadeSquare& sq : m_squares) sq.Update(_dt);
   if (m_cam && !IsCameraDirectorInControl(m_player)) {
     if (m_restorePos == 0) {
-      if (m_leftNeutral == 0) {
+      EVec3 mouse;
+      if (PcTakeMouseCursor(m_player, mouse)) {
+        // PC: the mouse puts the cursor on the floor point under it (kept on the lot, as the stick).
+        if (cFixedWorldImpl* w = Globs_pFixedWorld) {
+          const float maxX = static_cast<float>(w->m_ySize) - 1.001f, maxY = static_cast<float>(w->m_xSize) - 1.001f;
+          m_pos.x = std::min(std::max(mouse.x, 1.0f), maxX);
+          m_pos.y = std::min(std::max(mouse.y, 1.0f), maxY);
+        }
+      } else if (m_leftNeutral == 0) {
         EVec3 p = m_pos;
         ibuild::MoveCursorAlongCameraTargetVector(static_cast<float>(m_cam->GetCursorSpeed()), p, m_leftStick, m_cam);
         if (!IsPosOutsideWorld(p)) m_pos = p;
@@ -406,6 +419,7 @@ void InteractorModule__SimInteractor::OnCommandPressed(InteractorModule__Interac
       break;
     case 0x10:
       if (_gd.m_field70) break;  // DAT_80475BF4: the pause menu (PAZTarget)
+      PcSetMouseClassic(m_player, false);
       ChangeActiveInteractor(m_player, 0);
       if (HUDTarget* hud = _gd.m_hudTarget) hud->CloseMenu(m_player);
       if (impl) {
@@ -703,6 +717,25 @@ bool UpdateSimInteractor(int player, float dt) {
   InteractorModule__SimInteractor* in = s.sim;
   FeedSimInteractor(in, player);
   ESimsCam* cam = _gd.m_players[player & 1].m_cam;  // CameraManager::GetCamera
+  s_mouseTargetSet[player] = false;
+  if (player == KbmPlayer()) {
+    // PC keyboard and mouse (pc_kbm.cpp): where the stick reaches the cursor, the mouse puts it on the
+    // floor point under it; the stick (keys) hands a mouse-led classic control back to direct control.
+    const simmy::KbmTick& t = simmy::kbm_tick();
+    EController* pad = _pCtrlMan->GetController(static_cast<unsigned int>(_pCtrlMan->GetPlayerControllerIndex(player)));
+    const bool free = pad && cam && !pad->IsStickFiltered(0, 0, cam->m_filterId);
+    if (free && s_mouseClassic[player] && (t.flags & simmy::kKbmKeysMoved) && !(t.flags & simmy::kKbmCursor) && !_gd.m_field70) {
+      s_mouseClassic[player] = false;
+      in->m_leftStick = EVec2{0.0f, 0.0f};
+      ChangeActiveInteractor(player, 0);
+      if (HUDTarget* hud = _gd.m_hudTarget) hud->CloseMenu(player);
+      std::printf("[ctl] player %d: direct control (keys)\n", player + 1);
+    } else if (free && (t.flags & simmy::kKbmCursor)) {
+      s_mouseClassic[player] = true;
+      s_mouseTargetSet[player] = true;
+      s_mouseTarget[player] = EVec3{t.cx, t.cy, 0.0f};
+    }
+  }
   in->AttachCamera(cam);
   in->Update(dt);
   if (EHouse* house = _globals.m_house) in->UpdateObjectHighlights(house->m_objectMan);
@@ -731,6 +764,107 @@ bool SimInteractorInfo(int player, InteractorModule__InteractorInfo& info) {
   return true;
 }
 
+// ---- PC keyboard and mouse (pc_kbm.cpp) ----
+
+int KbmPlayer() {
+  if (!_pCtrlMan) return -1;
+  const int players = _gd.m_fieldEC ? 2 : 1;  // DAT_80475C70
+  for (int p = 0; p < players; ++p)
+    if (_pCtrlMan->GetPlayerMapped(static_cast<unsigned int>(p)) && _pCtrlMan->GetPlayerControllerIndex(static_cast<unsigned int>(p)) == 0)
+      return p;
+  // Before the front end maps a pad (or a player 1 left unmapped): player 1's default, pad 1.
+  return !_pCtrlMan->GetPlayerMapped(0) && _pCtrlMan->GetPlayerControllerIndex(0) == 0 ? 0 : -1;
+}
+
+bool PcMouseClassic(int player) { return s_mouseClassic[player & 1] && PlayerInteractorType(player) == 1; }
+void PcSetMouseClassic(int player, bool on) { s_mouseClassic[player & 1] = on; }
+
+bool PcTakeMouseCursor(int player, EVec3& pos) {
+  if (!s_mouseTargetSet[player & 1]) return false;
+  s_mouseTargetSet[player & 1] = false;
+  pos = s_mouseTarget[player & 1];
+  return true;
+}
+
+// What pc_kbm.cpp makes the frame's input from (read before the game's update; only the input it
+// makes counts, and that is recorded with the pads).
+void simmy::kbm_game_state(simmy::KbmGame& g) {
+  g = simmy::KbmGame{};
+  const int p = KbmPlayer();
+  g.player = p;
+  if (p < 0 || !_globals.m_house || !_gd.m_players || _gd.m_casTarget) return;
+  ESimsCam* cam = _gd.m_players[p & 1].m_cam;
+  EController* pad = _pCtrlMan->GetController(static_cast<unsigned int>(_pCtrlMan->GetPlayerControllerIndex(static_cast<unsigned int>(p))));
+  if (!cam || !pad || H2DTarget::m_nPauseRefCount != 0 || _gd.m_field70 || IsCameraDirectorInControl(p)) return;
+  g.live = true;
+  // The player's interaction menu open (the object list, its interactions): the wheel moves in it.
+  HUDTarget* hud = _gd.m_hudTarget;
+  const bool menuOpen = hud && hud->m_menus[p & 1].m_state > 1;
+  g.cameraFree = !menuOpen && !pad->IsStickFiltered(1, 0, cam->m_filterId);
+  InteractorModule__InteractorInfo info;
+  const int type = PlayerInteractorType(p);
+  const bool tool = PlaceManipulatorInfo(p, info);  // build / buy mode's cursors
+  g.cursorFree = !menuOpen && !tool && (type == 0 || type == 1) && !PlayerInSocialMode(p) && _globals.GetSelectedPerson(p) &&
+                 !pad->IsStickFiltered(0, 0, cam->m_filterId);
+  const PlayerInteractors& s = s_players[p & 1];
+  g.classicReady = type == 1 && s.pending == -2 && s.sim && s.sim->m_state == 1;
+  g.mouseClassic = PcMouseClassic(p);
+  g.cursorZ = 0.0f;
+}
+
+// PC keyboard and mouse: what the mouse points at (pc_kbm.cpp MouseToFloor).
+bool simmy::kbm_pick(int player, const float o[3], const float d[3], float floorZ, float& x, float& y) {
+  EHouse* house = _globals.m_house;
+  static const bool off = std::getenv("SIMMY_KBM_NOPICK") != nullptr;  // tests: the floor only
+  if (!house || d[2] >= 0.0f || off) return false;
+  const float floorT = (floorZ - o[2]) / d[2];
+  const float len = std::sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+  std::vector<std::pair<float, ISimInstance*>> hits;
+  for (ISimInstance* inst : HouseInstances(house->m_objectMan)) {
+    if (!inst->m_xob) continue;
+    const float* b = inst->m_bounds;
+    if (!(b[3] > b[0] && b[4] > b[1] && b[5] > b[2]) || b[5] < floorZ + 0.05f) continue;
+    // Not the big ones (trees: their box is mostly air over the lawn), only what fits about a 2x3-tile bed.
+    if (b[3] - b[0] > 3.2f || b[4] - b[1] > 3.2f || b[5] - b[2] > 3.0f) continue;
+    // The slab test against the box.
+    float t0 = 0.0f, t1 = floorT;
+    bool miss = false;
+    for (int a = 0; a < 3 && !miss; ++a) {
+      if (std::fabs(d[a]) < 1e-9f) {
+        miss = o[a] < b[a] || o[a] > b[a + 3];
+        continue;
+      }
+      float ta = (b[a] - o[a]) / d[a], tb = (b[a + 3] - o[a]) / d[a];
+      if (ta > tb) std::swap(ta, tb);
+      t0 = std::max(t0, ta), t1 = std::min(t1, tb);
+      miss = t0 > t1;
+    }
+    // (A box the eye is in or right in front of it, cut by the near plane, is looked through.)
+    if (!miss && t0 * len > 0.75f) hits.emplace_back(t0, inst);
+  }
+  std::sort(hits.begin(), hits.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+  // (Only reads: input making must not change the game. ISimInstance::HasInteractions would refresh its
+  // cache, drawing the UI's random numbers and running check trees, so it is not asked here; the
+  // cursor's own highlight decides what the object offers.)
+  cXPersonImpl* self = PersonImpl(_globals.GetSelectedPerson(player));
+  for (const auto& h : hits) {
+    if (self && h.second == self->m_instance) continue;  // the player's own sim does not hide the floor
+    // A point inside the box's footprint under the ray: the entry point, nudged to the box's centre.
+    const float* b = h.second->m_bounds;
+    const float px = o[0] + d[0] * h.first, py = o[1] + d[1] * h.first;
+    x = std::min(std::max(px, b[0] + 0.05f), b[3] - 0.05f);
+    y = std::min(std::max(py, b[1] + 0.05f), b[4] - 0.05f);
+    static const bool trace = std::getenv("SIMMY_KBM_TRACE") != nullptr;
+    if (trace && _framecount % 30 == 0) {
+      cXObjectImpl* o = h.second->m_xob ? h.second->m_xob->GetObjectImplementation() : nullptr;
+      std::printf("[kbm] pick %s: box %.2f,%.2f,%.2f..%.2f,%.2f,%.2f at t %.2f -> %.2f, %.2f\n", o ? o->DebugName() : "?", b[0], b[1],
+                  b[2], b[3], b[4], b[5], h.first, x, y);
+    }
+    return true;
+  }
+  return false;
+}
+
 void ShutdownSimInteractors() {
   for (int p = 0; p < 2; ++p) {
     PlayerInteractors& s = s_players[p];
@@ -740,6 +874,8 @@ void ShutdownSimInteractors() {
       delete s.sim;
     }
     s = PlayerInteractors{};
+    s_mouseClassic[p] = false;
+    s_mouseTargetSet[p] = false;
   }
   delete s_visualizer;
   s_visualizer = nullptr;

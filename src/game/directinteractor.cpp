@@ -10,6 +10,7 @@
 #include <cstring>
 #include <cstdlib>
 #include "simmy/unported_globals.hpp"
+#include "simmy/platform.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -611,8 +612,16 @@ void UpdateDirectInteractors(int count, float dt) {
       if (pad->GetCmdResult(6, pad->GetBtnPressedMask(filter), pad->GetBtnDownMask(filter), false))
         d->OnCommandPressed(InteractorModule__InteractorInputManager__InteractorCommand{4}, 1.0f);
       // Z (controller command 0x31) -> 0x11 (803FCA60).
-      if (pad->GetCmdResult(0x31, pad->GetBtnPressedMask(filter), pad->GetBtnDownMask(filter), false))
+      if (pad->GetCmdResult(0x31, pad->GetBtnPressedMask(filter), pad->GetBtnDownMask(filter), false)) {
+        PcSetMouseClassic(player, false);
         d->OnCommandPressed(InteractorModule__InteractorInputManager__InteractorCommand{0x11}, 1.0f);
+      } else if (player == KbmPlayer() && (simmy::kbm_tick().flags & simmy::kKbmCursor) && d->m_cam &&
+                 !pad->IsStickFiltered(0, 0, filter) && !IsCameraDirectorInControl(player)) {
+        // PC keyboard and mouse (pc_kbm.cpp): the mouse moved over the 3D view takes the player to the
+        // classic control, as Z does; the cursor then follows the mouse.
+        PcSetMouseClassic(player, true);
+        d->OnCommandPressed(InteractorModule__InteractorInputManager__InteractorCommand{0x11}, 1.0f);
+      }
       // Controller commands 0xE (Y) -> 0xD (next sim) and 0xD -> 0xE (previous sim) (803FCA60).
       if (pad->GetCmdResult(0xe, pad->GetBtnPressedMask(filter), pad->GetBtnDownMask(filter), false))
         d->OnCommandPressed(InteractorModule__InteractorInputManager__InteractorCommand{0xd}, 1.0f);

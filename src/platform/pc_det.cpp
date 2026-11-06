@@ -12,7 +12,8 @@
 //                         simulation state (see Hash below) and of its parts.
 // SIMMY_DET_DUMP=<file>   with SIMMY_DET_DUMP_TICKS=<from>-<to>: every hashed field of those ticks, one
 //                         line per object, to diff two runs and find the first differing field.
-// SIMMY_DET_RECORD=<file> writes the four pads as the game reads them each tick (after scripted/soak input).
+// SIMMY_DET_RECORD=<file> writes the four pads as the game reads them each tick (after scripted/soak input),
+//                         and the keyboard-and-mouse record (pc_kbm.cpp: cursor point, camera) when non-zero.
 // SIMMY_DET_REPLAY=<file> from tick 1 on, the pads are the file's (live pads and scripts are ignored; neutral
 //                         pads after its end); before tick 1 (front end, loading) the usual pads/scripts
 //                         drive the game.
@@ -443,6 +444,12 @@ void WritePads(DetState& s, int tick, const PADStatus* pads) {
     std::fprintf(s.record, " %d,%x,%d,%d,%d,%d,%u,%u,%u,%u,%x", q.err, q.button, q.stickX, q.stickY, q.substickX, q.substickY,
                  q.triggerLeft, q.triggerRight, q.analogA, q.analogB, static_cast<unsigned>(q.extButton));
   }
+  // The keyboard-and-mouse record of the frame (pc_kbm.cpp), when there is one: " m flags,cx,cy,rot,zoom,
+  // panx,pany", the floats in hexadecimal (%a), exact.
+  const KbmTick& m = kbm_tick();
+  if (!(m == KbmTick{}))
+    std::fprintf(s.record, " m %x,%a,%a,%a,%a,%a,%a", m.flags, static_cast<double>(m.cx), static_cast<double>(m.cy),
+                 static_cast<double>(m.rot), static_cast<double>(m.zoom), static_cast<double>(m.panX), static_cast<double>(m.panY));
   std::fprintf(s.record, "\n");
 }
 
@@ -480,6 +487,18 @@ bool ReadPads(DetState& s, int tick, PADStatus* pads) {
       q.analogB = static_cast<u8>(v[9]);
       q.extButton = static_cast<u32>(v[10]);
     }
+    KbmTick& m = kbm_tick_for_det();
+    m = KbmTick{};
+    while (*p == ' ') ++p;
+    if (*p == 'm') {
+      ++p;
+      m.flags = static_cast<unsigned>(std::strtoul(p, &p, 16));
+      float* f[6] = {&m.cx, &m.cy, &m.rot, &m.zoom, &m.panX, &m.panY};
+      for (float* x : f) {
+        while (*p == ' ' || *p == ',') ++p;
+        *x = static_cast<float>(std::strtod(p, &p));
+      }
+    }
     return true;
   }
   return false;
@@ -513,11 +532,13 @@ void det_pads(PADStatus* pads) {
   if (!s.tick && !s.boot) return;
   const int tick = s.tick + 1;  // the frame starting now
   if (s.replay) {
-    if (s.replayDone || !ReadPads(s, tick, pads))
+    if (s.replayDone || !ReadPads(s, tick, pads)) {
       for (int k = 0; k < 4; ++k) {
         pads[k] = PADStatus{};
         pads[k].err = k == 0 ? PAD_ERR_NONE : PAD_ERR_NO_CONTROLLER;
       }
+      kbm_tick_for_det() = KbmTick{};
+    }
   }
   if (s.record) WritePads(s, tick, pads);
 }

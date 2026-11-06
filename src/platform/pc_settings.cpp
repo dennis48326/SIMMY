@@ -72,12 +72,16 @@ std::string NormalizeKey(const std::string& key) {
   if (out == "window2monitor" || out == "display2" || out == "monitor2") return "window2display";
   if (out == "window2fullscreen") return "fullscreen2";
   if (out == "disc" || out == "discimage" || out == "isopath" || out == "gcm") return "iso";
+  if (out == "player1input" || out == "p1controls" || out == "player1controls" || out == "input") return "p1input";
+  if (out == "edgepan" || out == "edgepanning" || out == "mouseedgepanning") return "mouseedgepan";
   return out;
 }
 
 const char* const kKeys[] = {"window", "fullscreen", "resolution", "aspect", "hud", "msaa",
                              "anisotropy", "vsync", "fpscap", "backend", "resampler", "split",
-                             "window2", "window2pos", "window2display", "fullscreen2", "iso"};
+                             "window2", "window2pos", "window2display", "fullscreen2", "iso",
+                             "p1input", "mouseedgepan", "mouserotatespeed", "mousezoomspeed", "mouseinvertx",
+                             "mouseinverty", "mouseinvertwheel"};
 bool KnownKey(const std::string& k) {
   for (const char* known : kKeys)
     if (k == known) return true;
@@ -233,6 +237,26 @@ void ApplyValue(GraphicsSettings& g, const std::string& key, const std::string& 
     else if (v == "windowed") g.fullscreen2 = false;
     else if (ParseBool(v, b)) g.fullscreen2 = b;
     else Warn(key, v, "off or borderless");
+  } else if (key == "p1input") {
+    if (v == "auto" || v == "both" || v == "default") g.p1Input = 0;
+    else if (v == "controller" || v == "pad" || v == "gamepad") g.p1Input = 1;
+    else if (v == "keyboard_mouse" || v == "keyboardmouse" || v == "keyboard" || v == "kbm" || v == "mouse" ||
+             v == "keyboard+mouse")
+      g.p1Input = 2;
+    else Warn(key, v, "auto, controller or keyboard_mouse");
+  } else if (key == "mouseedgepan") {
+    bool b = false;
+    if (v == "fullscreen" || v == "auto") g.mouseEdgePan = 2;
+    else if (ParseBool(v, b)) g.mouseEdgePan = b ? 1 : 0;
+    else Warn(key, v, "off, on or fullscreen");
+  } else if (key == "mouserotatespeed" || key == "mousezoomspeed") {
+    char* end = nullptr;
+    const double f = std::strtod(v.c_str(), &end);
+    if (end && *end == '\0' && f >= 0.1 && f <= 10.0) (key == "mouserotatespeed" ? g.mouseRotateSpeed : g.mouseZoomSpeed) = static_cast<float>(f);
+    else Warn(key, v, "a number from 0.1 to 10 (1 = default)");
+  } else if (key == "mouseinvertx" || key == "mouseinverty" || key == "mouseinvertwheel") {
+    bool& b = key == "mouseinvertx" ? g.mouseInvertX : key == "mouseinverty" ? g.mouseInvertY : g.mouseInvertWheel;
+    if (!ParseBool(v, b)) Warn(key, v, "on or off");
   }
 }
 
@@ -264,7 +288,7 @@ void LoadIni(GraphicsSettings& g, const std::string& path, bool required) {
   }
   g.sourceFile = path;
   int lineNo = 0;
-  bool launcherSection = false;
+  bool launcherSection = false, keysSection = false;
   for (std::string line : lines) {
     ++lineNo;
     // iso= holds a path, which may contain ';' or '#': there the rest of the line is the value.
@@ -277,10 +301,23 @@ void LoadIni(GraphicsSettings& g, const std::string& path, bool required) {
     const size_t comment = line.find_first_of(";#");
     if (comment != std::string::npos) line.erase(comment);
     line = Trim(line);
-    // [graphics] sections are allowed and ignored; [launcher] holds SimmyLauncher's own settings.
-    if (!line.empty() && line[0] == '[') launcherSection = Lower(line) == "[launcher]";
+    // [graphics] sections are allowed and ignored; [launcher] holds SimmyLauncher's own settings;
+    // [keys] player 1's key bindings (pc_kbm.cpp).
+    if (!line.empty() && line[0] == '[') {
+      launcherSection = Lower(line) == "[launcher]";
+      keysSection = Lower(line) == "[keys]";
+    }
     if (line.empty() || line[0] == '[' || launcherSection) continue;
     const size_t eq = line.find('=');
+    if (keysSection) {
+      GraphicsSettings::KeyLine k;
+      k.action = Trim(eq == std::string::npos ? line : line.substr(0, eq));
+      k.keys = eq == std::string::npos ? std::string() : Trim(line.substr(eq + 1));
+      k.where = path + ":" + std::to_string(lineNo);
+      if (eq == std::string::npos) std::fprintf(stderr, "[keys] %s: \"%s\" is not \"action = key, key\"\n", k.where.c_str(), line.c_str());
+      else g.keyLines.push_back(k);
+      continue;
+    }
     const std::string key = NormalizeKey(eq == std::string::npos ? line : line.substr(0, eq));
     if (eq == std::string::npos || !KnownKey(key)) {
       std::fprintf(stderr, "[gfx] %s:%d: unknown setting \"%s\"\n", path.c_str(), lineNo, line.c_str());
@@ -664,6 +701,18 @@ std::string settings_value_string(const GraphicsSettings& g, const char* rawKey)
     return g.fullscreen2 ? "borderless" : "off";
   } else if (key == "iso") {
     return g.isoPath;
+  } else if (key == "p1input") {
+    return g.p1Input == 1 ? "controller" : g.p1Input == 2 ? "keyboard_mouse" : "auto";
+  } else if (key == "mouseedgepan") {
+    return g.mouseEdgePan == 0 ? "off" : g.mouseEdgePan == 1 ? "on" : "fullscreen";
+  } else if (key == "mouserotatespeed" || key == "mousezoomspeed") {
+    std::snprintf(buf, sizeof buf, "%g", static_cast<double>(key == "mouserotatespeed" ? g.mouseRotateSpeed : g.mouseZoomSpeed));
+  } else if (key == "mouseinvertx") {
+    return g.mouseInvertX ? "on" : "off";
+  } else if (key == "mouseinverty") {
+    return g.mouseInvertY ? "on" : "off";
+  } else if (key == "mouseinvertwheel") {
+    return g.mouseInvertWheel ? "on" : "off";
   }
   return buf;
 }
@@ -689,7 +738,9 @@ namespace {
 // The names written for new lines (the README's spelling).
 const char* const kNames[] = {"window", "fullscreen", "resolution", "aspect", "hud", "msaa",
                               "anisotropy", "vsync", "fps_cap", "backend", "resampler", "split",
-                              "window2", "window2_pos", "window2_display", "fullscreen2", "iso"};
+                              "window2", "window2_pos", "window2_display", "fullscreen2", "iso",
+                              "p1_input", "mouse_edge_pan", "mouse_rotate_speed", "mouse_zoom_speed",
+                              "mouse_invert_x", "mouse_invert_y", "mouse_invert_wheel"};
 bool SaveNames(const char* const* names, size_t count, std::string& message);
 }  // namespace
 
@@ -757,7 +808,24 @@ bool SaveNames(const char* const* names, size_t count, std::string& message) {
     if (commented >= 0) {
       lines[static_cast<size_t>(commented)] = std::string(name) + " = " + value;
     } else {
-      lines.push_back(std::string(name) + " = " + value);
+      // Appended after the last setting line: not inside a [keys] or [launcher] section (the settings
+      // reader takes neither as settings), which may follow at the end of the file.
+      std::string section;
+      int last = -1, firstOther = -1;
+      for (size_t i = 0; i < lines.size(); ++i) {
+        const std::string t = Trim(lines[i]);
+        if (!t.empty() && t[0] == '[') {
+          section = Lower(t);
+          if ((section == "[keys]" || section == "[launcher]") && firstOther < 0) firstOther = static_cast<int>(i);
+          if (section != "[keys]" && section != "[launcher]") last = static_cast<int>(i);
+          continue;
+        }
+        if (!t.empty() && section != "[keys]" && section != "[launcher]") last = static_cast<int>(i);
+      }
+      const std::string add = std::string(name) + " = " + value;
+      if (firstOther < 0) lines.push_back(add);
+      else if (last >= 0) lines.insert(lines.begin() + (last + 1), add);
+      else lines.insert(lines.begin(), {"[graphics]", add, ""});
     }
   }
   std::string text;

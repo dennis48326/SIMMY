@@ -80,3 +80,56 @@
 ;window2_pos = auto
 ;window2_display = auto
 ;fullscreen2 = off
+
+; ---- Controls (player 1) ----
+; Who controls player 1:
+;   auto            keyboard + mouse and the first controller, both (default)
+;   keyboard_mouse  keyboard + mouse only; the first controller is then pad 2 (player 2 in co-op)
+;   controller      the first controller only (keyboard and mouse do nothing in the game)
+;p1_input = auto
+
+; With the mouse cursor control, pushing the mouse against a window edge moves the camera:
+; off, on, or fullscreen (only in fullscreen; default).
+;mouse_edge_pan = fullscreen
+
+; Camera turning by dragging with the middle (or right) button, and its zoom by dragging up/down:
+; speed 0.1 .. 10 (1 = default) and direction. The mouse wheel's zoom speed and direction.
+;mouse_rotate_speed = 1
+;mouse_invert_x = off
+;mouse_invert_y = off
+;mouse_zoom_speed = 1
+;mouse_invert_wheel = off
+
+; Player 1's keys: "action = key, key, ..." ("none" for no key). Key names: a-z, 0-9, f1-f12, space,
+; return (enter), kp_enter, escape (esc), backspace, tab, lshift, rshift, shift, lctrl, rctrl, ctrl,
+; lalt, ralt, alt, up, down, left, right, pageup, pagedown, home, end, insert, delete, capslock,
+; comma, period, slash, semicolon, apostrophe, leftbracket, rightbracket, backslash, minus, equals,
+; grave, kp_0-kp_9, kp_plus, kp_minus, kp_multiply, kp_divide, kp_period (or SDL's own key names).
+; Keys are by position (a French keyboard's Z key is "w"). Unknown names are reported at start.
+; The defaults (remove the ';' to change one):
+[keys]
+;stick_up = w
+;stick_down = s
+;stick_left = a
+;stick_right = d
+;walk = lshift, rshift        ; held with the stick keys: walk (half stick) instead of run
+;a = space, return, kp_enter
+;b = backspace
+;x = f
+;y = tab                      ; next sim
+;z = c                        ; classic (cursor) control on / off
+;start = escape               ; pause menu
+;l = q
+;r = e
+;dpad_up = up
+;dpad_down = down
+;dpad_left = left
+;dpad_right = right
+;cstick_up = i                ; zoom in
+;cstick_down = k              ; zoom out
+;cstick_left = j              ; turn the camera
+;cstick_right = l
+;pan_up = kp_8                ; move the camera (mouse cursor control only)
+;pan_down = kp_2
+;pan_left = kp_4
+;pan_right = kp_6
