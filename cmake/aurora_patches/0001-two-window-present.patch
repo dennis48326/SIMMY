@@ -1,0 +1,303 @@
+diff --git a/include/aurora/gfx.hpp b/include/aurora/gfx.hpp
+index 8354524..88bcd30 100644
+--- a/include/aurora/gfx.hpp
++++ b/include/aurora/gfx.hpp
+@@ -45,6 +45,11 @@ PresentTargetId xfb_target() noexcept;
+ /// A target can be presented once per frame.
+ /// The primary XFB is presented automatically by aurora_end_frame.
+ bool present_to(PresentTargetId target);
++/// SIMMY patch: presents only the source rectangle (u0, v0)-(u1, v1) of the EFB/pass (0..1 units) to the target,
++/// stretched over the whole surface (no letterbox), for the primary XFB and present_to alike. Read when the
++/// present is recorded (aurora_end_frame / present_to), so it applies to the frame being recorded.
++/// An empty rectangle (u1 <= u0 or v1 <= v0) restores the normal, aspect-fitted present.
++void set_present_crop(PresentTargetId target, float u0, float v0, float u1, float v1) noexcept;
+ 
+ inline constexpr size_t InlineDrawPayloadSize = 128;
+ inline constexpr size_t MaxColorAttachments = 8;
+diff --git a/include/dolphin/gx/GXAurora.h b/include/dolphin/gx/GXAurora.h
+index 2f755f2..ff169b1 100644
+--- a/include/dolphin/gx/GXAurora.h
++++ b/include/dolphin/gx/GXAurora.h
+@@ -166,6 +166,12 @@ void AuroraSetViewportPolicy(AuroraViewportPolicy policy);
+  */
+ void AuroraGetRenderSize(u32* width, u32* height);
+ 
++/**
++ * Overrides the content framebuffer (EFB) size from the next frame on, whatever the window size, viewport policy
++ * and frame buffer scale. 0x0 restores the automatic size. (SIMMY patch: one EFB holding the views of two windows.)
++ */
++void AuroraSetRenderSizeOverride(u32 width, u32 height);
++
+ /**
+  * Flush pending GX state and wait for FIFO processing without signaling a draw-done callback.
+  */
+diff --git a/lib/dolphin/gx/GXAurora.cpp b/lib/dolphin/gx/GXAurora.cpp
+index e833e50..44c0e26 100644
+--- a/lib/dolphin/gx/GXAurora.cpp
++++ b/lib/dolphin/gx/GXAurora.cpp
+@@ -5,6 +5,7 @@
+ #include "__gx.h"
+ #include "gx.hpp"
+ #include "../../window.hpp"
++#include "../../gfx/efb.hpp"
+ 
+ #include "../../gfx/readback/readback.hpp"
+ #include "../../gx/fifo.hpp"
+@@ -46,6 +47,8 @@ void AuroraGetRenderSize(u32* width, u32* height) {
+   }
+ }
+ 
++void AuroraSetRenderSizeOverride(u32 width, u32 height) { aurora::gfx::efb::set_size_override(width, height); }
++
+ void AuroraGXSync() {
+   GXFlush();
+   aurora::gx::fifo::drain();
+diff --git a/lib/gfx/efb.cpp b/lib/gfx/efb.cpp
+index 6764311..c655443 100644
+--- a/lib/gfx/efb.cpp
++++ b/lib/gfx/efb.cpp
+@@ -16,6 +16,16 @@ AuroraWindowSize g_displaySize{};
+ std::optional<State> g_applied;
+ float g_scale = 0.f;
+ bool g_aspectFit = false;
++uint32_t g_overrideWidth = 0;  // SIMMY patch: set_size_override
++uint32_t g_overrideHeight = 0;
++
++AuroraWindowSize apply_override(AuroraWindowSize size) {
++  if (g_overrideWidth && g_overrideHeight) {
++    size.fb_width = g_overrideWidth;
++    size.fb_height = g_overrideHeight;
++  }
++  return size;
++}
+ 
+ uint32_t extent(double value) {
+   return static_cast<uint32_t>(std::clamp(std::round(value), 1.0, static_cast<double>(UINT32_MAX)));
+@@ -107,6 +117,12 @@ bool set_scale(float scale) {
+   return true;
+ }
+ 
++void set_size_override(uint32_t width, uint32_t height) {
++  std::lock_guard lock{g_configMutex};
++  g_overrideWidth = width && height ? width : 0;
++  g_overrideHeight = width && height ? height : 0;
++}
++
+ bool set_aspect_fit(bool fit) {
+   std::lock_guard lock{g_configMutex};
+   if (g_aspectFit == fit) {
+@@ -120,7 +136,7 @@ bool set_aspect_fit(bool fit) {
+ AuroraWindowSize resolve_size(AuroraWindowSize size) {
+   const auto [baseWidth, baseHeight] = vi::configured_fb_size();
+   std::lock_guard lock{g_configMutex};
+-  return calculate_size(size, baseWidth, baseHeight, g_scale, g_aspectFit);
++  return apply_override(calculate_size(size, baseWidth, baseHeight, g_scale, g_aspectFit));
+ }
+ 
+ AuroraWindowSize pending_size() {
+@@ -137,7 +153,7 @@ AuroraWindowSize pending_size() {
+     }
+   }
+ 
+-  return calculate_size(size, baseWidth, baseHeight, g_scale, g_aspectFit);
++  return apply_override(calculate_size(size, baseWidth, baseHeight, g_scale, g_aspectFit));
+ }
+ 
+ AuroraWindowSize applied_size() {
+@@ -177,7 +193,7 @@ State prepare_frame(bool commit) {
+         size.native_fb_height = baseHeight;
+       }
+     }
+-    size = calculate_size(size, baseWidth, baseHeight, g_scale, g_aspectFit);
++    size = apply_override(calculate_size(size, baseWidth, baseHeight, g_scale, g_aspectFit));
+   }
+ 
+   webgpu::resize_efb(size.fb_width, size.fb_height);
+diff --git a/lib/gfx/efb.hpp b/lib/gfx/efb.hpp
+index 98f4951..5d28d18 100644
+--- a/lib/gfx/efb.hpp
++++ b/lib/gfx/efb.hpp
+@@ -32,5 +32,7 @@ AuroraWindowSize calculate_size(AuroraWindowSize size, uint32_t baseWidth, uint3
+ void set_display_size(uint32_t width, uint32_t height, float scale);
+ bool set_scale(float scale);
+ bool set_aspect_fit(bool fit);
++// SIMMY patch: a fixed EFB size (0x0: automatic).
++void set_size_override(uint32_t width, uint32_t height);
+ 
+ } // namespace aurora::gfx::efb
+diff --git a/lib/gfx/present_target.cpp b/lib/gfx/present_target.cpp
+index ee33ca3..6cf500e 100644
+--- a/lib/gfx/present_target.cpp
++++ b/lib/gfx/present_target.cpp
+@@ -41,6 +41,8 @@ struct TargetState {
+   uint64_t appliedRevision = 0;
+   bool dirty = true;
+   bool vsync = true;
++  bool cropped = false;  // SIMMY patch: set_present_crop
++  std::array<float, 4> crop{0.f, 0.f, 1.f, 1.f};
+   std::atomic_bool sdlManaged = false;
+   std::atomic<PresentTargetStatus> status = PresentTargetStatus::Pending;
+ };
+@@ -216,6 +218,18 @@ void resize_present_target(PresentTargetId id, uint32_t width, uint32_t height,
+   ++target->revision;
+ }
+ 
++void set_present_crop(PresentTargetId id, float u0, float v0, float u1, float v1) noexcept {
++  const auto target = find_target(id);
++  if (!target) {
++    return;
++  }
++
++  std::lock_guard lock{target->configMutex};
++  target->cropped = std::isfinite(u0) && std::isfinite(v0) && std::isfinite(u1) && std::isfinite(v1) && u1 > u0 &&
++                    v1 > v0;
++  target->crop = target->cropped ? std::array{u0, v0, u1, v1} : std::array{0.f, 0.f, 1.f, 1.f};
++}
++
+ bool set_xfb_target(PresentTargetId id) noexcept {
+   std::lock_guard registryLock{g_targetsMutex};
+   if (id != InvalidPresentTarget) {
+@@ -240,6 +254,16 @@ PresentTargetId xfb_target() noexcept { return g_xfbTarget.load(std::memory_orde
+ 
+ namespace present {
+ 
++bool current_crop(const TargetSnapshot& snapshot, std::array<float, 4>& crop) noexcept {
++  crop = {0.f, 0.f, 1.f, 1.f};
++  if (!snapshot.state) {
++    return false;
++  }
++  std::lock_guard lock{snapshot.state->configMutex};
++  crop = snapshot.state->crop;
++  return snapshot.state->cropped;
++}
++
+ bool is_sdl_xfb() noexcept {
+   const auto target = find_target(xfb_target());
+   return target && !target->retired.load(std::memory_order_acquire) &&
+diff --git a/lib/gfx/present_target.hpp b/lib/gfx/present_target.hpp
+index 07c21b1..64d474f 100644
+--- a/lib/gfx/present_target.hpp
++++ b/lib/gfx/present_target.hpp
+@@ -5,6 +5,7 @@
+ #include "../webgpu/gpu.hpp"
+ #include "../imgui.hpp"
+ 
++#include <array>
+ #include <memory>
+ 
+ namespace aurora::gfx::present {
+@@ -35,6 +36,8 @@ struct Request {
+ };
+ 
+ TargetSnapshot snapshot(PresentTargetId id, bool primary = false);
++// SIMMY patch: the target's current set_present_crop rectangle (u0, v0, u1, v1); false when none is set.
++bool current_crop(const TargetSnapshot& snapshot, std::array<float, 4>& crop) noexcept;
+ void submit(const Request& request);
+ void shutdown();
+ void set_vsync(bool enabled) noexcept;
+diff --git a/lib/gfx/recording.cpp b/lib/gfx/recording.cpp
+index 61bf1c1..d283389 100644
+--- a/lib/gfx/recording.cpp
++++ b/lib/gfx/recording.cpp
+@@ -580,8 +580,21 @@ std::array<PresentPool, FrameSlotCount> g_presentPools;
+ present::Request record_present(present::TargetSnapshot target, webgpu::TextureWithSampler source,
+                                 bool resample = true) {
+   auto& frame = current_frame_packet();
+-  const auto viewport = webgpu::calculate_present_viewport(target.size.native_fb_width, target.size.native_fb_height,
+-                                                           source.size.width, source.size.height);
++  // SIMMY patch: set_present_crop, read now so it applies to this frame: the rectangle stretched over the surface.
++  std::array<float, 4> crop;
++  const bool cropped = present::current_crop(target, crop);
++  const auto viewport =
++      cropped ? webgpu::Viewport{.left = 0.f,
++                                 .top = 0.f,
++                                 .width = static_cast<float>(target.size.native_fb_width),
++                                 .height = static_cast<float>(target.size.native_fb_height),
++                                 .znear = 0.f,
++                                 .zfar = 1.f}
++              : webgpu::calculate_present_viewport(target.size.native_fb_width, target.size.native_fb_height,
++                                                   source.size.width, source.size.height);
++  if (cropped) {
++    resample = true;
++  }
+   if (!resample) {
+     return {
+         .target = std::move(target),
+@@ -608,7 +621,8 @@ present::Request record_present(present::TargetSnapshot target, webgpu::TextureW
+     source.sampler = destination.sampler;
+   }
+ 
+-  const auto uniform = push_uniform(webgpu::resample_uniform(width, height));
++  const float uvRect[4] = {crop[0], crop[1], crop[2], crop[3]};
++  const auto uniform = push_uniform(webgpu::resample_uniform(width, height, uvRect));
+   const auto taskIndex = static_cast<uint32_t>(frame.resampleTasks.size());
+   frame.resampleTasks.push_back({
+       .source = std::move(source),
+diff --git a/lib/webgpu/gpu.cpp b/lib/webgpu/gpu.cpp
+index 956cdd6..1575ccd 100644
+--- a/lib/webgpu/gpu.cpp
++++ b/lib/webgpu/gpu.cpp
+@@ -91,6 +91,7 @@ struct Uniforms {
+     sampler_mode: u32,
+     frame_width: f32,
+     frame_height: f32,
++    uv_rect: vec4<f32>,
+ };
+ 
+ struct VertexOutput {
+@@ -134,10 +135,10 @@ fn sample_area(frag_position: vec4<f32>) -> vec4<f32> {
+     let source_size = vec2<f32>(textureDimensions(t));
+     let target_size = max(vec2<f32>(uniforms.frame_width, uniforms.frame_height), vec2<f32>(1.0, 1.0));
+ 
+-    let source_min = clamp((frag_position.xy - vec2<f32>(0.5, 0.5)) / target_size,
+-                           vec2<f32>(0.0, 0.0), vec2<f32>(1.0, 1.0)) * source_size;
+-    let source_max = clamp((frag_position.xy + vec2<f32>(0.5, 0.5)) / target_size,
+-                           vec2<f32>(0.0, 0.0), vec2<f32>(1.0, 1.0)) * source_size;
++    let source_min = (uniforms.uv_rect.xy + clamp((frag_position.xy - vec2<f32>(0.5, 0.5)) / target_size,
++                           vec2<f32>(0.0, 0.0), vec2<f32>(1.0, 1.0)) * uniforms.uv_rect.zw) * source_size;
++    let source_max = (uniforms.uv_rect.xy + clamp((frag_position.xy + vec2<f32>(0.5, 0.5)) / target_size,
++                           vec2<f32>(0.0, 0.0), vec2<f32>(1.0, 1.0)) * uniforms.uv_rect.zw) * source_size;
+ 
+     let first_pixel = vec2<i32>(floor(source_min));
+     let last_pixel = vec2<i32>(ceil(source_max));
+@@ -172,7 +173,7 @@ fn sample_area(frag_position: vec4<f32>) -> vec4<f32> {
+ 
+ @fragment
+ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+-    var color = textureSample(t, s, in.uv);
++    var color = textureSample(t, s, uniforms.uv_rect.xy + in.uv * uniforms.uv_rect.zw);
+     if (uniforms.sampler_mode == 1u) {
+         color = sample_area(in.position);
+     }
+@@ -636,6 +637,15 @@ ResampleUniformBlock resample_uniform(uint32_t width, uint32_t height) noexcept
+   };
+ }
+ 
++ResampleUniformBlock resample_uniform(uint32_t width, uint32_t height, const float (&crop)[4]) noexcept {
++  auto block = resample_uniform(width, height);
++  block.uvRect[0] = crop[0];
++  block.uvRect[1] = crop[1];
++  block.uvRect[2] = crop[2] - crop[0];
++  block.uvRect[3] = crop[3] - crop[1];
++  return block;
++}
++
+ void resample(const wgpu::CommandEncoder& encoder, const TextureWithSampler& source,
+               const TextureWithSampler& destination, const wgpu::Buffer& uniforms, uint32_t offset) {
+   const auto width = destination.size.width;
+diff --git a/lib/webgpu/gpu.hpp b/lib/webgpu/gpu.hpp
+index 62d4040..74fc450 100644
+--- a/lib/webgpu/gpu.hpp
++++ b/lib/webgpu/gpu.hpp
+@@ -75,8 +75,11 @@ struct ResampleUniformBlock {
+   float frameWidth = 0.f;
+   float frameHeight = 0.f;
+   uint32_t padding = 0;
++  float uvRect[4] = {0.f, 0.f, 1.f, 1.f}; // SIMMY patch: source offset (xy) and size (zw), 0..1
+ };
+ ResampleUniformBlock resample_uniform(uint32_t width, uint32_t height) noexcept;
++// SIMMY patch: resampling only the source rectangle (u0, v0)-(u1, v1).
++ResampleUniformBlock resample_uniform(uint32_t width, uint32_t height, const float (&crop)[4]) noexcept;
+ void resample(const wgpu::CommandEncoder& encoder, const TextureWithSampler& source,
+               const TextureWithSampler& destination, const wgpu::Buffer& uniforms, uint32_t offset);
+ wgpu::RenderPipeline copy_pipeline(wgpu::TextureFormat format, bool premultipliedAlpha = false);

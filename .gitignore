@@ -1,0 +1,9 @@
+build/
+out/
+__pycache__/
+*.pyc
+*.iso
+*.gcm
+DATA/
+simmy.ini
+*.gci

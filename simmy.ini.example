@@ -1,0 +1,82 @@
+; SIMMY settings. Copy to simmy.ini next to simmy.exe (the build does this once, and never
+; overwrites a simmy.ini that is already there). Everything here is commented out: with no settings
+; the game looks exactly like the GameCube, a 4:3 640x480 picture scaled to the window.
+;
+; Command-line switches override this file: --<setting> <value> or --<setting>=<value>, for example
+;   simmy.exe --iso "D:\Games\The Sims 2.iso" --aspect 16:9 --resolution 1080p --msaa 4
+; plus --fullscreen, --windowed, --widescreen, --vsync, --novsync and --config <other.ini>.
+; Environment (tests): SIMMY_GFX="aspect=16:9;msaa=4", SIMMY_GFX_<SETTING>=value, SIMMY_INI=<file>.
+; In the game, F1 opens the options menu: it changes these settings while playing and its "Save to
+; simmy.ini" writes them into this file (comments and unknown lines are kept).
+
+[game]
+
+; The game's disc image: a plain GameCube .iso / .gcm of The Sims 2 (any region). SimmyLauncher.exe
+; writes this line when you choose the disc; --iso <file> overrides it. The whole rest of the line is
+; the path (no comments after it; quotes around it are allowed). Compressed images (.rvz, .wia, .gcz,
+; .ciso, NKit) must first be converted in Dolphin: right-click the game, Convert File..., Format ISO.
+; (Developers: --data <folder> reads an extracted disc instead and wins over this.)
+;iso =
+
+[graphics]
+
+; Window size in pixels (default 1280x960; 1280x720 with aspect=16:9). With fullscreen=exclusive this
+; is the display mode to use (default: the desktop's).
+;window = 1280x960
+
+; off | borderless | exclusive. Alt+Enter switches between windowed and fullscreen while playing.
+;fullscreen = off
+
+; Internal render resolution, independent of the window:
+;   auto (default: the window's own pixel size), 480p, 720p, 1080p, 1440p, 2160p,
+;   or a factor of the GameCube's 640x480 such as 2x or 3.5x.
+; The width follows the aspect: 1080p is 1440x1080 at 4:3 and 1920x1080 at 16:9.
+;resolution = auto
+
+; 4:3 (the original) or 16:9 (widescreen: the 3D view is widened to the window's aspect, with the
+; same vertical field of view; 16:10 and 21:9 only change the default window size).
+; Two-player co-op has its own setting (split, below).
+;aspect = 4:3
+
+; Widescreen only: where the Flash HUD and menus go.
+;   centered  the 4:3 UI in the middle of the screen
+;   edges     HUD elements in the left/right half of the UI move out to the screen edges (default); dialogs
+;             and menus across the middle stay centred
+;hud = edges
+
+; Multisample anti-aliasing: 1 (off), 2, 4 or 8.
+;msaa = 1
+
+; Anisotropic texture filtering: 1 (off) to 16.
+;anisotropy = 16
+
+; Wait for the display's refresh: on | off.
+;vsync = off
+
+; Frame-rate cap: 60, 30, 20 or 15. The game counts its time in 60 Hz retraces, so it never runs
+; faster than 60 frames a second (on a 120/144 Hz display it still runs at normal speed).
+;fps_cap = 60
+
+; Graphics API: auto, d3d12, d3d11, vulkan, opengl, opengles (metal on macOS).
+;backend = auto
+
+; Filter used to scale the picture to the window: bilinear, or area (sharper when the internal
+; resolution is larger than the window).
+;resampler = bilinear
+
+; Two-player co-op display (also --split=...):
+;   gc       the GameCube's: one 4:3 picture cut in two (default)
+;   4x3      two 4:3 halves side by side in one wide window
+;   wide     the window's own aspect cut in two
+;   windows  each player in their own window, each like a one-player widescreen game: player 1 in
+;            the game's window, player 2 in a second window (beside it, or on a second monitor).
+;            Closing window 2 hides it (F2 in window 1 shows it again); closing window 1 quits.
+;split = gc
+
+; split=windows: player 2's window. Its size (auto: window 1's), its position on the desktop and
+; its display (auto: another display than window 1's if there is one, else beside window 1), and
+; borderless fullscreen (Alt+Enter in window 2). These are written here when the game quits.
+;window2 = auto
+;window2_pos = auto
+;window2_display = auto
+;fullscreen2 = off
