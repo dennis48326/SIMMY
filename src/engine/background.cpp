@@ -2,6 +2,9 @@
 #include "simmy/types_gen.hpp"
 #include "simmy/platform.hpp"
 
+#include <cstdio>
+#include <cstdlib>
+
 static BackgroundImpl _background;
 BackgroundImpl* _pBackground = nullptr;  // 8050003C
 
@@ -45,6 +48,20 @@ int BackgroundImpl::IsCallingThread() { return std::this_thread::get_id() == m_t
 // 802E1E50
 void BackgroundImpl::Update() {}
 
+// PC test hook: SIMMY_TEST_QUIT_BG=N asks the game to quit (as the F1 overlay's Quit does) when the Nth
+// background routine is queued, so the exit path is tested while a house load or a save is running.
+static void TestQuitOnRoutine() {
+  static const int at = [] {
+    const char* e = std::getenv("SIMMY_TEST_QUIT_BG");
+    return e ? std::atoi(e) : 0;
+  }();
+  static int count = 0;
+  if (at > 0 && ++count == at) {
+    std::fprintf(stderr, "[test] background routine %d queued: quitting\n", count);
+    simmy::platform_request_quit();
+  }
+}
+
 // 802E1E54
 void BackgroundImpl::ExecuteRoutine(void (*fn)()) {
   {
@@ -52,6 +69,7 @@ void BackgroundImpl::ExecuteRoutine(void (*fn)()) {
     m_queue.emplace_back([fn] { fn(); });
   }
   m_cv.notify_one();
+  TestQuitOnRoutine();
   // PC: with SIMMY_DET (pc_det.cpp) the caller waits for the routine, so that a load takes the same
   // number of game frames on every run (the frames the front end ran before the house decide the UI's
   // timing phase in it).
@@ -65,6 +83,7 @@ void BackgroundImpl::ExecuteArgRoutine(void (*fn)(void*), void* arg) {
     m_queue.emplace_back([fn, arg] { fn(arg); });
   }
   m_cv.notify_one();
+  TestQuitOnRoutine();
   if (simmy::det_timing()) Flush();  // PC: SIMMY_DET (see ExecuteRoutine)
 }
 

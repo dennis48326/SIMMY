@@ -76,6 +76,7 @@ void platform_set_quit_handler(void (*onQuitRequested)()) { g_onQuit = onQuitReq
 void platform_request_quit() {
   if (g_quitRequested) return;
   g_quitRequested = true;
+  std::fprintf(stderr, "[simmy] quit requested\n");
   if (g_onQuit) g_onQuit();
 }
 
@@ -104,6 +105,7 @@ bool platform_pump_events() {
     for (const AuroraEvent* e = aurora_update(); e && e->type != AURORA_NONE; ++e) {
       if (e->type == AURORA_EXIT && !g_quitRequested) {
         g_quitRequested = true;
+        std::fprintf(stderr, "[simmy] quit requested by the window (closed, Alt+F4 or a quit event)\n");
         if (g_onQuit) g_onQuit();
       }
       // The second player's window (split=windows) handles its own events (pc_window2.cpp).
@@ -421,6 +423,7 @@ void platform_frame_tick() {
   const DevOptions& dev = dev_options();
   if (dev.quitAfterFrames && s_ticks >= dev.quitAfterFrames && !g_shotPending && !g_quitRequested) {
     g_quitRequested = true;
+    std::fprintf(stderr, "[simmy] --frames %u reached: quitting\n", dev.quitAfterFrames);
     if (g_onQuit) g_onQuit();
   }
   if (g_shotPending && s_ticks > dev.quitAfterFrames + 120) g_shotPending = false;  // give up eventually
@@ -431,6 +434,42 @@ void platform_frame_tick() {
   const auto next = g_lastTick + std::chrono::microseconds(settings_frame_interval_us());
   std::this_thread::sleep_until(next);
   g_lastTick = std::max(next, std::chrono::steady_clock::now() - std::chrono::milliseconds(100));
+}
+}  // namespace simmy
+
+namespace simmy {
+#ifdef _WIN32
+[[noreturn]] void process_exit_now(int code);  // pc_crash_win.cpp: TerminateProcess
+void crash_reinstall_handlers();                // pc_crash_win.cpp
+#endif
+
+// The one way out once the game has run (every exit ends here: the F1 overlay's Quit, closing window 1,
+// Alt+F4, SIMMY_DET_QUIT, --frames; closing player 2's window only hides it). By the time the game's
+// main returns, its own exit path (EApp::Main -> EEngine::ShutdownThreads) has stopped the controllers,
+// closed the audio device (its mixer thread is gone), finished the background thread's work (house loads,
+// memory card saves) and joined it. Here: the second window, the overlay, then aurora (GPU device, SDL
+// windows and subsystems), in that order; then the logs are flushed and the process ends at once.
+//
+// The process does not return from main: the game's global objects were made for a console that never
+// exits (several destructors are unported, others free into heaps or join threads), so their static
+// destructors are not run. On Windows the end is TerminateProcess on our own process, after the GPU
+// device and windows are released: unlike ExitProcess it does not run the DLLs' detach code (d3d12 and
+// driver DLLs with their threads killed mid-wait), which is where exit-time hangs and crashes come from;
+// the files the game wrote are already closed (memory card commits are synchronous, simmy.ini is saved
+// in place) and stdout / stderr are unbuffered. Elsewhere _Exit. The exit code is the game's.
+[[noreturn]] void platform_shutdown_and_exit(int rc) {
+  if (!g_headless) {
+    window2_shutdown();
+    overlay_shutdown();
+    aurora_shutdown();
+  }
+  std::fprintf(stderr, "[simmy] clean exit (code %d)\n", rc);
+  std::fflush(nullptr);
+#ifdef _WIN32
+  process_exit_now(rc);
+#else
+  std::_Exit(rc);
+#endif
 }
 }  // namespace simmy
 
@@ -583,6 +622,9 @@ int main(int argc, char* argv[]) {  // aurora/main.h renames this to aurora_main
       }
     }
     simmy::overlay_init(simmy::dev_options().offscreen);
+#ifdef _WIN32
+    simmy::crash_reinstall_handlers();  // SDL, Dawn or the driver may have replaced them
+#endif
     // aurora only hands a controller to port 1 by default (ports 2-4 start as "none"), so a second
     // pad never reached the game and the front end offered only one player. Like a GameCube with
     // pads in several ports, give every unconfigured port the next free controller. A port the
@@ -644,10 +686,5 @@ int main(int argc, char* argv[]) {  // aurora/main.h renames this to aurora_main
   std::fprintf(stderr, "[simmy] game main returned %d; %u distinct unported functions were called\n", rc,
                simmy::stub_unique_count());
 
-  if (!simmy::g_headless) {
-    simmy::window2_shutdown();
-    simmy::overlay_shutdown();
-    aurora_shutdown();
-  }
-  return rc;
+  simmy::platform_shutdown_and_exit(rc);
 }

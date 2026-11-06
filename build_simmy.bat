@@ -116,6 +116,12 @@ if exist "%BLD%\RelWithDebInfo\simmy_hang.txt" (echo --- hang report --- >> "%LO
 echo BUILD OK >> "%LOG%"
 rem Start the launcher once the build succeeds (set SIMMY_NO_LAUNCH=1 to skip). It replaces
 rem run_simmy.bat and run_simmy_coop.bat: pick the disc, then Play or Co-op.
+rem The test settings above must not reach the game the launcher starts (the watchdog would
+rem write simmy_hang.txt 40 s into every game).
+set SIMMY_WATCHDOG=
+set SIMMY_TEST_CLEAR=
+set TESTFLAG=
+set TESTPATH=
 if not defined SIMMY_NO_LAUNCH start "" "%BLD%\RelWithDebInfo\SimmyLauncher.exe"
 
 :done

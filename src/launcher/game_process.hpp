@@ -44,6 +44,9 @@ class GameProcess {
 // The command line as the game will see it (for the log).
 std::string describe_command(const LaunchRequest& request);
 
+// Names of the SIMMY_* variables in this process's environment (which a started game would inherit).
+std::vector<std::string> inherited_simmy_variables();
+
 // Opens a folder in the desktop's file manager.
 void open_folder(const std::string& path);
 

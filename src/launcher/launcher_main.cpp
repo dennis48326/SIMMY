@@ -384,6 +384,7 @@ class App {
   GameProcess game_;
   bool coopRunning_ = false;
   SDL_Time launchTime_ = 0;
+  bool forceQuit_ = false;  // the player pressed "Force quit": its exit code is not a failure
   std::string runningMode_;
   ErrorReport error_;
   Toast toast_;
@@ -826,6 +827,22 @@ void App::launch(bool coop) {
   r.env = {{"SIMMY_SKIP_INTRO", (flag("skip_intro") || quick) ? "1" : ""},
            {"SIMMY_TWO_PLAYER", quick ? "1" : ""},
            {"SIMMY_CAS_ACCEPT", quick ? "300" : ""}};
+  // Test and diagnostic switches (SIMMY_WATCHDOG, SIMMY_DET*, SIMMY_TEST_*, SIMMY_SHOTS, ...) left in
+  // the launcher's environment, e.g. by a build script, must not reach a normal game: every other
+  // SIMMY_* variable is removed from the game's environment, except SIMMY_INI (the launcher and the game
+  // read the same simmy.ini). SIMMY_LAUNCHER_KEEP_ENV=1 passes them through (development).
+  std::string stripped;
+  const char* keep = std::getenv("SIMMY_LAUNCHER_KEEP_ENV");
+  if (!(keep && *keep && *keep != '0')) {
+    for (const std::string& name : inherited_simmy_variables()) {
+      if (name == "SIMMY_INI" || name == "SIMMY_LAUNCHER_KEEP_ENV") continue;
+      bool set = false;
+      for (const auto& kv : r.env) set = set || kv.first == name;
+      if (set) continue;
+      r.env.emplace_back(name, "");
+      stripped += " " + name;
+    }
+  }
   SDL_GetCurrentTime(&launchTime_);
   launchTime_ -= SDL_NS_PER_SECOND * 2;  // file times can be coarse
   std::string err;
@@ -836,9 +853,11 @@ void App::launch(bool coop) {
     const std::time_t now = std::time(nullptr);
     std::strftime(when, sizeof when, "%Y-%m-%d %H:%M:%S", std::localtime(&now));
     SDL_IOprintf(log, "%s start: %s\n", when, command.c_str());
+    if (!stripped.empty()) SDL_IOprintf(log, "    removed from the game's environment:%s\n", stripped.c_str());
     SDL_CloseIO(log);
   }
   closePads();
+  forceQuit_ = false;
   if (!game_.start(r, err)) {
     openPads();
     showError("The game didn't start", err, "", true);
@@ -864,8 +883,39 @@ void App::pollGame() {
   std::string description;
   if (!game_.poll(code, description)) return;
   std::fprintf(stderr, "[launcher] game exited with code %d (%s)\n", code, Hex(static_cast<unsigned>(code)).c_str());
+  // A crash report the game wrote next to itself during this run (pc_crash_win.cpp). The watchdog's
+  // timed snapshot (simmy_watchdog.txt, SIMMY_WATCHDOG) is a diagnostic, not a failure: it is ignored.
+  std::string report, reportName;
+  {
+    SDL_Time t = 0;
+    const std::string path = gameDir_ + "simmy_crash.txt";
+    if (FileExists(path, &t) && t >= launchTime_) {
+      size_t size = 0;
+      if (void* data = SDL_LoadFile(path.c_str(), &size)) {
+        report.assign(static_cast<const char*>(data), std::min<size_t>(size, 4000));
+        reportName = "simmy_crash.txt";
+        SDL_free(data);
+      }
+    }
+  }
+  SDL_Time dumpTime = 0;
+  const bool haveDump = FileExists(gameDir_ + "simmy_crash.dmp", &dumpTime) && dumpTime >= launchTime_;
   if (SDL_IOStream* log = SDL_IOFromFile((baseDir_ + "simmy_launcher_log.txt").c_str(), "ab")) {
-    SDL_IOprintf(log, "    exit code %d (%s) %s\n", code, Hex(static_cast<unsigned>(code)).c_str(), description.c_str());
+    SDL_IOprintf(log, "    exit code %d (%s) %s%s\n", code, Hex(static_cast<unsigned>(code)).c_str(), description.c_str(),
+                 forceQuit_ ? " (force quit)" : "");
+    if (!report.empty()) {
+      SDL_IOprintf(log, "    crash report %s%s%s:\n", (gameDir_ + reportName).c_str(), haveDump ? ", minidump " : "",
+                   haveDump ? (gameDir_ + "simmy_crash.dmp").c_str() : "");
+      size_t start = 0;
+      for (int n = 0; n < 40 && start < report.size(); ++n) {
+        size_t end = report.find('\n', start);
+        if (end == std::string::npos) end = report.size();
+        std::string l = report.substr(start, end - start);
+        if (!l.empty() && l.back() == '\r') l.pop_back();
+        if (!l.empty()) SDL_IOprintf(log, "      %s\n", l.c_str());
+        start = end + 1;
+      }
+    }
     SDL_CloseIO(log);
   }
   if (window_) {
@@ -878,21 +928,8 @@ void App::pollGame() {
   setPage(Page::Home, kIdPlay);
   afterGameFrames_ = 0;
 
-  // Crash and hang reports the game writes next to itself (pc_crash_win.cpp).
-  std::string report, reportName;
-  for (const char* name : {"simmy_crash.txt", "simmy_hang.txt"}) {
-    SDL_Time t = 0;
-    const std::string path = gameDir_ + name;
-    if (report.empty() && FileExists(path, &t) && t >= launchTime_) {
-      size_t size = 0;
-      if (void* data = SDL_LoadFile(path.c_str(), &size)) {
-        report.assign(static_cast<const char*>(data), std::min<size_t>(size, 4000));
-        reportName = name;
-        SDL_free(data);
-      }
-    }
-  }
-  if (code == 0 && report.empty()) return;
+  // A clean exit (code 0, no crash report) or the player's own "Force quit": no message.
+  if (report.empty() && (code == 0 || forceQuit_)) return;
 
   // The excerpt: the report's first lines, else the end of the game's log.
   std::string excerpt;
@@ -922,12 +959,15 @@ void App::pollGame() {
     }
   }
   std::string body;
-  if (reportName == "simmy_hang.txt") body = "The game stopped responding and wrote a hang report.";
+  if (!report.empty()) body = "The game crashed and wrote a crash report.";
   else if (!description.empty()) body = "The game stopped unexpectedly: " + description + ".";
   else body = "The game stopped unexpectedly.";
   body += " Exit code " + (code >= 0 && code < 256 ? std::to_string(code) : Hex(static_cast<unsigned>(code))) + ".";
-  body += " The logs (game_log.txt, game_out.txt" + (reportName.empty() ? std::string() : ", " + reportName) +
-          ") are in the launcher's folder; they help a lot when reporting the problem.";
+  std::string files = "game_log.txt, game_out.txt";
+  if (!report.empty()) files += ", simmy_crash.txt";
+  if (haveDump) files += ", simmy_crash.dmp";
+  body += " Please send these files with your report: " + files + " (the button below opens their folder).";
+  if (gameDir_ != baseDir_ && (!report.empty() || haveDump)) body += " The crash files are in " + gameDir_ + ".";
   showError("Uh-oh! Something went wrong", body, excerpt, true);
 }
 
@@ -1340,6 +1380,7 @@ void App::drawPlaying() {
   canvas_.text(kFontSmall, kW * 0.5f, 548, kTips[tip], rgb(0xFFFFFF, 0.85f * a), Align::Center);
   if (button(kIdForceQuit, Rect{kW * 0.5f - 85, 588, 170, 46}, "Force quit", Style::Ghost, Icon::Stop, game_.running(),
              kFontHeading)) {
+    forceQuit_ = true;
     game_.kill();
   }
 }

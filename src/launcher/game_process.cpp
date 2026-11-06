@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <cwchar>
 
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
@@ -227,6 +228,24 @@ void GameProcess::kill() {
   if (running_ && process_) TerminateProcess(static_cast<HANDLE>(process_), 1);
 }
 
+std::vector<std::string> inherited_simmy_variables() {
+  std::vector<std::string> names;
+  wchar_t* block = GetEnvironmentStringsW();
+  if (!block) return names;
+  // "NAME=value\0NAME=value\0...\0"; entries starting with '=' are the per-drive current directories.
+  for (const wchar_t* p = block; *p; p += wcslen(p) + 1) {
+    const std::string entry = Narrow(p);
+    const size_t eq = entry.find('=');
+    if (eq == std::string::npos || eq == 0) continue;
+    std::string name = entry.substr(0, eq);
+    std::string upper = name;
+    for (char& c : upper) c = static_cast<char>(c >= 'a' && c <= 'z' ? c - 32 : c);  // names ignore case on Windows
+    if (upper.rfind("SIMMY_", 0) == 0) names.push_back(name);
+  }
+  FreeEnvironmentStringsW(block);
+  return names;
+}
+
 void open_folder(const std::string& path) {
   ShellExecuteW(nullptr, L"open", Widen(path).c_str(), nullptr, nullptr, SW_SHOWNORMAL);
 }
@@ -316,6 +335,15 @@ bool GameProcess::poll(int& exitCode, std::string& description) {
 
 void GameProcess::kill() {
   if (running_ && pid_ > 0) ::kill(pid_, SIGKILL);
+}
+
+std::vector<std::string> inherited_simmy_variables() {
+  std::vector<std::string> names;
+  for (char** e = environ; e && *e; ++e) {
+    const char* eq = std::strchr(*e, '=');
+    if (eq && std::strncmp(*e, "SIMMY_", 6) == 0) names.emplace_back(*e, static_cast<size_t>(eq - *e));
+  }
+  return names;
 }
 
 void open_folder(const std::string& path) {

@@ -48,7 +48,8 @@ host threads, and the resource system's background worker is one.
 
 **Saves** go where aurora keeps them: `%APPDATA%\SIMMY\USA\Card A\` as `.gci` files, the same format
 Dolphin uses for its GCI folders (also when the game runs from a European disc). `simmy.ini` and the
-crash and hang reports (`simmy_crash.txt`, `simmy_hang.txt`) are next to `simmy.exe`, the GPU cache
+crash report (`simmy_crash.txt` plus a small minidump `simmy_crash.dmp`; `simmy_watchdog.txt` with
+`SIMMY_WATCHDOG=N`) are next to `simmy.exe`, the GPU cache
 in `%APPDATA%\SIMMY\`. The game data (disc image or `--data` folder) is only read.
 
 Ported so far:
@@ -147,8 +148,12 @@ work if you keep them). The launcher:
   plus *Skip intro movies* (`SIMMY_SKIP_INTRO=1`). Its own settings live in a `[launcher]` section
   of `simmy.ini`, which the game skips.
 - While the game runs the launcher waits minimized and comes back when it ends. The game's output
-  goes to `game_out.txt` / `game_log.txt` next to the launcher; if the game crashed (or wrote
-  `simmy_crash.txt` / `simmy_hang.txt`), the launcher says so and offers to open the log folder.
+  goes to `game_out.txt` / `game_log.txt` next to the launcher; if the game ended with a nonzero
+  exit code or wrote a crash report (`simmy_crash.txt` / `simmy_crash.dmp`), the launcher says so,
+  records the exit code (hex) and the report in `simmy_launcher_log.txt` and offers to open the log
+  folder. A clean quit (exit code 0) shows nothing. The launcher removes `SIMMY_*` variables (test and
+  diagnostic switches such as `SIMMY_WATCHDOG`) other than `SIMMY_INI` from the game's environment,
+  unless `SIMMY_LAUNCHER_KEEP_ENV=1`.
 
 Mouse, keyboard (arrows, Enter, Esc) and controllers (D-pad / stick, A, B) all work. Test switches:
 `--screenshot out.bmp [--page home|coop|options|playing|error] [--frames N] [--scale S]`,

@@ -56,6 +56,10 @@ void platform_frame_tick();
 
 bool platform_headless();
 
+// Asks the game to quit (the F1 overlay's Quit, closing the window): the game winds down through its
+// own exit path, then pc_main.cpp's platform_shutdown_and_exit ends the process.
+void platform_request_quit();
+
 // ---- PC development options (pc_main.cpp / pc_devtools.cpp) ----
 //   --offscreen               render without a window (aurora's headless surface), e.g. for CI
 //   --screenshot N file.bmp   save frame N (counting from 1) as a BMP

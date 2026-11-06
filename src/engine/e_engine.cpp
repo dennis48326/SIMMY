@@ -100,6 +100,11 @@ void EEngine::InitFileSystem() { _eorFileSys.Init(static_cast<int>(0x80000000u))
 
 // 802E2CAC
 void EEngine::ShutdownThreads(bool waitForThreads) {
+  // PC: the console only came here on a reset; on PC every quit does (F1 Quit, closing the window), and
+  // it can come while the background thread loads a house or writes a memory card save. Let that
+  // routine finish before the audio, effects and resource managers it uses are shut down (the original
+  // order flushes the background thread last, in ShutdownResourceManagers).
+  if (_pBackground) _pBackground->Flush();
   if (_pCtrlMan) _pCtrlMan->Shutdown();
   if (_pActualAudio) _pActualAudio->Shutdown();
   Effects::ShutdownEffectsSystem();

@@ -858,6 +858,13 @@ void RunTestSteps(unsigned frame) {
       std::string message;
       settings_save(message);
       SetStatus(message);
+    } else if (a == "sdlquit") {  // exit-path tests: what closing window 1 / Alt+F4 / a logoff sends
+      SDL_Event e{};
+      e.type = SDL_EVENT_QUIT;
+      SDL_PushEvent(&e);
+    } else if (a == "close2") {  // exit-path tests: player 2's window closed (it is only hidden)
+      std::fprintf(stderr, "[window2] closed by the player (test)\n");
+      window2_set_shown(false);
     } else std::fprintf(stderr, "[overlay] unknown test action \"%s\"\n", a.c_str());
     if (button) o.injectButtons = button, o.injectFrames = 3;
   }
