@@ -3,6 +3,7 @@
 #include "simmy/types_gen.hpp"
 #include "simmy/platform.hpp"
 #include "simmy/unported_globals.hpp"
+#include "simmy/inventory_pc.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -57,56 +58,8 @@ const void* Table(const char* name) {
   return q ? q->getTable(name) : nullptr;
 }
 
-// ---------------------------------------------------------------------------------------------------
-// BBI::InventoryItems on the player family's slots (PlayerFamilyImpl keeps the streamed items: byte 0
-// the category, 1 the count, 2 the colour index, 3 the subcategory, then the GUID word).
-
-constexpr int kContainerSize = 0x24;  // BBI::InventoryItems::GetContainerSize (8004AA5C)
-// 8004AFEC
-int GetItemIndexByGuid(PlayerFamilyImpl* inv, int guid, int color) {
-  for (int i = 0; i < kContainerSize; ++i)
-    if (inv->m_haveItem[i] && inv->m_items[i].m_word == guid && static_cast<unsigned char>(inv->m_items[i].m_bytes[2]) == color)
-      return i;
-  return -1;
-}
-// 8004A9A4
-PlayerFamilyImpl::InventoryItem* GetItemByGuid(PlayerFamilyImpl* inv, int guid, int color) {
-  const int i = GetItemIndexByGuid(inv, guid, color);
-  return i == -1 ? nullptr : &inv->m_items[i];
-}
-// 8004AA64
-PlayerFamilyImpl::InventoryItem* GetItemAtIndex(PlayerFamilyImpl* inv, int i) {
-  return i < kContainerSize && inv->m_haveItem[i] ? &inv->m_items[i] : nullptr;
-}
-int ItemCount(const PlayerFamilyImpl::InventoryItem* item) { return item->m_bytes[1]; }  // 8004A298
-// 8004A248
-void SetItemCount(PlayerFamilyImpl::InventoryItem* item, int count) {
-  item->m_bytes[1] = static_cast<signed char>(count < 0 ? 0 : count > 99 ? 99 : count);
-}
-// 8004A59C (the ingredients' categories: by GUID and colour) the slot goes, the later ones move down.
-void DeleteItem(PlayerFamilyImpl* inv, int index) {
-  inv->m_haveItem[index] = false;
-  inv->m_items[index] = PlayerFamilyImpl::InventoryItem();
-  for (int i = index + 1; i < kContainerSize && inv->m_haveItem[i]; ++i) {
-    inv->m_haveItem[i - 1] = true;
-    inv->m_items[i - 1] = inv->m_items[i];
-    inv->m_haveItem[i] = false;
-    inv->m_items[i] = PlayerFamilyImpl::InventoryItem();
-  }
-}
-// 8004A524
-int RemoveItemsByGuid(PlayerFamilyImpl* inv, int guid, int count, int color) {
-  const int index = GetItemIndexByGuid(inv, guid, color);
-  if (index == -1) return 0;
-  PlayerFamilyImpl::InventoryItem* item = &inv->m_items[index];
-  const int had = ItemCount(item);
-  if (had - count < 1) {
-    DeleteItem(inv, index);
-    return had;
-  }
-  SetItemCount(item, had - count);
-  return count;
-}
+// The family inventory: simmy/inventory_pc.hpp (inventory.cpp).
+using namespace inventory;
 
 // ---------------------------------------------------------------------------------------------------
 // Strings (16-bit)

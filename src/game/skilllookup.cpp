@@ -9,8 +9,8 @@
 // AnimRefTable list, 8 bytes each: the records' array and the table's id), as LoadDatabase reads it.
 // The animate primitive's lookups: an object's own tables (AnimRefTable 0x81 adult, 0x82 child, 0x83
 // adult to child, 0x84 child to adult of the object's file; GC: ObjSelector +0x40..+0x4C made on first
-// use), the stock (0x82), global (0x80) and misc (0x9C) tables of the global file. Not ported: reach
-// and passive influence lookups.
+// use), the stock (0x82), global (0x80) and misc (0x9C) tables of the global file, and the passive
+// influence reactions (resolveSkillForPassiveInfluence). Not ported: the reach lookups.
 #include "simmy/types_gen.hpp"
 #include "simmy/unported_globals.hpp"
 
@@ -130,4 +130,32 @@ int GetObjectAnimRef(cXObject* object, cXPerson* person, int index, bool ownObje
   }
   out = GetEntry(table, index);
   return out ? 1 : Missing(impl && impl->m_selector ? impl->m_selector->m_fileName : "object", index);
+}
+
+// 80142798
+// Animation `index` of the object's adult table (its passive influence's reaction). -1: none.
+int GetObjectAnimRefPassiveInfluence(cXObject* object, int index, const AnimRef*& out) {
+  cXObjectImpl* impl = object ? object->GetObjectImplementation() : nullptr;
+  const unsigned char* file = impl ? SelectorResFile(impl->m_selector) : nullptr;
+  out = file ? AnimTableEntry(file, 0x81, index) : nullptr;  // GC: ObjSelector::GetAdultAnimTable
+  return out ? 1 : -1;
+}
+
+// 8014215C
+// The animate primitive's animation for a passive influence (operands: +0 the index, or with flag 4 of
+// +5 the frame's param it names; +4 the table: 0 the object's, 1 global, 2 person stock, 3 misc).
+// 1, or -1 when the table has none.
+int resolveSkillForPassiveInfluence(cXObject* object, StackElem* frame, const unsigned char* params, const AnimRef*& out) {
+  out = nullptr;
+  int index = static_cast<short>(simmy::be16(params));
+  if (params[5] & 4) index = frame->GetParams()[index];
+  int r = 1;
+  switch (static_cast<signed char>(params[4])) {
+    case 0: r = GetObjectAnimRefPassiveInfluence(object, index, out); break;
+    case 1: r = GetGlobalAnimRef(nullptr, index, out); break;
+    case 2: r = GetPersonStockAnimRef(nullptr, index, out); break;
+    case 3: r = GetMiscAnimRef(nullptr, index, out); break;
+    default: break;
+  }
+  return r == -1 ? -1 : 1;
 }

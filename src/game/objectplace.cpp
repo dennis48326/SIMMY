@@ -146,6 +146,7 @@ void SetLocation(cXObjectImpl* o, const int pos[2], int level) {
     CTilePt old = o->GetCTilePt();
     if (module->GetTileObjectID(old) == o->m_id) module->SetTileObjectID(old, 0);
   }
+  const int was[2] = {o->m_location[0], o->m_location[1]};
   o->m_location[0] = pos[0];
   o->m_location[1] = pos[1];
   o->m_level = level;
@@ -154,6 +155,7 @@ void SetLocation(cXObjectImpl* o, const int pos[2], int level) {
     if (!module->GetTileObjectID(tile)) module->SetTileObjectID(tile, o->m_id);
   }
   UpdateObjectRoomID(o);  // 800DF784: ResolveRoomID, data 0x1D
+  PassiveInfluenceLocationChanged(o, was[0], was[1]);
 }
 
 // 800EA6B0 cXObjectImpl::SimObjectPlaced: the model takes its place and is no longer carried (cursor

@@ -217,6 +217,10 @@ bool TimeIsInRange(int time, int start, int end) {
   return start <= time && time <= end;
 }
 
+// 80024824
+// GC: empty in the release build (the lightning room effect, primitive 0x34 kind 2, does nothing).
+void EHouse::TriggerLightningEffect() {}
+
 // 80024828
 void EHouse::WeatherChanging() {
   m_field38 = 1;

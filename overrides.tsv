@@ -175,3 +175,6 @@
 800457B0	int BuildVertexSpans(const std::vector<EFloorStripInfo>& strips, std::vector<EFloorVertexSpan>& spans)
 800462F8	void EvaluateFloorColors(EShader* shader, EVec3& ambient, EVec3& sun, EVec3& base, EVec3& scale)
 800463A4	void EvaluateLightAtVertices(int room, ELightGrid& grid, ELightGrid__LightData* lights, EFloorVertexSpan* spans, int count, float (*out)[3])
+8014215C	int resolveSkillForPassiveInfluence(cXObject* object, StackElem* frame, const unsigned char* params, const AnimRef*& out)
+80142798	int GetObjectAnimRefPassiveInfluence(cXObject* object, int index, const AnimRef*& out)
+800FF2F8	int StartFireAtObjectLoc(cXObject* object, ObjSelector* fire)

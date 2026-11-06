@@ -67,8 +67,9 @@ contents, sim flags, idle status, tree stack (frames, nodes, params, locals, pri
 person data, motives (+old, deltas), action queue, animator state, position, facing, route count,
 neighbour; per neighbour: person data, motives, counts, reputation, wants/fears, relationships; every 3D
 instance's matrix. **Not hashed**: UI/Apt state (diagnostic line only), social-mode flags (socialmode.cpp
-map), route internals, world tiles/walls/floors, camera (except via animators' zoom ratio), sound/
-particle/UI RNGs. Add new simulation state to `Hash` in pc_det.cpp when you add it to the game.
+map), route internals, world tiles/walls/floors, the passive influence map and items (rebuilt from
+the objects; their effect is in the hashed motives and object trees), camera (except via animators' zoom
+ratio), sound/particle/UI RNGs. Add new simulation state to `Hash` in pc_det.cpp when you add it to the game.
 
 ## How to check determinism (generic recipe)
 
@@ -94,7 +95,9 @@ A small compare script (first differing tick and which parts differ) is worth ad
 - Floats: keep x64 SSE2, MSVC `/fp:precise` (never `/fp:fast`), no FMA contraction (add
   `-ffp-contract=off` if a build ever enables FMA). `sin/cos/atan2/acos/hypot` may differ by 1 ulp between
   glibc and the MSVC CRT; they are used in sanimator2.cpp, person.cpp, xrouting.cpp, directinteractor.cpp,
-  camera.cpp, esim.cpp. Same-exe Windows-only play avoids this; mixed Linux/Windows needs a check (and
+  camera.cpp, esim.cpp, objectsim.cpp (door test), passiveinfluencemap.cpp (influence shapes).
+- Sorts with ties: use `simmy::SnQsort` ([`sn_qsort.hpp`](../include/simmy/sn_qsort.hpp), the game's BSD
+  qsort) where GC used `qsort`, not `std::sort` (its tie order is implementation-defined). Same-exe Windows-only play avoids this; mixed Linux/Windows needs a check (and
   maybe fdlibm-style replacements in sim paths).
 
 ## Remaining work for lockstep netplay

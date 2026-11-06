@@ -47,6 +47,8 @@ void ObjectModuleImpl::KillAllObjects() {
     m_first = next;
   }
   m_byId.clear();
+  if (PassiveInfluenceSystem* influence = Globs_pSimulator ? Globs_pSimulator->GetPassiveInfluenceSystem() : nullptr)
+    influence->FlushSystem();
 }
 
 // 800F30BC
@@ -268,10 +270,24 @@ void ObjectModuleImpl::DoStream(ReconBuffer* b, int version) {
     if (keep && o->m_treeSim && o->m_treeSim->GetStackSize() > 0) o->ResumeBehavior();
     else o->StartBehavior();
   }
-  SIMMY_STUB("ObjectModuleImpl::DoStream: the selected people, object lists, placeholders removed, "
-             "passive influences",
-             0x800F3C94);
+  SIMMY_STUB("ObjectModuleImpl::DoStream: the selected people, object lists, placeholders removed", 0x800F3C94);
+  // The objects in the world take their places on the passive influence map (targets).
+  if (PassiveInfluenceSystem* influence = Globs_pSimulator ? Globs_pSimulator->GetPassiveInfluenceSystem() : nullptr)
+    for (cXObjectImpl* o = m_first; o; o = o->m_nextObject)
+      if (ObjIsInWorld(o)) influence->MoveObjectInWorld(o);
 }
+
+// 800F8550
+// The VM's accessed-variable notifications (a development aid): empty in the release build.
+void ObjectModuleImpl::SkillAccessed(cXPerson*, int, bool) {}
+// 800F8554
+void ObjectModuleImpl::MotiveAccessed(cXPerson*, int, bool) {}
+// 800F8558
+void ObjectModuleImpl::PersonalityAccessed(cXPerson*, int, bool) {}
+// 800F855C
+void ObjectModuleImpl::RelationshipAccessed(cXObject*, cXObject*, int, bool) {}
+// 800F8560
+void ObjectModuleImpl::RelationshipAccessed(Neighbor*, Neighbor*, int, bool) {}
 
 // 800F4A14
 // GC: the module's people list. PC: the people by id; characters share the template person's selector,

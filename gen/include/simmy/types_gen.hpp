@@ -1303,6 +1303,7 @@ struct EMemoryCard;
 struct ENgcController;
 struct ERAudioStream;
 struct MemCardSaveLoad;
+struct PassiveInfluencePerson;
 struct SoundEventInfo;
 struct StartScreenStartState;
 struct cHitTimer;
@@ -6200,48 +6201,12 @@ struct ParticleManager : public EResourceManager {
     EResource * AddRef(char *name, EFile *file, int pos);  // 8032B6F4
     virtual int CanCache(EResource *);  // 8032B714
 };
-struct PassiveInfluenceItem {
-    PassiveInfluenceItem() = default;  // generated: lets derived stubs construct the base
-};
-struct PassiveInfluenceMap {
-    PassiveInfluenceMap() = default;  // generated: lets derived stubs construct the base
-    PassiveInfluenceMap(int, int);  // 801133E8
-    ~PassiveInfluenceMap();  // 80113470
-    void AddItemToMap(PassiveInfluenceItem *);  // 80113520
-    void RemoveItemFromMap(PassiveInfluenceItem *);  // 80113740
-    RET_UNKNOWN GetListForTile(int, int);  // 801138F8
-    void EmptyMap();  // 80113944
-    RET_UNKNOWN NotifySimulator(cXPerson *, int, int);  // 80113A58
-    RET_UNKNOWN CheckObjectInfluence(PassiveInfluenceTarget *);  // 80113A8C
-    RET_UNKNOWN ApplyInfluence(PassiveInfluenceObject *, PassiveInfluenceTarget *);  // 80113C68
-    RET_UNKNOWN ValidateMissing(PassiveInfluenceItem *);  // 80113DA8
-    void CalculateTargetArea(PassiveInfluenceItem *);  // 801151C0
-    void FilledArc_Line(int, int, int, PassiveInfluenceItem *);  // 80115428
-    RET_UNKNOWN FilledArc_Polygon(int, int, int, int, int, int *, vert2 *);  // 80115700
-    RET_UNKNOWN FilledArc(int, int, int, int, int, PassiveInfluenceItem *);  // 80115928
-    RET_UNKNOWN CalculateAffectedArea(PassiveInfluenceItem *);  // 80115BD8
-    void Validate();  // 8011623C
-};
-struct PassiveInfluenceObject {
-    PassiveInfluenceObject() = default;  // generated: lets derived stubs construct the base
-};
-struct PassiveInfluenceSystem {
-    PassiveInfluenceSystem();  // 80113DB0
-    ~PassiveInfluenceSystem();  // 80113E48
-    void FlushSystem();  // 80113F04
-    void DoStream(ReconBuffer *, int);  // 80113F3C
-    RET_UNKNOWN AddObjectToMap(cXObject *, signed char, signed char, signed char, signed char);  // 80113F40
-    RET_UNKNOWN RemoveObjectFromMap(cXObject *);  // 8011416C
-    void MoveObjectInWorld(cXObject *);  // 80114344
-    RET_UNKNOWN NotifySimulator(cXPerson *, int, int);  // 80114704
-    RET_UNKNOWN CheckObjects(int);  // 80114B9C
-    void SetInfluenceMotiveDelta(cXObject *, unsigned char, float, short);  // 80114E1C
-    RET_UNKNOWN ClearInfluenceMotiveDeltas(cXObject *);  // 801150A0
-    bool SetSkillNameID(cXObject *, AnimRef *);  // 8011513C
-};
-struct PassiveInfluenceTarget {
-    PassiveInfluenceTarget() = default;  // generated: lets derived stubs construct the base
-};
+#include "simmy/classes/passiveinfluence.hpp"  // hand-written
+#include "simmy/classes/passiveinfluence.hpp"  // hand-written
+#include "simmy/classes/passiveinfluence.hpp"  // hand-written
+#include "simmy/classes/passiveinfluence.hpp"  // hand-written
+#include "simmy/classes/passiveinfluence.hpp"  // hand-written
+#include "simmy/classes/passiveinfluence.hpp"  // hand-written
 struct Path {
     Path() = default;  // generated: lets derived stubs construct the base
     RET_UNKNOWN InitAST();  // 8013ACAC
@@ -7929,7 +7894,7 @@ RET_UNKNOWN TryFindSafeLocForSim(cXObject *, FTilePt &, int, cXObject *, int);  
 void MakeMoneyString(StringBuffer2 &, int);  // 800FC5A0
 RET_UNKNOWN ParseOneString(BString2 &, BString2 &, int, int *, int *, int *);  // 800FC604
 RET_UNKNOWN _MotiveSort(void *, void *);  // 800FE014
-RET_UNKNOWN StartFireAtObjectLoc(cXObject *, ObjSelector *);  // 800FF2F8
+int StartFireAtObjectLoc(cXObject* object, ObjSelector* fire);  // 800FF2F8
 void PresetHouseGameStatus();  // 80104E58
 RET_UNKNOWN fround(float);  // 8010A9D8
 RET_UNKNOWN GetJobHUDName(short);  // 8010EE64
@@ -7956,12 +7921,12 @@ void ReportMissingAnimation(cXPerson *, char *, int);  // 80141BA8
 void ReportMissingAnimation(cXObject *, cXPerson *, AnimTable *, int);  // 80141C14
 void InitSkillLookup();  // 80141C80
 void DestroySkillLookup();  // 80142124
-RET_UNKNOWN resolveSkillForPassiveInfluence(cXObject *, StackElem *, AnimateNewParam *, AnimRef *&);  // 8014215C
+int resolveSkillForPassiveInfluence(cXObject* object, StackElem* frame, const unsigned char* params, const AnimRef*& out);  // 8014215C
 int GetStdAnimRef(cXPerson* person, int idx, const AnimRef*& out);  // 8014226C
 RET_UNKNOWN GetReachAnimRef(cXPerson *, ReachAnimIdx, AnimRef *&);  // 80142484
 int GetMiscAnimRef(cXPerson* person, int index, const AnimRef*& out);  // 80142500
 int GetObjectAnimRef(cXObject* object, cXPerson* person, int index, bool ownObject, const AnimRef*& out);  // 8014258C
-RET_UNKNOWN GetObjectAnimRefPassiveInfluence(cXObject *, int, AnimRef *&);  // 80142798
+int GetObjectAnimRefPassiveInfluence(cXObject* object, int index, const AnimRef*& out);  // 80142798
 int GetPersonStockAnimRef(cXPerson* person, int index, const AnimRef*& out);  // 8014282C
 int GetGlobalAnimRef(cXPerson* person, int index, const AnimRef*& out);  // 801428B8
 RET_UNKNOWN GetLegacyPersonSkillTable();  // 80142944

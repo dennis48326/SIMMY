@@ -21,11 +21,14 @@ unreachable in this build (PDA, EyeToy, Urbz leftovers, Xbox/PS2 code) or replac
 
 ## Simulation
 
-- Unported primitives (logged once, then **treated as true**): 0x09 burn (no fires), 0x0A tutorial,
-  0x13 person in area, 0x15 show string, 0x21 five worst motives, 0x22 UI effect, 0x23 user event,
-  0x27 inventory, 0x2C object animate, 0x33 preload, 0x34 room effect, 0x36 GBA, 0x39-0x3C HUD primitives,
-  0x3D particle effect, 0x41 passive influence; person 0x2F reach. Some `InterpValue` scopes are partial
-  (neighbourhood/career/family scopes, check-tree ad scopes).
+- Unported primitives (logged once, then **treated as true**), none used by a tree on the disc: 0x0A
+  tutorial, 0x15 show string, 0x22 UI effect, 0x3D particle effect, person 0x2F reach; 0x39-0x3C HUD
+  primitives (only the debug object `zz_move_a__tron`). `TrySetToNext` kinds other than 0-12 return
+  false.
+- Passive influence: the person's reaction animation (`AwarenessManager::Start/StopPassiveInfluenceAnimation`)
+  and the rest of the awareness manager (memory awareness, head turning, auto-carry in the rain).
+- `TryUserEvent` formats its string (`ParseUIString`) without showing it, as GC does; `TryPreloadObject`
+  never waits (object data is read on demand).
 - Placement events (object trees on place/pick-up), slots in buy mode, the grid object (GUID 0x437).
 - `SAnimator2`: awareness, mood animations, skill idle animations, low-motive runs, rumble notes.
 - Routing is a PC A* (one try, no failure trees, no re-planning toward a moving target).
@@ -87,7 +90,8 @@ service NPCs; rumble notes.
   hourglass shows it).
 - The classic/direct control mode is not saved with the game; the pause menu remembers its last tab.
 - The story family starts with §0 on lot 9; the plumb bob's particles never show (release build stops
-  them); bloom has no notes in the shipped data; lightning is empty; the CAS room has no ambient score.
+  them); bloom has no notes in the shipped data; lightning is empty (`EHouse::TriggerLightningEffect`,
+  room effect 0x34 kind 2); GBA communication (0x36) is false without EyeToy hardware; the CAS room has no ambient score.
 - In two-player games audio is one stereo mix of both cameras' listeners; full-stage dialogs show for
   both players (in both windows with `split=windows`).
 - `ProcessFrameEffects` and EGraphics bloom/blur parameters are empty in the release build.

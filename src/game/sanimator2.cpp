@@ -118,6 +118,7 @@ void SAnimator2::Update() {
   m_field114 = 0;
   adjustAnimationPlayRates();
   m_prevTimeMult = m_timeMult;
+  PassiveInfluenceAwarenessCheck(this);  // GC: AwarenessManager::AwarenessCheck (its passive influence part)
   updateMovementState();
   checkParticleCleanup();
   if (m_curAnim) {

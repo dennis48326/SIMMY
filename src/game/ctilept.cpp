@@ -52,6 +52,12 @@ int CTilePt::GetX() const { return m_x; }
 // 800B4CB4
 int CTilePt::GetY() const { return m_y; }
 
+// 800B4D1C
+void CTilePt::Set(int x, int y) {
+  m_y = static_cast<signed char>(y);
+  m_x = static_cast<signed char>(x);
+}
+
 // 800B4D28
 void CTilePt::Set(int x, int y, int level) {
   m_level = static_cast<signed char>(level);

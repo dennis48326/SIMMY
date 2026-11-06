@@ -944,10 +944,7 @@ int cXPersonImpl::TryElement(StackElem* frame, short op, const unsigned char* pa
     case 100: return -1;
     case 0x2c: {
       // The kinds 7 and 8 (operand +3 = 4, 5) are the object's passive-influence animations.
-      if (params[3] == 4 || params[3] == 5) {
-        SIMMY_STUB("primitive 0x2c cXObjectImpl::TryAnimate (passive influence skills)", 0x8010958C);
-        return 1;
-      }
+      if (params[3] == 4 || params[3] == 5) return cXObjectImpl::TryAnimate(frame, params);
       return m_animator ? m_animator->TryAnimate(frame, params) : 1;
     }
     case 0x2d: return TryGotoRoutingSlot(frame, params);

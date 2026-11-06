@@ -28,11 +28,6 @@ void ObjectModuleImpl::BroadcastMessage(char *, int) { SIMMY_STUB("ObjectModuleI
 void ObjectModuleImpl::SendMessage(cXObject *, char *, int) { SIMMY_STUB("ObjectModuleImpl::SendMessage(cXObject *, char *, int)", 0x800F837C); }
 RET_UNKNOWN ObjectModuleImpl::UpdateWallAdjacencies() { SIMMY_STUB("ObjectModuleImpl::UpdateWallAdjacencies(void)", 0x800F8444); return {}; }
 void ObjectModuleImpl::InvalidateAllRoutes() { SIMMY_STUB("ObjectModuleImpl::InvalidateAllRoutes(void)", 0x800F84D8); }
-void ObjectModuleImpl::SkillAccessed(cXPerson *, int, bool) { SIMMY_STUB("ObjectModuleImpl::SkillAccessed(cXPerson *, int, bool)", 0x800F8550); }
-void ObjectModuleImpl::MotiveAccessed(cXPerson *, int, bool) { SIMMY_STUB("ObjectModuleImpl::MotiveAccessed(cXPerson *, int, bool)", 0x800F8554); }
-void ObjectModuleImpl::PersonalityAccessed(cXPerson *, int, bool) { SIMMY_STUB("ObjectModuleImpl::PersonalityAccessed(cXPerson *, int, bool)", 0x800F8558); }
-void ObjectModuleImpl::RelationshipAccessed(cXObject *, cXObject *, int, bool) { SIMMY_STUB("ObjectModuleImpl::RelationshipAccessed(cXObject *, cXObject *, int, bool)", 0x800F855C); }
-void ObjectModuleImpl::RelationshipAccessed(Neighbor *, Neighbor *, int, bool) { SIMMY_STUB("ObjectModuleImpl::RelationshipAccessed(Neighbor *, Neighbor *, int, bool)", 0x800F8560); }
 RET_UNKNOWN ObjectModuleImpl::OffsetObjectMap(CTilePt &) { SIMMY_STUB("ObjectModuleImpl::OffsetObjectMap(CTilePt &)", 0x800F85D8); return {}; }
 void ObjectModuleImpl::OffsetWorld(CTilePt &) { SIMMY_STUB("ObjectModuleImpl::OffsetWorld(CTilePt &)", 0x800F86F8); }
 RET_UNKNOWN ObjectModuleImpl::GetTutorialObject() { SIMMY_STUB("ObjectModuleImpl::GetTutorialObject(void)", 0x800F8C54); return {}; }

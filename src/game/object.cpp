@@ -39,6 +39,8 @@ cXObjectImpl::~cXObjectImpl() {
   delete[] m_attrs;
   delete[] m_sprites;
   delete m_relations;
+  if (PassiveInfluenceSystem* influence = Globs_pSimulator ? Globs_pSimulator->GetPassiveInfluenceSystem() : nullptr)
+    influence->RemoveObjectFromMap(this);
   EGlobal::FreeSpriteRenderer(this);  // its sprite renderer goes on the next ESpriteRenderMan::Update
   delete m_treeSim;
 }

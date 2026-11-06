@@ -291,13 +291,13 @@ cXObjectImpl* cXObjectImpl::GetInteractionLeader() {
 
 // 800E318C
 // A tile people interact with: in the world, and (unless the definition's +0x8A says never (2)) a
-// person, a single-tile object or a group's interaction leader, or (unless +0x8A is 1) one flagged so
-// (misc flag 8).
+// person, a single-tile object or a group's interaction leader, or (unless +0x8A is 1) a part with a
+// "dynamic multi-tile update" tree (function table entry 8; vtable 0x1D4 GetTreeID).
 RET_UNKNOWN cXObjectImpl::IsInteractionTile() {
   if (!ObjIsInWorld(this)) return 0;
   const ObjDefinition* def = GetDef();
   const short mode = ERQuickdata::S16(def, 0x8a);
   if (mode == 2) return 0;
   if (objdef::Type(def) == 2 || objdef::MasterID(def) == 0 || ERQuickdata::S16(def, 0x10) < 0) return 1;
-  return mode != 1 && GetMiscFlag(cXObject__MiscFlag{8}) ? 1 : 0;
+  return mode != 1 && GetTreeID(8) != 0 ? 1 : 0;
 }

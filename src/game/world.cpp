@@ -428,7 +428,9 @@ void cFixedWorldImpl::DeleteArrays() {
   delete m_flags;
   delete m_walls;
   m_floors = m_rooms = m_flags = m_walls = nullptr;
-  m_influence = m_passiveInfluence = nullptr;
+  m_influence = nullptr;  // GC: the InfluenceMap (not ported)
+  delete m_passiveInfluence;
+  m_passiveInfluence = nullptr;
 }
 
 // 80151C30
@@ -437,6 +439,8 @@ int cFixedWorldImpl::GetXSize() const { return m_xSize; }
 int cFixedWorldImpl::GetYSize() const { return m_ySize; }
 // 80151C40
 int cFixedWorldImpl::GetMaxSize() const { return 0x40; }
+// 80152364
+PassiveInfluenceMap* cFixedWorldImpl::GetPassiveInfluenceMap() { return m_passiveInfluence; }
 
 // 8014C630
 // New floor, flag and wall arrays of the size (8 to 64 tiles a side); GC: keeping the old contents
@@ -450,7 +454,8 @@ int cFixedWorldImpl::SetSize(int xSize, int ySize, bool keep) {
   m_flags = new _c2DArray(1, xSize, ySize, EmptyName());
   m_walls = new _c2DArray(8, xSize, ySize, EmptyName());
   m_rooms = new _c2DArray(2, xSize, ySize, EmptyName());
-  SIMMY_STUB("cFixedWorldImpl::SetSize: the influence maps", 0x8014C630);
+  SIMMY_STUB("cFixedWorldImpl::SetSize: the InfluenceMap", 0x8014C630);
+  m_passiveInfluence = new PassiveInfluenceMap(xSize, ySize);
   m_xSize = xSize;
   m_ySize = ySize;
   return 1;
@@ -480,7 +485,9 @@ int cFixedWorldImpl::Load(iResFile* file, int) {
   if (xSize != m_xSize || ySize != m_ySize) {
     delete m_rooms;
     m_rooms = new _c2DArray(2, xSize, ySize, EmptyName());
-    SIMMY_STUB("cFixedWorldImpl::Load: the influence maps", 0x8014CC0C);
+    SIMMY_STUB("cFixedWorldImpl::Load: the InfluenceMap", 0x8014CC0C);
+    delete m_passiveInfluence;
+    m_passiveInfluence = new PassiveInfluenceMap(xSize, ySize);
     m_xSize = xSize;
     m_ySize = ySize;
   }
@@ -693,6 +700,12 @@ int cFixedWorldImpl::IsOutside(CTilePt& tile) { return (*m_flags->At(tile.GetX()
 // The lot's edge row and column count as out of bounds.
 int cFixedWorldImpl::OutOfBounds(CTilePt& tile) const {
   return !(tile.m_x > 0 && tile.m_x < m_xSize - 1 && tile.m_y > 0 && tile.m_y < m_ySize - 1);
+}
+
+// 80151B10
+// Off the lot's grid (the border tiles count as on it).
+int cFixedWorldImpl::OutOfGrid(CTilePt& tile) const {
+  return !(tile.m_x >= 0 && tile.m_x < m_xSize && tile.m_y >= 0 && tile.m_y < m_ySize);
 }
 
 // 801521AC

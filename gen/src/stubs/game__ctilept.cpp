@@ -26,7 +26,6 @@ void CTilePt::Get(int *, int *) const { SIMMY_STUB("CTilePt::Get(int *, int *) c
 void CTilePt::Get(int *, int *, int *) const { SIMMY_STUB("CTilePt::Get(int *, int *, int *) const", 0x800B4CDC); }
 RET_UNKNOWN CTilePt::SetX(int) { SIMMY_STUB("CTilePt::SetX(int)", 0x800B4D04); return {}; }
 RET_UNKNOWN CTilePt::SetY(int) { SIMMY_STUB("CTilePt::SetY(int)", 0x800B4D10); return {}; }
-void CTilePt::Set(int, int) { SIMMY_STUB("CTilePt::Set(int, int)", 0x800B4D1C); }
 RET_UNKNOWN CTilePt::SetX(float) { SIMMY_STUB("CTilePt::SetX(float)", 0x800B4D38); return {}; }
 RET_UNKNOWN CTilePt::SetY(float) { SIMMY_STUB("CTilePt::SetY(float)", 0x800B4D58); return {}; }
 void CTilePt::Set(float, float) { SIMMY_STUB("CTilePt::Set(float, float)", 0x800B4D78); }

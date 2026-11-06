@@ -7,7 +7,6 @@ void cFixedWorldImpl::OffsetWorld(CTilePt &) { SIMMY_STUB("cFixedWorldImpl::Offs
 void SetLotBorders(int, int, int, int) { SIMMY_STUB("SetLotBorders(int, int, int, int)", 0x801517C0); }
 RET_UNKNOWN cFixedWorldImpl::OutOfRoutableExtent(CTilePt &) const { SIMMY_STUB("cFixedWorldImpl::OutOfRoutableExtent(CTilePt &) const", 0x80151984); return {}; }
 RET_UNKNOWN cFixedWorldImpl::OutOfRoutableExtent(FTilePt &) const { SIMMY_STUB("cFixedWorldImpl::OutOfRoutableExtent(FTilePt &) const", 0x801519D4); return {}; }
-RET_UNKNOWN cFixedWorldImpl::OutOfGrid(CTilePt &) const { SIMMY_STUB("cFixedWorldImpl::OutOfGrid(CTilePt &) const", 0x80151B10); return {}; }
 RET_UNKNOWN cFixedWorldImpl::OutOfBounds(FTilePt &) const { SIMMY_STUB("cFixedWorldImpl::OutOfBounds(FTilePt &) const", 0x80151B58); return {}; }
 RET_UNKNOWN cFixedWorldImpl::OutOfGrid(FTilePt &) const { SIMMY_STUB("cFixedWorldImpl::OutOfGrid(FTilePt &) const", 0x80151BC4); return {}; }
 RET_UNKNOWN cFixedWorldImpl::IsGrassAt(CTilePt &) { SIMMY_STUB("cFixedWorldImpl::IsGrassAt(CTilePt &)", 0x80151C98); return {}; }
@@ -17,4 +16,3 @@ RET_UNKNOWN cFixedWorldImpl::GetWallStorage(CTilePt &) { SIMMY_STUB("cFixedWorld
 void DestroyTheWorld() { SIMMY_STUB("DestroyTheWorld(void)", 0x801522C0); }
 void ValidateTheWorld() { SIMMY_STUB("ValidateTheWorld(void)", 0x8015230C); }
 RET_UNKNOWN cFixedWorldImpl::GetInfluenceMap() { SIMMY_STUB("cFixedWorldImpl::GetInfluenceMap(void)", 0x8015235C); return {}; }
-RET_UNKNOWN cFixedWorldImpl::GetPassiveInfluenceMap() { SIMMY_STUB("cFixedWorldImpl::GetPassiveInfluenceMap(void)", 0x80152364); return {}; }

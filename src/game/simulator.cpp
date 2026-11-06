@@ -5,6 +5,7 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 
 cSimulatorImpl* Globs_pSimulator = nullptr;  // Globs::pSimulator
 
@@ -84,8 +85,10 @@ cSimulatorImpl::cSimulatorImpl() {
 }
 
 // 8014044C
-// GC: also the PassiveInfluenceSystem and the Commander base.
+// GC: also the Commander base.
 cSimulatorImpl::~cSimulatorImpl() {
+  delete m_passiveInfluence;
+  m_passiveInfluence = nullptr;
   if (Globs_pSimulator == this) Globs_pSimulator = nullptr;
 }
 
@@ -117,7 +120,12 @@ void cSimulatorImpl::Init() {
   m_randSeed = GetSRandSeed();
   SetSpeed(0);
   m_globals[0x14] = 3;
-  SIMMY_STUB("cSimulatorImpl::Init: PassiveInfluenceSystem, cXObjectImpl::overrideDialogReturnCode", 0x80140324);
+  // GC: a new system each time without deleting the last (the map keeps reporting to the first one
+  // made: PassiveInfluenceSystem::s_passiveInfluenceSystem). PC: the last one is deleted; the new one
+  // becomes the one reported to only if none is.
+  delete m_passiveInfluence;
+  m_passiveInfluence = new PassiveInfluenceSystem;
+  cXObjectImpl::overrideDialogReturnCode = 4;
 }
 
 // 801404CC
@@ -183,8 +191,7 @@ void cSimulatorImpl::DoStream(ReconBuffer* b, int version) {
     m_globals[kDaysInMonth] = static_cast<short>(GameTime::CountDaysInMonth(m_globals[kYear], m_globals[kMonth]));
     m_globals[kFreeWill] = 1;  // cXObject::GetFreeWill (PC: free will is always on)
   }
-  if (version > 0x5b && m_passiveInfluence)
-    SIMMY_STUB("cSimulatorImpl::DoStream: PassiveInfluenceSystem::DoStream", 0x80140560);
+  if (version > 0x5b && m_passiveInfluence) m_passiveInfluence->DoStream(b, version);
   m_streaming = 0;
   m_boostLength = 0.0f;
   m_boostTime = 0.0f;
@@ -274,8 +281,27 @@ int cSimulatorImpl::SimulateOneTick() {
       }
     }
   }
-  SIMMY_STUB("cSimulatorImpl::SimulateOneTick: PassiveInfluenceSystem::CheckObjects, ObjectModule::PostSim",
-             0x8014095C);
+  if (m_passiveInfluence) m_passiveInfluence->CheckObjects(1);
+  SIMMY_STUB("cSimulatorImpl::SimulateOneTick: ObjectModule::PostSim", 0x8014095C);
+  // PC development aid: SIMMY_FIRE_TEST=<tick>,<object id>[,burn] starts a fire at that object (as TryBurn's
+  // StartFireAtObjectLoc does) when the simulator reaches the tick; with ",burn" the burn primitive
+  // (0x09, operands 0 / 1: its own tile, even in use) runs on it instead, from player 1's sim's tree.
+  static const char* fireTest = std::getenv("SIMMY_FIRE_TEST");
+  if (fireTest && m_ticks == std::atoi(fireTest) && std::strchr(fireTest, ',') && Globs_pObjectModule) {
+    const int id = std::atoi(std::strchr(fireTest, ',') + 1);
+    cXObject* o = Globs_pObjectModule->GetObjectFromID(id);
+    ObjSelector* fire = Globs_pObjectFolder ? Globs_pObjectFolder->GetSelectorByGUID(0x24c95f99) : nullptr;
+    cXPerson* runner = _globals.GetSelectedPerson(0);
+    cXObjectImpl* impl = runner && runner->AsObject() ? runner->AsObject()->GetObjectImplementation() : nullptr;
+    if (std::strstr(fireTest, ",burn") && impl) {
+      StackElem frame;
+      frame.m_stackObject = static_cast<short>(id);
+      const unsigned char params[8] = {0, 1, 0, 0, 0, 0, 0, 0};
+      std::printf("[sim] fire test at tick %d: burn primitive -> %d\n", m_ticks, impl->TryBurn(&frame, params));
+    } else {
+      std::printf("[sim] fire test at tick %d: %s\n", m_ticks, StartFireAtObjectLoc(o, fire) ? "started" : "refused");
+    }
+  }
   if (message) GlobalDispatch(message, 0);
   if (hourChanged) {
     const int before = GetTimeOfDay();

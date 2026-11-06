@@ -167,6 +167,8 @@ Development only: the launcher removes all of them except `SIMMY_INI` from the g
 | `SIMMY_SIM_TRACE=1` | Simulator dispatches, motives, routes, careers |
 | `SIMMY_TRACE_IDS=98,126` | Also trace those objects |
 | `SIMMY_VM_TRACE=1\|<id>`, `SIMMY_VM_TRACE_TREES=<hex>,...`, `SIMMY_VM_TRACE_WHO=<text>` | Primitive trace (all / one object / some trees / name filter) |
+| `SIMMY_INFLUENCE_TRACE=1\|2` | Passive influences added/removed, targets' trees; 2 also every motive change |
+| `SIMMY_FIRE_TEST=<tick>,<id>[,burn]` | Start a fire at object `<id>` when the simulator reaches the tick (`,burn`: run the burn primitive 0x09 on it from player 1's sim) |
 | `SIMMY_ROUTE_TRACE=1` | Routing |
 | `SIMMY_AUTO_TRACE=1\|ads` | Autonomy choices / advertisements |
 | `SIMMY_AUTONOMY_IDLE=<s>` | Idle time before autonomy takes a player's sim |

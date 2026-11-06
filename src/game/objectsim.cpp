@@ -5,6 +5,8 @@
 #include "simmy/unported_globals.hpp"
 #include "simmy/roomresolve.hpp"
 #include "simmy/classes/placement.hpp"
+#include "simmy/inventory_pc.hpp"
+#include "simmy/sn_qsort.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -204,6 +206,9 @@ void cXObjectImpl::HandleError() {
   if (GetType() == 2)
     if (auto* p = dynamic_cast<cXPersonImpl*>(this))
       if (p->m_animator) p->m_animator->Reset();
+  // cXObjectImpl::Reset: its passive influences go.
+  if (PassiveInfluenceSystem* influence = Globs_pSimulator ? Globs_pSimulator->GetPassiveInfluenceSystem() : nullptr)
+    influence->RemoveObjectFromMap(this);
   if (m_treeSim) m_treeSim->Reset(GetBehavior(), GetTreeID(1));
 }
 
@@ -249,7 +254,7 @@ int cXObjectImpl::TryElement(StackElem* frame, short op, const unsigned char* pa
     case 0x05: r = TryDrop(); break;
     case 0x07: r = TryUpdate(frame, params); break;
     case 0x08: r = TryRandom(frame, params); break;
-    case 0x09: r = Unported(op, "TryBurn", 0x800FF520); break;
+    case 0x09: r = TryBurn(frame, params); break;
     case 0x0a: r = Unported(op, "TryTutorial", 0x800FF1DC); break;
     case 0x0b: r = TryDistanceTo(frame, params); break;
     case 0x0c: r = TryDirectionTo(frame, params); break;
@@ -262,7 +267,7 @@ int cXObjectImpl::TryElement(StackElem* frame, short op, const unsigned char* pa
       r = TryKillObject(frame, params, &id);
       break;
     }
-    case 0x13: r = Unported(op, "TryIsPersonInArea", 0x800FA314); break;
+    case 0x13: r = TryIsPersonInArea(frame, params); break;
     case 0x14: r = TryCallFunctionalTree(frame, params); break;
     case 0x15: r = Unported(op, "TryShowString", 0x80105420); break;
     case 0x17: r = static_cast<int>(TryPlaySound(frame, (PlaySoundParam*)params)); break;  // game/soundprims.cpp
@@ -270,27 +275,27 @@ int cXObjectImpl::TryElement(StackElem* frame, short op, const unsigned char* pa
     case 0x19: r = TryBudget(frame, params); break;
     case 0x1a: r = TryRelationship2(frame, params); break;
     case 0x1c: r = TryCallNamedTree(frame, params); break;
-    case 0x1d: r = Unported(op, "TrySetMotiveDelta", 0x80109344); break;
+    case 0x1d: r = TrySetMotiveDelta(frame, params); break;
     case 0x1f: r = TrySetToNext(frame, params); break;
     case 0x20: r = TryTestObjectType(frame, params); break;
-    case 0x21: r = Unported(op, "TryFind5WorstMotives", 0x800FE068); break;
+    case 0x21: r = TryFind5WorstMotives(frame, params); break;
     case 0x22: r = Unported(op, "TryUIEffect", 0x800FA1E8); break;
-    case 0x23: r = Unported(op, "TryUserEvent", 0x800F9F44); break;
+    case 0x23: r = TryUserEvent(frame, params); break;
     case 0x24: r = TryDialog(frame, params, false); break;
-    case 0x27: r = Unported(op, "TryInventoryCommand", 0x80106A8C); break;
+    case 0x27: r = TryInventoryCommand(frame, params); break;
     case 0x28: r = TryCameraControl(frame, params); break;
     case 0x29: r = TrySetBalloon(frame, params); break;  // sprites.cpp
     case 0x2a: r = TryCreateObject(frame, params); break;
     case 0x2b: r = TryDropOnto(frame, params); break;
-    case 0x2c: r = Unported(op, "TryAnimate", 0x8010958C); break;
+    case 0x2c: r = TryAnimate(frame, params); break;
     case 0x2e: r = TrySnap(frame, params); break;
     case 0x30: r = static_cast<int>(TryKillSounds(frame, (KillSoundsParam*)params)); break;  // game/soundprims.cpp
     case 0x31: r = TryNotifyStackObject(frame, params); break;
     case 0x32: r = TryMakeActionString(frame, params); break;
-    case 0x33: r = Unported(op, "TryPreloadObject", 0x80100C84); break;
-    case 0x34: r = Unported(op, "TryRoomEffect", 0x80105F54); break;
+    case 0x33: r = TryPreloadObject(frame, params); break;
+    case 0x34: r = TryRoomEffect(frame, params); break;
     case 0x35: r = TryCheckObject(frame, params); break;
-    case 0x36: r = Unported(op, "TryGbaCommunication", 0x80106568); break;
+    case 0x36: r = TryGbaCommunication(frame, params); break;
     case 0x37: r = TryAnimateObject(frame, params); break;
     case 0x38: r = TryCompleteGoal(frame, params); break;
     case 0x39: r = Unported(op, "TryHUDCreate", 0x8010E674); break;
@@ -299,7 +304,7 @@ int cXObjectImpl::TryElement(StackElem* frame, short op, const unsigned char* pa
     case 0x3c: r = Unported(op, "TryHUDData", 0x8010ED00); break;
     case 0x3d: r = Unported(op, "TryParticleEffect", 0x80108384); break;
     case 0x3f: r = TryMemory(frame, params); break;
-    case 0x41: r = Unported(op, "TryPassiveInfluence", 0x80108EC8); break;
+    case 0x41: r = TryPassiveInfluence(frame, params); break;
     case 0x42: r = TryWantsAndFearsNotify(frame, params); break;
     case 0x43: r = TryChangeWantFearTree(frame, params); break;
     default:
@@ -425,10 +430,10 @@ int cXObjectImpl::TryUpdate(StackElem* frame, const unsigned char* params) {
 // Sets the target (the stack object, or with flag 0x80 the variable in operands 5 and 7) to the next
 // object after it of a kind (flags & 0xF): 0 any object, 1 a person, 2 a non-person, 3 the next part of
 // its multi-tile group (round the group), 4 objects of the operand GUID, 6 objects whose data 0x3B is
-// param 0, 8 objects on the target's tile (round the tile), 0xC objects in the world. Flag 0x40:
-// interaction tiles only. False: no more (target 0; kind 8: no target, kept).
-// PC: objects in id order (GC: the module's object list), people from the module's ids; the
-// neighbourhood kinds (5, 7, 9, 10, ...) are not ported.
+// param 0, 8 objects on the target's tile (round the tile), 9 the objects east, south, west and north
+// of the object in a local (in its room), 0xC objects in the world; 5 / 7 neighbours, 0xA careers, 0xB
+// neighbour houses. Flag 0x40: interaction tiles only. False: no more (target 0; kinds 8, 9: kept).
+// PC: objects in id order (GC: the module's object list), people from the module's ids.
 int cXObjectImpl::TrySetToNext(StackElem*, const unsigned char* params) {
   const unsigned char flags = params[4];
   const int scope = flags & 0x80 ? static_cast<signed char>(params[5]) : 10;
@@ -509,6 +514,55 @@ int cXObjectImpl::TrySetToNext(StackElem*, const unsigned char* params) {
     if (i == count) return 0;
     InterpWriteValue(scope, data, &target, static_cast<short>(house));
     return 1;
+  }
+  if (kind == 9) {
+    // The next object round the object in local +6 (its tile's object east, south, west, north of
+    // it, after the target's; flag 0x40: interaction tiles only) in its room. False: none left (the
+    // target kept). Errors: the local out of range 8, no such object 10.
+    StackElem* frame = m_treeSim->GetCurElem();
+    const int local = params[6];
+    if (!frame || local >= frame->m_numLocals) {
+      m_treeSim->SetError(8);
+      Error(8);
+      return -1;
+    }
+    cXObject* cur = GetObjectFromID(*target);
+    cXObject* c = GetObjectFromID(frame->GetLocals()[local]);
+    cXObjectImpl* center = c ? c->GetObjectImplementation() : nullptr;
+    if (!center) {
+      m_treeSim->SetError(10);
+      Error(10);
+      return -1;
+    }
+    const CTilePt at = center->GetCTilePt();
+    int dx = 1, dy = 0;
+    bool first = cur == nullptr;
+    if (cur) {
+      const CTilePt t = cur->GetCTilePt();
+      dx = static_cast<signed char>(t.GetX() - at.GetX());
+      dy = static_cast<signed char>(t.GetY() - at.GetY());
+    }
+    for (;;) {
+      if (!first) {
+        if (dx >= 1) {
+          dx = 0, dy = 1;
+        } else if (dx < 0) {
+          dx = 0, dy = -1;
+        } else if (dy < 1) {
+          return 0;
+        } else {
+          dx = -1, dy = 0;
+        }
+      }
+      first = false;
+      CTilePt t(at.GetX() + dx, at.GetY() + dy, at.GetLevel());
+      if (Globs_pFixedWorld && Globs_pFixedWorld->OutOfGrid(t)) continue;
+      cXObject* found = module ? module->GetObjectFromID(module->GetTileObjectID(t)) : nullptr;
+      cXObjectImpl* f = found ? found->GetObjectImplementation() : nullptr;
+      if (!f || static_cast<unsigned short>(f->GetData(0x1d)) != static_cast<unsigned short>(center->GetData(0x1d))) continue;
+      if ((flags & 0x40) && !f->IsInteractionTile()) continue;
+      return set(f->m_id);
+    }
   }
   if (kind != 0 && kind != 1 && kind != 2 && kind != 4 && kind != 6 && kind != 8 && kind != 0xc) {
     static char name[64];
@@ -988,7 +1042,8 @@ void cXObjectImpl::GetShortComboValue(signed char combo, short* scope, short* da
 // stack object's motive[temp], 0x12 / 0x13 my / the stack object's person data, 0x15 the stack object's
 // definition, 0x16 the stack object's attribute[param], 0x17 my room, 0x19 locals, 0x1A / 0x2D tree
 // constants, 0x1B the stack object's attribute[temp], 0x1E my person data[temp], 0x1F the stack object's
-// person data[temp], 0x23 whether the stack object has an entry point, 0x2A nothing.
+// person data[temp], 0x23 whether the stack object has an entry point, 0x2A nothing, 0x0C / 0x1C / 0x1D
+// the check tree's ad copy (range, personality, min; autonomy only). Any other scope: error 9.
 int cXObjectImpl::InterpValue(int scope, int data, short** ref, float** fref, short* value, short** extra) {
   short* dummy = nullptr;
   if (!ref) ref = &dummy;
@@ -1016,12 +1071,12 @@ int cXObjectImpl::InterpValue(int scope, int data, short** ref, float** fref, sh
   auto motive = [&](cXPersonImpl* p, int index) {
     v = static_cast<short>(std::lround(p->GetMotive(index)));
     if (fref) *fref = &p->m_motives.m_values[index];
-    SIMMY_STUB("cXObjectImpl::InterpValue: ObjectModule::MotiveAccessed (vtable 0x194)", 0x8010AAC8);
+    // GC: ObjectModule::MotiveAccessed (vtable 0x194; empty in the release build).
   };
   auto personData = [&](cXPersonImpl* p, int index) {
     at(&p->m_personData[index]);
-    if (index - 2 < 6 || static_cast<unsigned int>(index - 9) <= 9)
-      SIMMY_STUB("cXObjectImpl::InterpValue: ObjectModule::PersonalityAccessed / SkillAccessed", 0x8010AAC8);
+    // GC: personality (2..7) and skill (9..0x12) data tell ObjectModule::PersonalityAccessed /
+    // SkillAccessed (empty in the release build).
   };
   switch (scope) {
     case 0:
@@ -1073,9 +1128,17 @@ int cXObjectImpl::InterpValue(int scope, int data, short** ref, float** fref, sh
     case 12:
     case 0x1c:
     case 0x1d:
-      SIMMY_STUB("cXObjectImpl::InterpValue: check-tree ad scopes (ObjTestSim::sCheckTreeModEntry)", 0x8010AAC8);
-      tempDataPrim = 0;
-      at(&tempDataPrim);
+      // The check tree's copy of the entry's ads (ObjTestSim::sCheckTreeModEntry) by motive: 0x0C its
+      // range, 0x1C its personality ad, 0x1D its min (another motive than 0..15: error 0x1A). Outside
+      // autonomy's ad check (cXPerson::sbAllowingCheckTreeAds clear): a scratch 0.
+      if (!gAllowingCheckTreeAds) {
+        tempDataPrim = 0;
+        at(&tempDataPrim);
+        break;
+      }
+      if (data < 0 || data >= 16) return fail(0x1a);
+      at(scope == 12 ? &gCheckTreeModEntry.m_range[data]
+                     : scope == 0x1c ? &gCheckTreeModEntry.m_personality[data] : &gCheckTreeModEntry.m_min[data]);
       break;
     case 0xd: {
       cXObjectImpl* o = stackObject();
@@ -1330,17 +1393,9 @@ int cXObjectImpl::InterpValue(int scope, int data, short** ref, float** fref, sh
       }
       break;
     }
-    default: {
-      static bool seen[0x40];
-      if (scope >= 0 && scope < 0x40 && !seen[scope]) {
-        seen[scope] = true;
-        std::printf("[vm] variable scope 0x%x is not ported (reads 0)\n", scope);
-      }
-      SIMMY_STUB("cXObjectImpl::InterpValue: the neighbourhood, career and family scopes", 0x8010AAC8);
-      tempDataPrim = 0;
-      at(&tempDataPrim);
-      break;
-    }
+    default:
+      // No such scope (2, 5, above 0x2F): error 9.
+      return fail(9);
   }
   if (value) *value = v;
   return 1;
@@ -1523,6 +1578,7 @@ int cXObjectImpl::TrySnap(StackElem* frame, const unsigned char* params) {
       return 0;
     }
   }
+  const int was[2] = {m_location[0], m_location[1]};
   m_location[0] = pos[0];
   m_location[1] = pos[1];
   m_data.WriteVar(1, static_cast<short>(dir));
@@ -1531,6 +1587,7 @@ int cXObjectImpl::TrySnap(StackElem* frame, const unsigned char* params) {
   m_data.WriteVar(3, static_cast<short>(container ? containerSlot : 0));
   m_data.WriteVar(0x34, 0);
   UpdateObjectRoomID(this);  // Place -> SetLocation: ResolveRoomID, data 0x1D
+  PassiveInfluenceLocationChanged(this, was[0], was[1]);
   // A person's animator takes the new place (TrySnap(FTilePt&, ...) 8010E084: SnapToGrid and the
   // person's direction), unless the container's object slot has flag 2.
   const int slotFlags = container ? ObjectSlotFlags(container, containerSlot) : 0;
@@ -1641,6 +1698,7 @@ void PlaceObject(cXObjectImpl* object, const int pos[2], int level, cXObjectImpl
     CTilePt old = object->GetCTilePt();
     if (module->GetTileObjectID(old) == object->m_id) module->SetTileObjectID(old, 0);
   }
+  const int was[2] = {object->m_location[0], object->m_location[1]};
   object->m_location[0] = pos[0];
   object->m_location[1] = pos[1];
   object->m_level = level;
@@ -1651,6 +1709,7 @@ void PlaceObject(cXObjectImpl* object, const int pos[2], int level, cXObjectImpl
     if (!module->GetTileObjectID(tile)) module->SetTileObjectID(tile, object->m_id);
   }
   UpdateObjectRoomID(object);  // GC Place -> SetLocation: ResolveRoomID, data 0x1D
+  PassiveInfluenceLocationChanged(object, was[0], was[1]);
   if (object->GetType() == 2) {
     if (object->m_instance) object->m_instance->SetObjOrient();
     return;
@@ -2244,8 +2303,8 @@ int cXObjectImpl::TryFindFunctionalObject(StackElem* frame, const unsigned char*
   cXObjectImpl* best = nullptr;
   float bestScore = 0.0f;
   for (cXObjectImpl* o = Globs_pObjectModule ? Globs_pObjectModule->m_first : nullptr; o; o = o->m_nextObject) {
-    // GC: IsBurning (vtable 0x44C); fires are not ported.
-    if (o->GetData(0x19) >= 1) continue;
+    // In use, or burning (cXObjectImpl::IsBurning 800EB5F8: data 8 bit 0x200).
+    if (o->GetData(0x19) >= 1 || (static_cast<unsigned short>(o->GetData(8)) >> 9 & 1)) continue;
     if (!o->GetTreeID(entry)) continue;
     int score = 0x32;
     if (scoreData != -1) score = o->GetData(scoreData);
@@ -3115,4 +3174,523 @@ int cXObjectImpl::TryPushAction(StackElem* frame, const unsigned char* params) {
 void cXObjectImpl::ChangeSelectedSimL(int player) {
   _globals.ReverseSelectedPerson(player);
   if (ESimsCam* cam = _gd.m_players ? _gd.m_players[player & 1].m_cam : nullptr) cam->CenterOnSelectedSim();
+}
+
+// ---------------------------------------------------------------------------------------------------
+// Primitives: people near doors, user events, motives, inventory, preloading, room effects, the GBA,
+// passive influence, fire
+
+namespace {
+// The lot's people in the order ObjectModuleImpl::GetNextPerson (800F9860) walks them (GC: the module's
+// people list, in the order they were added; PC: by id).
+std::vector<cXPersonImpl*> LotPeople() {
+  std::vector<cXPersonImpl*> people;
+  ObjectModuleImpl* module = Globs_pObjectModule;
+  const int count = module ? module->GetNumObjects() : 0;
+  for (int id = 1; id <= count; ++id) {
+    cXObject* o = module->GetObjectFromID(id);
+    cXObjectImpl* impl = o ? o->GetObjectImplementation() : nullptr;
+    if (impl && impl->GetType() == 2)
+      if (auto* p = dynamic_cast<cXPersonImpl*>(impl)) people.push_back(p);
+  }
+  return people;
+}
+
+// The step (x, y in tiles, FTilePt order: +0, +4) in front of direction `dir` (0..7) as
+// TryIsPersonInArea and TryBurn build it.
+void DirectionStep(int dir, int* a, int* b) {
+  static const int kA[8] = {-1, -1, 0, 1, 1, 1, 0, -1};
+  static const int kB[8] = {0, 1, 1, 1, 0, -1, -1, -1};
+  *a = kA[dir & 7];
+  *b = kB[dir & 7];
+}
+
+PassiveInfluenceSystem* InfluenceSystem() { return Globs_pSimulator ? Globs_pSimulator->GetPassiveInfluenceSystem() : nullptr; }
+
+constexpr unsigned int kFireGUID = 0x24c95f99;  // efx_fire
+}  // namespace
+
+// 800FA314
+// Operands: +0 / +2 the variable naming a door (a portal; anything else: false); +3 who: 1 people who
+// are no player's primary sim, 2 primary sims only, 3 a player's selected sim under direct control and
+// not autonomous, else anyone. My temp 0: the range (1/16 tiles, 0: 0x1C). True: such a person within
+// the range of the middle between the door and its other side, in either side's room, nearer than a
+// person's width or within 30 degrees of the door's axis (either way) and facing it (within 30 degrees).
+// GC quirks kept: a ghost met in the walk ends it (false); once one person has passed the range test,
+// the rooms the others are tested against are 0.
+int cXObjectImpl::TryIsPersonInArea(StackElem*, const unsigned char* params) {
+  int range = static_cast<unsigned short>(m_temps[0]);
+  if (range == 0) range = 0x1c;
+  short id = 0;
+  if (InterpValue(static_cast<signed char>(params[2]), Be16(params, 0), nullptr, nullptr, &id) == -1) return -1;
+  cXObject* o = GetObjectFromID(id);
+  cXObjectImpl* door = o ? o->GetObjectImplementation() : nullptr;
+  if (!door) return -1;
+  if (door->GetType() != 8) return 0;
+  bool tested = false;
+  float midA = 0, midB = 0, axisA = 0, axisB = 0;
+  for (cXPersonImpl* p : LotPeople()) {
+    if (p->IsGhost()) return 0;
+    const int who = params[3];
+    if (who == 1) {
+      if (p->IsPrimarySim(0) || p->IsPrimarySim(1)) continue;
+    } else if (who == 2) {
+      if (!p->IsPrimarySim(0) && !p->IsPrimarySim(1)) continue;
+    } else if (who == 3) {
+      int player = -1;
+      if (p == _globals.GetSelectedPerson(0)) player = 0;
+      else if (p == _globals.GetSelectedPerson(1)) player = 1;
+      if (player < 0) continue;
+      InteractorModule__DirectInteractor* d = PlayerDirectInteractor(player);  // GetPlayerInteractor(player, 0)
+      if (!d || d->m_autonomous != 0) continue;
+    }
+    int roomA = 0, roomB = 0;
+    if (!tested) {
+      // The door's other side (cXPortal::GetOtherSide): the next part round its group with a portal tree.
+      auto* mt = IsPortalObject(door) ? dynamic_cast<cXMTObjectImpl*>(door) : nullptr;
+      if (!mt) break;
+      cXMTObjectImpl* other = mt;
+      do {
+        cXMTObjectImpl* next = other->GetNextMultiTileObject();
+        other = next ? next : other->m_lead;
+      } while (other && other != mt && other->GetTreeID(0xf) == 0);
+      if (!other || other == mt) break;
+      midA = static_cast<float>((door->m_location[1] + other->m_location[1]) >> 1);
+      midB = static_cast<float>((door->m_location[0] + other->m_location[0]) >> 1);
+      roomA = static_cast<short>(door->GetData(0x1d));
+      roomB = static_cast<short>(other->GetData(0x1d));
+    }
+    const int room = static_cast<unsigned short>(p->GetData(0x1d));  // GetRoom: unsigned (the door's two: signed)
+    if (room != roomA && room != roomB) continue;
+    const float dA = static_cast<float>(p->m_location[1]) - midA;
+    const float dB = static_cast<float>(p->m_location[0]) - midB;
+    const double dist = std::sqrt(dA * dA + dB * dB);
+    if (static_cast<double>(static_cast<float>(range)) < dist) continue;
+    if (dist < static_cast<double>(static_cast<float>(6))) return 1;  // cXObject::GetPersonWidth: gPersonWidth 6
+    if (!tested) {
+      int a = 0, b = 0;
+      DirectionStep(door->GetData(1) & 7, &a, &b);
+      axisA = static_cast<float>(static_cast<double>(static_cast<float>(b << 4)) * 0.0625);
+      axisB = static_cast<float>(static_cast<double>(static_cast<float>(a << 4)) * 0.0625);
+      tested = true;
+    }
+    const float along = static_cast<float>(static_cast<double>(dA * axisA + dB * axisB) / dist);
+    if (along < 0.866f && -0.866f < along) continue;
+    SAnimator2* anim = p->GetSAnimator();
+    const double dir = anim ? anim->GetRealDir() : 0.0;
+    const float turned = static_cast<float>(dir + 1.5707963705062866);
+    const float s = std::sin(turned), c = std::cos(turned);
+    if (static_cast<float>(static_cast<double>(s * -dA + c * -dB) / dist) < 0.866f) continue;
+    return 1;
+  }
+  return 0;
+}
+
+// 800F9F44
+// Three ticks: the simulator steps once (global 0xB); then (the stack object must exist, error 0x17) the
+// value (operand +0: literal, or with flag 0x20 of +4 the local it names) is read, GlobalDispatch 0x108
+// unless flag 0x40 (nothing in the game listens to it), and the frame's tree's string set 0x131 entry
+// +5 is formatted (ParseUIString; the text is not used); then true.
+int cXObjectImpl::TryUserEvent(StackElem* frame, const unsigned char* params) {
+  if (frame->m_primState == 0) {
+    if (Globs_pSimulator) Globs_pSimulator->SetGlobal(cSimulatorImpl::kStepOnce, 1);
+    frame->m_primState = 1;
+    return 2;
+  }
+  if (frame->m_primState != 1) return 1;
+  frame->m_primState = 2;
+  if (!GetObjectFromID(frame->m_stackObject)) {
+    m_treeSim->SetError(0x17);
+    Error(0x17);
+    return -1;
+  }
+  short value = 0;
+  if (InterpValue((params[4] & 0x20) ? 0x19 : 7, Be16(params, 0), nullptr, nullptr, &value) == -1) return -1;
+  return 2;
+}
+
+// 800FE068
+// Operand +4: whose (1 the stack object's, 2 none: error 0x0A, else mine); +6 below 3 (else error 0x1E).
+// My temps 0..4: the five lowest of the motives 5, 6, 7, 8, 9, 0xD, 0xE, 0xF (sorted by the game's qsort
+// with _MotiveSort, which counts values within 0.01 as equal).
+int cXObjectImpl::TryFind5WorstMotives(StackElem* frame, const unsigned char* params) {
+  const unsigned int whose = simmy::be16(params + 4), kind = simmy::be16(params + 6);
+  struct Entry {
+    short index;
+    short motive;
+  };
+  Entry motives[8] = {{0, 5}, {0, 6}, {0, 7}, {0, 8}, {0, 9}, {0, 0xd}, {0, 0xe}, {0, 0xf}};  // 803DC0A0
+  cXObjectImpl* o = nullptr;
+  if (whose == 1) {
+    cXObject* so = GetObjectFromID(frame->m_stackObject);
+    o = so ? so->GetObjectImplementation() : nullptr;
+  } else if (whose != 2) {
+    o = this;
+  }
+  cXPersonImpl* p = o && o->GetType() == 2 ? dynamic_cast<cXPersonImpl*>(o) : nullptr;
+  if (!p) {
+    m_treeSim->SetError(10);
+    Error(10);
+    return -1;
+  }
+  if (kind >= 3) {
+    m_treeSim->SetError(0x1e);
+    Error(0x1e);
+    return -1;
+  }
+  const float* values = p->GetMotiveRef(0);  // sCurMotiveTabToSort
+  simmy::SnQsort(motives, 8, [values](const Entry& a, const Entry& b) {  // _MotiveSort (800FE014)
+    const float d = values[a.motive] - values[b.motive];
+    if (d < -0.01f) return -1;
+    return 0.01f < d ? 1 : 0;
+  });
+  for (int i = 0; i < 5; ++i) m_temps[i] = motives[i].motive;
+  return 1;
+}
+
+// 801069B4
+// The GUID (an ingredient id): operand +1 the scope, +2 the data; none (0) with flag 0x80 of +4.
+int cXObjectImpl::InventoryCommandParam_GetGuid(const unsigned char* params) {
+  if (params[4] & 0x80) return 0;
+  short v = -1;
+  if (InterpValue(params[1], Be16(params, 1), nullptr, nullptr, &v) == -1) return 0;
+  return v;
+}
+
+// 80106A28
+// The count: operand +5 the scope, +6 the data.
+int cXObjectImpl::InventoryCommandParam_GetCount(const unsigned char* params) {
+  short v = 0;
+  if (InterpValue(static_cast<signed char>(params[5]), Be16(params, 3), nullptr, nullptr, &v) == -1) return 0;
+  return v;
+}
+
+// 80106A8C
+// The player's family inventory, from a person's tree (an object's: error 0x4D); operand +4 & 0x3F: 0 whether the GUID is in it (true with the
+// "all items" cheat, DAT_804761BC), 1 my temp 0 = its count, 2 nothing (false), 3 add the count
+// (temp 0: those added), 4 remove (temp 0: those removed), 5 empty it. Errors: no GUID 0x4F, a count
+// below 1 0x4E. False without an inventory.
+int cXObjectImpl::TryInventoryCommand(StackElem*, const unsigned char* params) {
+  auto fail = [&](short code) {
+    m_treeSim->SetError(code);
+    Error(code);
+    return -1;
+  };
+  // TreeSim::GetPerson: only a person's tree may use the inventory.
+  if (GetType() != 2 || !dynamic_cast<cXPersonImpl*>(this)) return fail(0x4d);
+  PlayerFamilyImpl* inv = inventory::PlayerInventory();
+  if (!inv) return 0;
+  switch (params[4] & 0x3f) {
+    case 0: {
+      const int guid = InventoryCommandParam_GetGuid(params);
+      if (guid == 0) return fail(0x4f);
+      // DAT_804761BC: a cheat (all ingredients) the release build never sets.
+      return inventory::IsItemInInventory(inv, guid) ? 1 : 0;
+    }
+    case 1: {
+      const int guid = InventoryCommandParam_GetGuid(params);
+      if (guid == 0) return fail(0x4f);
+      m_temps[0] = static_cast<short>(inventory::CountItemsByGuid(inv, guid));
+      return 1;
+    }
+    case 3: {
+      const int guid = InventoryCommandParam_GetGuid(params);
+      const short count = static_cast<short>(InventoryCommandParam_GetCount(params));
+      if (count < 1) return fail(0x4e);
+      m_temps[0] = static_cast<short>(inventory::AddItemsByGuid(inv, guid, count, 0));
+      return 1;
+    }
+    case 4: {
+      const int guid = InventoryCommandParam_GetGuid(params);
+      const short count = static_cast<short>(InventoryCommandParam_GetCount(params));
+      if (count < 1) return fail(0x4e);
+      m_temps[0] = static_cast<short>(inventory::RemoveItemsByGuid(inv, guid, count, 0));
+      return 1;
+    }
+    case 5:
+      inventory::Clear(inv);
+      return 1;
+    default: return 0;
+  }
+}
+
+// 80100C84
+// Operand +4 flag 1: the object folder frees what it no longer needs (PC: nothing to free), true.
+// Else the GUID (+0) has its data loaded (ObjectFolderImpl::ForceDataPreload; 2 while it loads). PC:
+// object data is read when it is needed, so a known GUID is ready at once; an unknown one is false.
+int cXObjectImpl::TryPreloadObject(StackElem*, const unsigned char* params) {
+  if (simmy::be16(params + 4) & 1) return 1;  // ObjectFolderImpl::FreeUnusedData
+  const unsigned int guid = simmy::be32(params);
+  if (guid == 0 || !Globs_pObjectFolder || !Globs_pObjectFolder->GetSelectorByGUID(static_cast<int>(guid))) return 0;
+  return 1;
+}
+
+// 80105F54
+// Operand +0 the effect, +1 flags (1 every other room, 2 the stack object's room instead of mine), two
+// values (scope +2 / data +4, scope +3 / data +6). 0 the room's light scale (value / 512), 1 one colour
+// channel (the first value, below 3) to the second / 512, 2 lightning (EHouse::TriggerLightningEffect:
+// empty in the release build), 3 rain, 4 fair weather. Rooms with bit 0x8000 (outside): false. Errors:
+// no such room 0x28, a channel above 2 0x0D.
+int cXObjectImpl::TryRoomEffect(StackElem* frame, const unsigned char* params) {
+  const unsigned char flags = params[1];
+  const bool others = (flags & 1) != 0;
+  const unsigned int effect = params[0];
+  unsigned int room = static_cast<unsigned short>(GetData(0x1d));
+  cXObject* so = GetObjectFromID(frame->m_stackObject);
+  if (so && (flags >> 1 & 1)) room = static_cast<unsigned short>(so->GetObjectImplementation()->GetData(0x1d));
+  short a = 0, b = 0;
+  short* ra = nullptr;
+  short* rb = nullptr;
+  float* fa = nullptr;
+  float* fb = nullptr;
+  if (InterpValue(static_cast<signed char>(params[2]), Be16(params, 2), &ra, &fa, &a) == -1) return -1;
+  if (InterpValue(static_cast<signed char>(params[3]), Be16(params, 3), &rb, &fb, &b) == -1) return -1;
+  const float va = ra ? static_cast<float>(*ra) : fa ? *fa : static_cast<float>(a);
+  const float vb = rb ? static_cast<float>(*rb) : fb ? *fb : static_cast<float>(b);
+  if (room & 0x8000) return 0;
+  RoomManager* manager = RoomManager::GetRoomManager();
+  if (!manager || !manager->GetRoom(static_cast<unsigned short>(room))) {
+    m_treeSim->SetError(0x28);
+    Error(0x28);
+    return -1;
+  }
+  EHouse* house = _globals.m_house;
+  switch (effect) {
+    case 0: RoomManager::SetRoomIntensityScale(static_cast<int>(room), others, static_cast<float>(va * 0.001953125)); break;
+    case 1:
+      if (3.0 <= va) {
+        m_treeSim->SetError(0xd);
+        Error(0xd);
+        return -1;
+      }
+      RoomManager::SetRoomIntensityColorScale(static_cast<int>(room), others, static_cast<int>(va), static_cast<float>(vb * 0.001953125));
+      break;
+    case 2:
+      if (house) EHouse::TriggerLightningEffect();
+      break;
+    case 3:
+      if (house) house->Rain();
+      break;
+    case 4:
+      if (house) house->Fair();
+      break;
+    default: return 0;
+  }
+  return 1;
+}
+
+// 80106568
+// True only in a one-player game with EyeToy hardware (EyeToyClient::IsEyeToyHardwarePresent; the GBA
+// link is checked through it). PC: no EyeToy, so false, as on a GameCube with nothing connected.
+int cXObjectImpl::TryGbaCommunication(StackElem*, const unsigned char*) { return 0; }
+
+// 80108EC8
+// Operands: +0 / +2 the variable naming the object; +3 flags (bit 2: it influences objects of type +3,
+// else people; 1 / 2 see PassiveInfluenceSystem::NotifySimulator); +4 the shape (5: removed); +5 a combo
+// (GetShortComboValue) giving the range in tiles (at most 0x20). True.
+int cXObjectImpl::TryPassiveInfluence(StackElem* frame, const unsigned char* params) {
+  short id = 0;
+  if (InterpValue(static_cast<signed char>(params[2]), Be16(params, 0), nullptr, nullptr, &id) == -1) {
+    frame->m_stackObject = 0;
+    return -1;
+  }
+  cXObject* object = GetObjectFromID(id);
+  PassiveInfluenceSystem* system = InfluenceSystem();
+  if (static_cast<signed char>(params[4]) == 5) {
+    if (system) system->RemoveObjectFromMap(object);
+    return 1;
+  }
+  short scope = 0, data = 0, range = 0;
+  GetShortComboValue(static_cast<signed char>(params[5]), &scope, &data);
+  if (InterpValue(scope, data, nullptr, nullptr, &range) == -1) return -1;
+  if (range > 0x20) range = 0x20;
+  if (system)
+    system->AddObjectToMap(object, static_cast<signed char>(params[3]), static_cast<signed char>(params[4]),
+                           static_cast<signed char>(range), static_cast<signed char>(params[3]));
+  return 1;
+}
+
+// 80109344
+// An object's passive-influence motive delta. Operand +3 flags: 2 mine, 4 the stack object's (neither:
+// -1); 1 clears them. Else +2 the motive (4..9, 0xE, 0xF; else error 0x1A), the delta a game hour
+// (scope +0 / data +4; per frame: / 60 / 30) and its limit (scope +1 / data +6).
+int cXObjectImpl::TrySetMotiveDelta(StackElem* frame, const unsigned char* params) {
+  const unsigned char flags = params[3];
+  if ((flags & 6) == 0) return -1;
+  auto target = [&]() -> cXObject* {
+    if (flags & 2) return this;
+    if (flags & 4) return GetObjectFromID(frame->m_stackObject);
+    return nullptr;
+  };
+  PassiveInfluenceSystem* system = InfluenceSystem();
+  if (flags & 1) {
+    if (system) system->ClearInfluenceMotiveDeltas(target());
+    return 1;
+  }
+  const unsigned int motive = params[2];
+  if (motive < 4 || (motive > 9 && (motive > 0xf || motive < 0xe))) {
+    m_treeSim->SetError(0x1a);
+    Error(0x1a);
+    return -1;
+  }
+  short delta = 0, limit = 0;
+  if (InterpValue(static_cast<signed char>(params[0]), Be16(params, 2), nullptr, nullptr, &delta) == -1) return -1;
+  if (InterpValue(static_cast<signed char>(params[1]), Be16(params, 3), nullptr, nullptr, &limit) == -1) return -1;
+  const float perFrame = static_cast<float>(static_cast<double>(static_cast<float>(delta)) / 60.0 / 30.0);
+  if (system) system->SetInfluenceMotiveDelta(target(), static_cast<unsigned char>(motive), perFrame, limit);
+  return 1;
+}
+
+// 8010958C
+// The animate primitive on an object: only its passive influence's reaction (kinds 7 mine, 8 the stack
+// object's; operand +3 = kind - 3, or from the flags of +5), else error 5. The animation
+// (resolveSkillForPassiveInfluence) is kept for the influence (SetSkillNameID).
+int cXObjectImpl::TryAnimate(StackElem* frame, const unsigned char* params) {
+  int kind = params[3];
+  if (kind == 0) {
+    kind = (params[5] & 1) != 0 ? 1 : 0;
+    if (params[5] & 0x10) kind |= 2;
+  } else {
+    kind += 3;
+  }
+  cXObject* object = nullptr;
+  if (kind == 7) {
+    object = this;
+  } else if (kind == 8) {
+    object = GetObjectFromID(frame->m_stackObject);
+  } else {
+    m_treeSim->SetError(5);
+    Error(5);
+    return -1;
+  }
+  const AnimRef* skill = nullptr;
+  const int r = resolveSkillForPassiveInfluence(object, frame, params, skill);
+  if (object)
+    if (PassiveInfluenceSystem* system = InfluenceSystem()) system->SetSkillNameID(object, skill);
+  return r;
+}
+
+// 800FF2F8
+// A fire (efx_fire) at the object's tile centre, unless one is there already or it cannot be placed.
+// 1: started.
+int StartFireAtObjectLoc(cXObject* object, ObjSelector* fire) {
+  cXObjectImpl* impl = object ? object->GetObjectImplementation() : nullptr;
+  ObjectModuleImpl* module = Globs_pObjectModule;
+  if (!impl || !fire || !module) return 0;
+  CTilePt tile = impl->GetCTilePt();
+  ObjectIterator it;
+  for (it.init(tile, ObjectIterator__IterateType{ObjectIterator__IterateType::kAll}); it.m_current; ++it)
+    if (it.m_current->GetSelector() == fire) return 0;
+  const short id = static_cast<short>(module->MakeNewOutOfWorldObject(fire, nullptr));
+  if (id == 0) return 0;
+  cXObject* made = module->GetObjectFromID(id);
+  cXObjectImpl* f = made ? made->GetObjectImplementation() : nullptr;
+  if (!f) return 0;
+  const int pos[2] = {(impl->m_location[0] & ~0xf) | 8, (impl->m_location[1] & ~0xf) | 8};
+  if (ObjCanPlace(f, pos, impl->m_level, nullptr, 0)) {
+    ObjPlace(f, pos, impl->m_level, nullptr, 0);
+    if (std::getenv("SIMMY_SIM_TRACE")) {
+      const std::string fireName = f->DebugName();
+      std::printf("[vm] fire %s starts at %s\n", fireName.c_str(), impl->DebugName());
+    }
+    return 1;
+  }
+  module->KillObject(id);
+  return 0;
+}
+
+// 800FF520
+// Fire spreads to the stack object's tile (operand +0 = 1: the tile in front of it, through no wall but
+// a low one (styles 3, 5, 6, 0xF, 0x17) and no diagonal). Not off the lot, not onto a fireproof object
+// or a fire, at most 30 fires. On a tile with nothing that burns (object data 0x28 bit 0x20) a fire is
+// put there; else the last thing that burns catches fire (unless operand +1 bit 1 is clear and it is in
+// use, object data 8 bit 0x20, or occupied, data 0x3E): a person is let go of everything and stood in
+// the middle of its tile first; a multi-tile object (not a dynamic one) burns on every part. 1: a fire
+// started. Errors: no stack object 0x15, the fire not loaded 0x45 (PC: object data is always ready).
+int cXObjectImpl::TryBurn(StackElem* frame, const unsigned char* params) {
+  cXObject* so = GetObjectFromID(frame->m_stackObject);
+  cXObjectImpl* target = so ? so->GetObjectImplementation() : nullptr;
+  if (!target) {
+    m_treeSim->SetError(0x15);
+    Error(0x15);
+    return -1;
+  }
+  if (!ObjIsInWorld(target)) return 0;
+  ObjSelector* fire = Globs_pObjectFolder ? Globs_pObjectFolder->GetSelectorByGUID(static_cast<int>(kFireGUID)) : nullptr;
+  int pos[2] = {target->m_location[0], target->m_location[1]};
+  const int level = target->m_level;
+  if (params[0] == 1) {
+    int a = 0, b = 0;
+    DirectionStep(target->GetData(1) & 7, &a, &b);
+    pos[0] += a * 16;
+    pos[1] += b * 16;
+  }
+  CTilePt tile(pos[1] >> 4, pos[0] >> 4, level);  // CTilePt(FTilePt&, level)
+  cFixedWorldImpl* world = Globs_pFixedWorld;
+  if (!world || world->OutOfBounds(tile)) return 0;
+  if (params[0] == 1) {
+    TileWalls walls = world->GetWall(tile);
+    const TileWallsSegment segment{static_cast<int>(TileWalls::RotateSegment(TileWallsSegment{8}, target->GetData(1) / 2))};
+    if (walls.HasWall(segment)) {
+      const int style = static_cast<int>(walls.GetStyle(segment));
+      if (style != 3 && style != 5 && style != 6 && style != 0xf && style != 0x17) return 0;
+    }
+    if (walls.HasDiagonal()) return 0;
+  }
+  cXObjectImpl* burn = nullptr;
+  ObjectIterator it;
+  for (it.init(tile, ObjectIterator__IterateType{ObjectIterator__IterateType::kAll}); it.m_current; ++it) {
+    cXObjectImpl* o = it.m_current->GetObjectImplementation();
+    if (!o) continue;
+    if (o->GetData(0x28) >> 5 & 1) burn = o;                                    // CanBurn
+    if ((o->GetData(8) >> 0xb & 1) || o->GetSelector() == fire) return 0;     // IsFireproof
+  }
+  int fires = 0;
+  for (cXObjectImpl* o = Globs_pObjectModule ? Globs_pObjectModule->m_first : nullptr; o; o = o->m_nextObject)
+    if (o->m_def && objdef::GUID(o->m_def) == kFireGUID) ++fires;
+  if (fires + 1 >= 0x1f) return 0;
+  if (!burn) {
+    if (!fire) return 0;  // GC: ObjSelector::IsPreloaded (error 0x45); PC: always loaded
+    ObjectModuleImpl* module = Globs_pObjectModule;
+    const short id = static_cast<short>(module->MakeNewOutOfWorldObject(fire, nullptr));
+    if (id == 0) return 0;
+    cXObject* made = module->GetObjectFromID(id);
+    cXObjectImpl* f = made ? made->GetObjectImplementation() : nullptr;
+    if (f && ObjCanPlace(f, pos, level, nullptr, 0)) {
+      ObjPlace(f, pos, level, nullptr, 0);
+      if (std::getenv("SIMMY_SIM_TRACE")) {
+        const std::string me = DebugName();
+        std::printf("[vm] %s: fire %s spreads\n", me.c_str(), f->DebugName());
+      }
+      return 1;
+    }
+    module->KillObject(id);
+    return 0;
+  }
+  if (!(burn->GetData(0x28) >> 5 & 1)) return 0;
+  if (!(params[1] & 1) && ((burn->GetData(8) >> 5 & 1) || burn->GetData(0x3e) >= 1)) return 0;  // IsOccupied
+  if (!burn->IsMultiTile()) {
+    if (burn->GetType() == 2) {
+      // A person: let go of everything (its outfit kept), then stood in the middle of its tile.
+      cXPersonImpl* person = dynamic_cast<cXPersonImpl*>(burn);
+      const int at[2] = {(burn->m_location[0] & ~0xf) | 8, (burn->m_location[1] & ~0xf) | 8};
+      const int personLevel = burn->m_level;
+      SAnimator2* anim = person ? person->GetSAnimator() : nullptr;
+      const int costume = anim ? anim->m_lastCostume : 0;
+      burn->Cleanup(nullptr);
+      if (anim) anim->m_lastCostume = costume;
+      PlaceObject(burn, at, personLevel, nullptr);  // cXPersonImpl::Place
+      if (anim) anim->m_resetPos = 1;
+    }
+    return StartFireAtObjectLoc(burn, fire);
+  }
+  auto* mt = dynamic_cast<cXMTObjectImpl*>(burn);
+  if (!mt || mt->IsDynamic()) return 0;
+  int parts = 0;
+  for (cXMTObjectImpl* p = mt->GetFirstMultiTileObject(); p; p = p->GetNextMultiTileObject()) ++parts;
+  if (parts + fires >= 0x1f) return 0;
+  bool started = false;
+  for (cXMTObjectImpl* p = mt->GetFirstMultiTileObject(); p; p = p->GetNextMultiTileObject())
+    if (StartFireAtObjectLoc(p, fire) == 1) started = true;
+  return started ? 1 : 0;
 }

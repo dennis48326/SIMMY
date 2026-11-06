@@ -611,10 +611,10 @@ struct cXObjectImpl : public cXObject {
   void GetErrorString(StringBuffer &);  // 800EBE38
   bool AllowIdleOptimization();  // 800F9E6C
   void HandleBreakpoint(StackElem *, BehaviorNode *);  // 800F9F20
-  RET_UNKNOWN TryUserEvent(StackElem *, XPrimParam *);  // 800F9F44
+  int TryUserEvent(StackElem* frame, const unsigned char* params);  // 800F9F44
   RET_UNKNOWN TryUIEffect(StackElem *, XPrimParam *);  // 800FA1E8
   int TryTestObjectType(StackElem* frame, const unsigned char* params);  // 800FA1F4
-  RET_UNKNOWN TryIsPersonInArea(StackElem *, XPrimParam *);  // 800FA314
+  int TryIsPersonInArea(StackElem* frame, const unsigned char* params);  // 800FA314
   RET_UNKNOWN UseKnownGoodLocation(TFGL_ACTIONS, short, FTilePt *, int, short);  // 800FAAA4
   // Primitive 0x10 (objectsim.cpp; GC: with the action, place, level and object as outputs).
   int TryFindGoodLocation(StackElem* frame, const unsigned char* params);  // 800FADF4
@@ -623,13 +623,13 @@ struct cXObjectImpl : public cXObject {
   RET_UNKNOWN ParseUIString(BString2 &, StackElem *, short *, ObjSelector **, bool);  // 800FC7DC
   int TryMakeActionString(StackElem* frame, const unsigned char* params);  // 800FD890
   int TryPushAction(StackElem* frame, const unsigned char* params);  // 800FDAA8
-  RET_UNKNOWN TryFind5WorstMotives(StackElem *, XPrimParam *);  // 800FE068
+  int TryFind5WorstMotives(StackElem* frame, const unsigned char* params);  // 800FE068
   int TryRelationship2(StackElem* frame, const unsigned char* params);  // 800FE28C
   int TryRelationship(StackElem* frame, const unsigned char* params);  // 800FEAD4
   RET_UNKNOWN TryTutorial(StackElem *, XPrimParam *);  // 800FF1DC
-  RET_UNKNOWN TryBurn(StackElem *, XPrimParam *);  // 800FF520
+  int TryBurn(StackElem* frame, const unsigned char* params);  // 800FF520
   int TryCreateObject(StackElem* frame, const unsigned char* params);  // 800FFF24
-  RET_UNKNOWN TryPreloadObject(StackElem *, XPrimParam *);  // 80100C84
+  int TryPreloadObject(StackElem* frame, const unsigned char* params);  // 80100C84
   int TryDropOnto(StackElem* frame, const unsigned char* params);  // 80100D4C
   int TryBudget(StackElem* frame, const unsigned char* params);  // 80100F88
   int TrySetToNext(StackElem* frame, const unsigned char* params);  // 80101110
@@ -649,14 +649,14 @@ struct cXObjectImpl : public cXObject {
   int TryGrab(StackElem* frame, const unsigned char* params);  // 80105AFC
   int TryTreeBreak(StackElem* frame, const unsigned char* params);  // 80105D70
   int TryRandom(StackElem* frame, const unsigned char* params);  // 80105DD4
-  RET_UNKNOWN TryRoomEffect(StackElem *, XPrimParam *);  // 80105F54
+  int TryRoomEffect(StackElem* frame, const unsigned char* params);  // 80105F54
   int TryCheckObject(StackElem* frame, const unsigned char* params);  // 80106270
-  RET_UNKNOWN TryGbaCommunication(StackElem *, XPrimParam *);  // 80106568
+  int TryGbaCommunication(StackElem* frame, const unsigned char* params);  // 80106568
   int TryAnimateObject(StackElem* frame, const unsigned char* params);  // 801065B0
   int TryCompleteGoal(StackElem* frame, const unsigned char* params);  // 80106798
-  RET_UNKNOWN InventoryCommandParam_GetGuid(InventoryCommandParam &);  // 801069B4
-  RET_UNKNOWN InventoryCommandParam_GetCount(InventoryCommandParam &);  // 80106A28
-  RET_UNKNOWN TryInventoryCommand(StackElem *, XPrimParam *);  // 80106A8C
+  int InventoryCommandParam_GetGuid(const unsigned char* params);  // 801069B4
+  int InventoryCommandParam_GetCount(const unsigned char* params);  // 80106A28
+  int TryInventoryCommand(StackElem* frame, const unsigned char* params);  // 80106A8C
   int TryCameraControl(StackElem* frame, const unsigned char* params);  // 80106D7C
   int TryDistanceTo(StackElem* frame, const unsigned char* params);  // 80107CDC
   int TryDirectionTo(StackElem* frame, const unsigned char* params);  // 80107EA0
@@ -664,11 +664,11 @@ struct cXObjectImpl : public cXObject {
   RET_UNKNOWN TryParticleEffect(StackElem *, XPrimParam *);  // 80108384
   // Primitive 0x3F: a person's memory of another (eight 3-bit memories in relationship variable 2).
   int TryMemory(StackElem* frame, const unsigned char* params);  // 80108450
-  RET_UNKNOWN TryPassiveInfluence(StackElem *, XPrimParam *);  // 80108EC8
+  int TryPassiveInfluence(StackElem* frame, const unsigned char* params);  // 80108EC8
   int TryWantsAndFearsNotify(StackElem* frame, const unsigned char* params);  // 80109048
   int TryChangeWantFearTree(StackElem* frame, const unsigned char* params);  // 80109264
-  RET_UNKNOWN TrySetMotiveDelta(StackElem *, XPrimParam *);  // 80109344
-  RET_UNKNOWN TryAnimate(StackElem *, AnimateNewParam *);  // 8010958C
+  int TrySetMotiveDelta(StackElem* frame, const unsigned char* params);  // 80109344
+  int TryAnimate(StackElem* frame, const unsigned char* params);  // 8010958C
   // One tick of its behaviour (the tree runs until a primitive waits), then the data 0x19 countdown.
   // 1: it ran (0: its tree stopped).
   virtual int Simulate(int ticks);  // 801096C4

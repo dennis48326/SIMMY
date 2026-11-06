@@ -170,7 +170,7 @@ struct cFixedWorldImpl {
   virtual RET_UNKNOWN OutOfRoutableExtent(FTilePt &) const;  // 801519D4
   virtual int OutOfBounds(CTilePt& tile) const;  // 80151A40
   virtual int OutOfBuildingBounds(CTilePt& tile, bool inner) const;  // 80151A90
-  virtual RET_UNKNOWN OutOfGrid(CTilePt &) const;  // 80151B10
+  virtual int OutOfGrid(CTilePt& tile) const;  // 80151B10
   virtual RET_UNKNOWN OutOfBounds(FTilePt &) const;  // 80151B58
   virtual RET_UNKNOWN OutOfGrid(FTilePt &) const;  // 80151BC4
   virtual int GetXSize() const;  // 80151C30
@@ -191,7 +191,7 @@ struct cFixedWorldImpl {
   virtual int MayEditTile(CTilePt& tile) const;  // 8015213C
   virtual unsigned short GetRoomIdFromPoint(CTilePt& tile);  // 801521AC
   virtual RET_UNKNOWN GetInfluenceMap();  // 8015235C
-  virtual RET_UNKNOWN GetPassiveInfluenceMap();  // 80152364
+  virtual PassiveInfluenceMap* GetPassiveInfluenceMap();  // 80152364
 
   int m_xSize = 0;                  // +0x14
   int m_ySize = 0;                  // +0x18
@@ -205,5 +205,5 @@ struct cFixedWorldImpl {
                                     //   2 visited, 4 outside; 0x10 off the lot's extent)
   _c2DArray* m_walls = nullptr;     // +0x38 'Arry' 12: TileWallStorage (8 bytes) per tile
   void* m_influence = nullptr;      // +0x3C InfluenceMap
-  void* m_passiveInfluence = nullptr;  // +0x40 PassiveInfluenceMap
+  PassiveInfluenceMap* m_passiveInfluence = nullptr;  // +0x40
 };

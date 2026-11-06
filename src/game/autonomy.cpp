@@ -269,34 +269,53 @@ double MotiveEffects::GetCurrentScore() {
 // 803AF7F0), none: zero. An ad adds its value / 1000 to the motive before the curve.
 double MotiveEffects::GetInteractionScore(const unsigned char* entry) {
   if (!entry || !m_motives || m_curves.empty()) return 0.0;
-  const auto* ads = static_cast<const unsigned char*>(ERQuickdata::Ptr(entry, 4));
-  const unsigned int count = ads ? ERQuickdata::U32(ads - 4, 0) : 0;
+  TTabScratchAds ads;
+  ads.CopyFrom(entry);
+  return GetInteractionScore(ads);
+}
+
+double MotiveEffects::GetInteractionScore(const TTabScratchAds& ads) {
+  if (!m_motives || m_curves.empty()) return 0.0;
   float sum = 0.0f;
   for (const Curve& c : m_curves) {
     const float cur = m_motives[c.m_motive];
     float ad = 0.0f;
-    const unsigned char* a = nullptr;
-    for (unsigned int i = 0; i < count && !a; ++i)
-      if (ERQuickdata::S16(ads + i * 8, 6) == c.m_motive) a = ads + i * 8;
-    if (a) {
-      const int personality = ERQuickdata::S16(a, 0);
-      const int min = ERQuickdata::S16(a, 2), range = ERQuickdata::S16(a, 4);
-      if (personality == 0) {
-        ad = static_cast<float>(min + range);  // GetMax
-      } else {
-        int trait = 0;
-        if (personality > 0 && personality < 23 && m_person) {
-          trait = m_person->GetPersonData(kPersonalityAds[personality].data);
-          if (kPersonalityAds[personality].invert) trait = 1000 - trait;
-        }
-        ad = static_cast<float>(min) + static_cast<float>(range) * static_cast<float>(trait) / 1000.0f;
+    const int personality = ads.m_personality[c.m_motive];
+    const int min = ads.m_min[c.m_motive], range = ads.m_range[c.m_motive];
+    if (personality == 0) {
+      ad = static_cast<float>(min + range);  // GetMax
+    } else {
+      int trait = 0;
+      if (personality > 0 && personality < 23 && m_person) {
+        trait = m_person->GetPersonData(kPersonalityAds[personality].data);
+        if (kPersonalityAds[personality].invert) trait = 1000 - trait;
       }
+      ad = static_cast<float>(min) + static_cast<float>(range) * static_cast<float>(trait) / 1000.0f;
     }
     sum += c.m_fn.Eval(static_cast<float>(ad * 0.0010000000474974513 + cur));
     static const bool adTrace = std::getenv("SIMMY_AUTO_TRACE") && !std::strcmp(std::getenv("SIMMY_AUTO_TRACE"), "ads");  // PC dev trace
     if (adTrace && ad != 0.0f) std::printf("[auto]     ad motive %d: %.1f (motive %.1f)\n", c.m_motive, ad, cur);
   }
   return sum / static_cast<float>(m_curves.size());
+}
+
+TTabScratchAds gCheckTreeModEntry;   // ObjTestSim::sCheckTreeModEntry (80113390 constructs it)
+int gAllowingCheckTreeAds = 0;       // cXPerson::sbAllowingCheckTreeAds
+
+// GC 8014951C TTabScratchEntry::CopyFrom: the ads (SetAd(i, entry->GetAd(i)) for the sixteen motives).
+void TTabScratchAds::CopyFrom(const unsigned char* entry) {
+  const auto* ads = entry ? static_cast<const unsigned char*>(ERQuickdata::Ptr(entry, 4)) : nullptr;
+  const unsigned int count = ads ? ERQuickdata::U32(ads - 4, 0) : 0;
+  for (int m = 0; m < 16; ++m) {
+    m_personality[m] = m_min[m] = m_range[m] = 0;
+    for (unsigned int i = 0; i < count; ++i)
+      if (ERQuickdata::S16(ads + i * 8, 6) == m) {
+        m_personality[m] = ERQuickdata::S16(ads + i * 8, 0);
+        m_min[m] = ERQuickdata::S16(ads + i * 8, 2);
+        m_range[m] = ERQuickdata::S16(ads + i * 8, 4);
+        break;
+      }
+  }
 }
 
 // ---------------------------------------------------------------------------------------------------
@@ -417,15 +436,25 @@ int cXPersonImpl::TryFindBestAction(StackElem* frame) {
       Interaction action(this, o, static_cast<int>(i), 2);
       // ObjTestSim::TestInteraction (autonomous): not while it burns or is in use (data 0x19), for
       // adults (GetAvailableToAdults) or ghosts, and the check tree passes with param 0 = 1.
-      if (IsPermittedToRunCheckTreeForAds(ERQuickdata::U32(o->m_def, 0x1c), static_cast<int>(i)))
-        SIMMY_STUB("cXPersonImpl::TryFindBestAction: check-tree advertisement edits (ObjTestSim::sCheckTreeModEntry)", 0x80127114);
+      // The entries IsPermittedToRunCheckTreeForAds allows run their check tree on a copy of their ads
+      // (ObjTestSim::sCheckTreeModEntry) it may change (scopes 0x0C, 0x1C, 0x1D, cXPerson::
+      // sbAllowingCheckTreeAds); in another room than the person their social ad is 0. They score with
+      // the copy.
+      const bool modAds = IsPermittedToRunCheckTreeForAds(ERQuickdata::U32(o->m_def, 0x1c), static_cast<int>(i));
       const bool forMe = IsGhost() ? (flags & 0x10) != 0 : !(flags & 0x40);
       if (!forMe) continue;
+      if (modAds) gCheckTreeModEntry.CopyFrom(e);  // TTabScratchEntry::CopyFrom
       const short check = ERQuickdata::S16(e, 0);
       short params[4] = {1, 0, 0, 0};
-      if (check != 0 && m_treeSim->RunCheckTree(o->GetBehavior(), check, static_cast<short>(o->m_id), params) != 1)
-        continue;
-      const double score = effects.GetInteractionScore(e);
+      if (check != 0) {
+        if (modAds) gAllowingCheckTreeAds = 1;
+        const int passed = m_treeSim->RunCheckTree(o->GetBehavior(), check, static_cast<short>(o->m_id), params);
+        gAllowingCheckTreeAds = 0;
+        if (passed != 1) continue;
+      }
+      if (modAds && static_cast<unsigned short>(o->GetData(0x1d)) != static_cast<unsigned short>(GetData(0x1d)))
+        gCheckTreeModEntry.SetMax(0xd, 0);  // GetAd(0xD)->SetMax(0)
+      const double score = modAds ? effects.GetInteractionScore(gCheckTreeModEntry) : effects.GetInteractionScore(e);
       const double falloff = 1.0f / static_cast<float>(dist * action.m_attenuation + 1.0);
       const float s = score == base ? 0.0f : static_cast<float>(static_cast<float>(score - base) * falloff);
       if (TraceAutonomy())

@@ -53,7 +53,7 @@ Opcodes < 0x100 are primitives; 0x100-0xFFF global trees, 0x1000-0x1FFF the obje
 |---|---|
 | `Behavior` (an object's trees, constants, tree sets) | treesim.cpp |
 | `TreeStack` / `StackElem` / `TreeSimImpl` (frames, Gosub, params/locals) | treesim.cpp |
-| `cXObjectImpl::TryElement` 80109770 (object primitives) | objectsim.cpp |
+| `cXObjectImpl::TryElement` 80109770 (object primitives) | objectsim.cpp; passive influence in [`passiveinfluencemap.cpp`](../src/game/passiveinfluencemap.cpp), the family inventory in [`inventory.cpp`](../src/game/inventory.cpp) |
 | `cXPersonImpl::TryElement` (person primitives: 0x03 find best action, 0x06 change suit, 0x11 idle for input, 0x16 look towards, 0x1B goto relative, 0x1D motive delta, 0x1E gosub found action, 0x25 test interacting with, 0x2C animate, 0x2D goto routing slot, 0x3E social mode, 0x40 idle animate) | person.cpp, autonomy.cpp, socialmode.cpp |
 | `cXObjectImpl::TryExpression` / `InterpValue` 8010AAC8 (the expression primitive and the variable scopes: my/stack object data, person data, globals, temps, params, locals, motives, room 0x17, neighbourhood...) | objectsim.cpp |
 | `TryGenericSimCall` (0x01: house transitions 0x16, wardrobe 0x22, food creation 0x27, selected sim 0x1A/0x1B...) | objectsim.cpp, [`ingamecas.cpp`](../src/game/ingamecas.cpp) |
@@ -63,10 +63,29 @@ Opcodes < 0x100 are primitives; 0x100-0xFFF global trees, 0x1000-0x1FFF the obje
 | Errors (`Error`, `HandleError`) | objectsim.cpp |
 
 Unported primitives go through `Unported(op, name, addr)`: logged once, **then treated as true**, so a
-tree carries on as if it worked. Still unported: 0x09 burn, 0x0A tutorial, 0x13 person in area, 0x15
-show string, 0x21 five worst motives, 0x22 UI effect, 0x23 user event, 0x27 inventory, 0x2C (object side)
-animate, 0x33 preload, 0x34 room effect, 0x36 GBA, 0x39-0x3C HUD create/add/manage/data, 0x3D particle
-effect, 0x41 passive influence; person 0x2F reach. Unknown opcodes set error 5.
+tree carries on as if it worked. Still unported, and used by no tree on the disc (a scan of every
+`edithtreesets` BHAV): 0x0A tutorial, 0x15 show string, 0x22 UI effect, 0x3D particle effect; person 0x2F
+reach; 0x39-0x3C HUD create/add/manage/data are used only by the debug object `zz_move_a__tron` ("Debug
+Mode - Test Job HUD"). Unknown opcodes set error 5. Unknown variable scopes (2, 5, above 0x2F) set error 9.
+
+| Primitive | GC | Port notes |
+|---|---|---|
+| 0x09 burn | `TryBurn` 800FF520, `StartFireAtObjectLoc` 800FF2F8 | Fire spreads (efx_fire "spread to object", the genie lamp's bad wish): a new `efx_fire` on the tile, or the thing that burns there (object data 0x28 bit 0x20) catches fire; fireproof objects (data 8 bit 0x800) and fires stop it; at most 30 fires; a burning person is let go of everything first. Fires themselves are made by trees (CreateObject: stoves, tombstones, guitars...); burning objects (data 8 bit 0x200) are skipped by autonomy and FindFunctionalObject |
+| 0x13 person in area | `TryIsPersonInArea` 800FA314 | Doors (door_sg): a person near the middle of the door's two sides, in either side's room, on the door's axis and facing it. GC quirks kept (a ghost ends the walk; after the first person in range the rooms compared are 0) |
+| 0x1D (object) motive delta, 0x41 passive influence, 0x2C (object) animate | `TrySetMotiveDelta` 80109344, `TryPassiveInfluence` 80108EC8, `TryAnimate` 8010958C | The passive influence system ([`passiveinfluencemap.cpp`](../src/game/passiveinfluencemap.cpp), [`passiveinfluence.hpp`](../include/simmy/classes/passiveinfluence.hpp)): trash piles, bins, outhouses, stereos put a shape (wedge, half disc, hexagon, square in front) of tiles in their room on the lot's map with motive deltas; a person standing there has those motives moved every frame (from `SAnimator2::Update`, the passive-influence part of `AwarenessManager::AwarenessCheck`), up to the deltas' limits. Targets (definition +0x0A 0x1B/0x2B/0x3E) run tree entry 0x0D for an object influence of their type once a tick (`CheckObjects`). The person's reaction animation (`StartPassiveInfluenceAnimation`) is not ported; object 0x2C only records it. `SIMMY_INFLUENCE_TRACE=1` (2: motive changes) |
+| 0x21 five worst motives | `TryFind5WorstMotives` 800FE068 | Temps 0..4; sorted with the game's qsort (BSD quicksort, [`sn_qsort.hpp`](../include/simmy/sn_qsort.hpp)) so ties come out as on GC |
+| 0x23 user event | `TryUserEvent` 800F9F44 | Three ticks: the simulator steps once (global 0xB), then GlobalDispatch 0x108 (no listener in the game) |
+| 0x27 inventory | `TryInventoryCommand` 80106A8C | The family inventory (garden, fruit tree and aquarium harvests; food creation's ingredients): [`inventory.cpp`](../src/game/inventory.cpp) over `PlayerFamilyImpl`'s slots |
+| 0x33 preload | `TryPreloadObject` 80100C84 | PC: object data is read when needed, so a known GUID is ready at once (GC could wait) |
+| 0x34 room effect | `TryRoomEffect` 80105F54 | Room light scale / colour, rain, fair weather; lightning (`EHouse::TriggerLightningEffect`) is empty in the release build |
+| 0x36 GBA | `TryGbaCommunication` 80106568 | False, as on a GameCube with nothing connected (GC tests EyeToy hardware in one-player games) |
+| 0x1F set to next, kind 9 | `TrySetToNext` 80101110 | The objects east, south, west, north of an object (counters and tables find their neighbours); `IsInteractionTile` (800E318C, flag 0x40) is a part with a "dynamic multi-tile" tree (function entry 8) |
+
+Check-tree ad scopes (0x0C range, 0x1C personality, 0x1D min of a motive's ad): only for the TTAB entries
+`IsPermittedToRunCheckTreeForAds` (801270E0) allows, autonomy copies the entry's ads
+(`TTabScratchAds`, GC `TTabScratchEntry`), runs the check tree with `cXPerson::sbAllowingCheckTreeAds` set
+so it can change them, zeroes the social ad when the object is in another room, and scores with the copy
+([`autonomy.cpp`](../src/game/autonomy.cpp)). Elsewhere the scopes read a scratch 0, as on GC.
 
 The tree RNG is `GetNextRandomNumber` (800A64F8, in [`cassimstate.cpp`](../src/game/cassimstate.cpp)): the
 simulator's seed inside a tick, an outer seed for check trees run from menus.
@@ -86,7 +105,9 @@ simulator's seed inside a tick, an outer seed for check trees run from menus.
 - **Animator** `SAnimator2` ([`sanimator2.cpp`](../src/game/sanimator2.cpp)): position in 1/16 tiles (tile
   centre at +8, already a world position: `positionCharacter` 80065094 must **not** add the house's
   0.5 offset; objects do add it in `SetObjOrient`), animation states, free-move walk/run for direct
-  control, route walking, animation events (sounds, footsteps, particles, censor). Stubbed: awareness,
+  control, route walking, animation events (sounds, footsteps, particles, censor), passive influence on
+  the motives (the awareness check's part). Stubbed: the rest of awareness (memory, head turning,
+  auto-carry, passive-influence reactions),
   mood animations, skill idles, rumble.
 - **Collision** (`CollisionMap`, [`collisionmap.cpp`](../src/game/collisionmap.cpp)): swept circle against
   walls and object footprints for direct control. `DoesCollideObject` uses GC's `CanIntersectPeople` (800EB6C4,
