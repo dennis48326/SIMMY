@@ -10,8 +10,6 @@
 // windows: ObjectIterator), the outside light at the second point, shadows and the wall fading.
 #include "simmy/types_gen.hpp"
 #include "simmy/unported_globals.hpp"
-
-#include <cmath>
 #include <cstdint>
 
 #include <cmath>
@@ -500,6 +498,131 @@ void ERoom::InitRoomLookupTab() {
   m_roomWalls.clear();
   for (int i = 0; i < 8; ++i)
     for (ERoomWall* wall : m_walls[i]) m_roomWalls[wall->m_room].push_back(wall);
+}
+
+// 8002E0C4
+// The wallpaper preview on each wall run of `room`. Returns the wall length covered.
+int ERoom::DrawWallpaperPreview(ERC* rc, unsigned short room, EVec2& cursor) {
+  int n = 0;
+  rc->ModelMatrixId();
+  auto it = m_roomWalls.find(room);
+  if (it == m_roomWalls.end()) return 0;
+  for (ERoomWall* wall : it->second) n += wall->DrawWallpaperPreview(rc, cursor);
+  return n;
+}
+
+// 8002C860
+// A run's ends (tile points, in the house's frame) moved to the wall's face: an x or y edge (segments
+// 1, 2, 4, 8) half a tile along and 0.45 across; a diagonal (0x10, 0x20) corner to corner, 0.05 off to
+// the chosen half's side.
+void ERoomWall::GetWallDims(TileWallsSegment segment, DiagonalSideSelector side, EVec3& a, EVec3& b) {
+  a.z = 0.0f;
+  b.z = 0.0f;
+  EHouse* house = _globals.m_house;
+  const float hx = house ? house->m_posY : 0.0f, hy = house ? house->m_posX : 0.0f;  // +0x4C, +0x50
+  a.x += hx, a.y += hy;
+  b.x += hx, b.y += hy;
+  const int seg = static_cast<int>(segment), s = static_cast<int>(side);
+  float nx, ny, nz;
+  if (seg == 4) {
+    a.x -= 0.55f, b.x += 0.55f, a.y += 0.45f, b.y += 0.45f;
+    return;
+  }
+  if (seg == 1) {
+    a.x -= 0.55f, b.x += 0.55f, a.y -= 0.45f, b.y -= 0.45f;
+    return;
+  }
+  if (seg == 2) {
+    a.y -= 0.55f, b.y += 0.55f, a.x -= 0.45f, b.x -= 0.45f;
+    return;
+  }
+  if (seg == 8) {
+    a.y -= 0.55f, b.y += 0.55f, a.x += 0.45f, b.x += 0.45f;
+    return;
+  }
+  if (seg == 0x10) {
+    a.y += 0.5f, a.x += 0.5f;
+    b.y -= 0.5f, b.x -= 0.5f;
+    a.x -= 1.0f;
+    b.x += 1.0f;
+    nx = b.y - a.y, ny = -(b.x - a.x), nz = 0.0f;
+    if (nx != 0.0f || ny != 0.0f) {
+      const float l = std::sqrt(nx * nx + ny * ny);
+      nx /= l, ny /= l;
+    }
+    nx *= 0.05f, ny *= 0.05f, nz *= 0.05f;
+    if (s == 2) {
+      a.x += nx, a.y += ny, a.z += nz;
+      b.x += nx, b.y += ny, b.z += nz;
+      return;
+    }
+  } else if (seg == 0x20) {
+    a.y -= 0.5f, a.x -= 0.5f;
+    b.y += 0.5f, b.x += 0.5f;
+    nx = b.y - a.y, ny = -(b.x - a.x), nz = 0.0f;
+    if (nx != 0.0f || ny != 0.0f) {
+      const float l = std::sqrt(nx * nx + ny * ny);
+      nx /= l, ny /= l;
+    }
+    nx *= 0.05f, ny *= 0.05f, nz *= 0.05f;
+    if (s == 1) {
+      a.x += nx, a.y += ny, a.z += nz;
+      b.x += nx, b.y += ny, b.z += nz;
+      return;
+    }
+  } else {
+    return;
+  }
+  a.x -= nx, a.y -= ny, a.z -= nz;
+  b.x -= nx, b.y -= ny, b.z -= nz;
+}
+
+// 8002D308
+// The normal of the line a -> b in the ground plane (its direction turned a quarter left). (GC: the
+// cursor is not looked at.)
+void ERoomWall::getWallNormalOnSideOfCursor(EVec3& a, EVec3& b, EVec2&, EVec2& normal) {
+  float dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
+  if (dx != 0.0f || dy != 0.0f || dz != 0.0f) {
+    const float l = std::sqrt(dx * dx + dy * dy + dz * dz);
+    dx /= l, dy /= l;
+  }
+  normal.y = dx;
+  normal.x = -dy;
+}
+
+// 8002D3C0
+// The run's wall face (GetWallDims) 0.04 out from the wall (the side away from it for segments 2, 4 and
+// diagonal sides 1, 2) as one quad 3 high, the paper repeating once a tile along it. Returns the run's
+// length in tiles.
+int ERoomWall::DrawWallpaperPreview(ERC* rc, EVec2& cursor) {
+  EVec3 a{static_cast<float>(m_start.m_y), static_cast<float>(m_start.m_x), static_cast<float>(m_start.m_level)};  // GetEVec3M
+  EVec3 b{static_cast<float>(m_end.m_y), static_cast<float>(m_end.m_x), static_cast<float>(m_end.m_level)};
+  GetWallDims(TileWallsSegment{m_segment}, DiagonalSideSelector{m_side}, a, b);
+  const float len = a.x == b.x ? std::fabs(a.y - b.y) : std::fabs(a.x - b.x);
+  EVec2 n;
+  getWallNormalOnSideOfCursor(a, b, cursor, n);
+  if (m_segment == 2 || m_segment == 4 || m_side == 1 || m_side == 2) {
+    n.x = -n.x;
+    n.y = -n.y;
+  }
+  a.x += n.x * 0.04f, a.y += n.y * 0.04f;
+  b.x += n.x * 0.04f, b.y += n.y * 0.04f;
+  const float dx = a.x - b.x, dy = a.y - b.y, dz = a.z - b.z;
+  int tiles = static_cast<int>(std::sqrt(dx * dx + dy * dy + dz * dz));
+  if (tiles < 1) tiles = 1;
+  const float v = static_cast<float>(-tiles);
+  EGEVert verts[4];
+  const float pos[4][3] = {{a.x, a.y, 3.0f}, {b.x, b.y, 3.0f}, {a.x, a.y, 0.0f}, {b.x, b.y, 0.0f}};
+  const float uv[4][2] = {{1.0f, v}, {1.0f, 0.0f}, {0.0f, v}, {0.0f, 0.0f}};
+  for (int i = 0; i < 4; ++i) {
+    EGEVert& e = verts[i];
+    e.pos[0] = pos[i][0], e.pos[1] = pos[i][1], e.pos[2] = pos[i][2], e.pos[3] = 1.0f;
+    e.normal[0] = 0, e.normal[1] = 0x7f, e.normal[2] = 0, e.normal[3] = 0xff;
+    e.uv[0] = uv[i][0], e.uv[1] = uv[i][1];
+    for (int& c : e.color) c = 0x80;
+  }
+  rc->TriStrip(verts, 4);
+  return static_cast<int>(len);
 }
 
 // 8002DF7C

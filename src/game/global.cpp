@@ -191,6 +191,16 @@ void EGlobal::AllocInstance(cXObject* object) {
 // 8004079C
 cXPerson* EGlobal::GetSelectedPerson(int player) { return m_selectedPerson[player]; }
 
+// 800409D8
+// The player's selected sim is in social mode (its vtable 0x334, cXPersonImpl::IsInSocialMode).
+RET_UNKNOWN EGlobal::IsPlayerInSocialMode(int player) {
+  cXPerson* person = GetSelectedPerson(player);
+  if (!person) return 0;
+  cXObject* object = person->AsObject();
+  auto* impl = object ? dynamic_cast<cXPersonImpl*>(object->GetObjectImplementation()) : nullptr;
+  return impl ? impl->IsInSocialMode() : 0;  // PC: GC calls the person's slot directly
+}
+
 // 800407DC
 // The player's selected sim. GC: the old one loses (the new one gains) the selected flag and player
 // control of its animator, the new one grabs the player's plumb bob, the HUD hears of it, and the
@@ -332,4 +342,20 @@ const unsigned short* const* EGlobal::GetPDAString(const char* name) { return Ta
 const unsigned short* EGlobal::NewUIText(const char* name) {
   const unsigned short* const* handle = _globals.GetNewUIString(name);
   return handle && *handle ? *handle : kEmpty;
+}
+
+// 80042718
+// Saving is allowed unless the HUD is in a job mode (+0xC8) or a player's camera director holds a
+// shot (state 1 with +0x234 set); in two-player mode both directors count.
+RET_UNKNOWN EGlobal::IsSaveGameEnabled() {
+  const HUDTarget* hud = _gd.m_hudTarget;  // DAT_80475BC8
+  const CameraDirector* d0 = _globals.CameraDirectorOf(0);
+  int enabled = 0;
+  // PC: GC dereferences the HUD and the directors (live mode always has them).
+  if ((!hud || hud->m_mode == 0) && (!d0 || d0->m_state != 1 || d0->m_field234 == 0)) enabled = 1;
+  if (!_gd.m_fieldEC) return enabled;  // DAT_80475C70
+  if (!enabled) return 0;
+  const CameraDirector* d1 = _globals.CameraDirectorOf(1);
+  if (d1 && d1->m_state == 1 && d1->m_field234 != 0) return 0;
+  return 1;
 }

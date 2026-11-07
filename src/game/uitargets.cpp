@@ -84,6 +84,10 @@ void UIObjectBase::AttachTables(const char* name) {
   m_installed = 1;
 }
 
+// 80177CA8
+// The quickdata tags (<unlock_aspiration_points>, ...) in a target's text.
+void UIObjectBase::doUIQDStringSubstitution(unsigned short* text) { UIQDTarget::UIQDSubstitutionStrings(text); }
+
 // 80177CC8
 // Through the router (_globals' UI router, DAT_80475EF8) as if the movie had set it.
 void UIObjectBase::UIRouter_SetVariable(char* name, char* value) {

@@ -1,7 +1,6 @@
 // Port of game/skincompositor.cpp: a sim's skin map quadrant composited on the CPU from the skin
 // colour's base skin and the textures of the parts drawn in that quadrant. PC: the result is copied
-// into a 32-bit RGBA skin texture (the GameCube quantised it to 8 bits, CopyTexture32To8); tattoos are
-// not ported (CasSimPartsS2C::GetTattooTextureID is a stub returning none).
+// into a 32-bit RGBA skin texture (the GameCube quantised it to 8 bits, CopyTexture32To8).
 #include "simmy/types_gen.hpp"
 #include "simmy/unported_globals.hpp"
 
@@ -182,9 +181,8 @@ void SkinCompositor::GetTextureIDs(unsigned int& skin, unsigned int* tattoos, un
     textures[p] = m_simParts->GetTextureID(eBodyPartS2C{p}, m_desc, false);
     reflections[p] = m_simParts->GetReflectionTextureID(eBodyPartS2C{p}, m_desc);
   }
-  for (int t = 0; t < 3; ++t)
-    tattoos[t] = static_cast<unsigned int>(
-        m_simParts->GetTattooTextureID(eTattooTextureTypeS2C{}, static_cast<unsigned int>(m_desc->m_tattoos[t])));
+  for (int t = 0; t < 3; ++t)  // the locations 0, 1, 2 (+0xF2..F4)
+    tattoos[t] = m_simParts->GetTattooTextureID(eTattooTextureTypeS2C{t}, static_cast<unsigned int>(m_desc->m_tattoos[t]));
 }
 
 namespace {

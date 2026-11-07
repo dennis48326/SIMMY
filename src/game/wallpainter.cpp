@@ -37,6 +37,7 @@ InteractorModule__WallPainter::~InteractorModule__WallPainter() {}
 // 80224180
 // GC: the visualizer's resources; the extents.
 void InteractorModule__WallPainter::OnCreate() {
+  if (InteractorModule__InteractorVisualizer* v = InteractorVisualizer()) v->CreateResources(*this);
   m_extents.x = 0.5f;
   m_extents.y = 3.0f;
 }
@@ -63,6 +64,10 @@ void InteractorModule__WallPainter::Start(BuildToolParams& params) {
   m_count = 0;
   m_patternSells.clear();
   m_flags |= m_params.sell == 1 ? 8 : 4;
+  // The paper's shader (WallTile +0x08) into the visualizer's resource set.
+  if (m_paper)
+    if (InteractorModule__InteractorVisualizer* v = InteractorVisualizer())
+      if (InteractorModule__InteractorResourceSet* set = v->GetInteractorResourceSet(this)) set->AddShader(GetShaderID());
 }
 
 // 8022448C
@@ -345,9 +350,9 @@ void InteractorModule__WallPainter::OnCommandUpdate(InteractorModule__Interactor
 }
 
 // 802256A4
-void InteractorModule__WallPainter::PreDraw(InteractorModule__InteractorVisualizer&) {}
+void InteractorModule__WallPainter::PreDraw(InteractorModule__InteractorVisualizer& v) { v.PreDraw(*this); }
 // 802256D0
-void InteractorModule__WallPainter::Draw(InteractorModule__InteractorVisualizer&) {}
+void InteractorModule__WallPainter::Draw(InteractorModule__InteractorVisualizer& v) { v.Draw(*this); }
 
 // 802131F4 InteractorModule::GetRoomIdFromPoint
 // The tile's room (cFixedWorld vtable 0xEC GetRoom); a tile split by a diagonal: its first half's room.

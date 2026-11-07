@@ -329,6 +329,17 @@ unsigned int CasSimPartsS2C::GetIconTextureId(eBodyPartS2C part, unsigned int in
   return 0;
 }
 
+// 8016C850
+// The skin texture of tattoo `index` at the type's location (the game state's version of it).
+unsigned int CasSimPartsS2C::GetTattooTextureID(eTattooTextureTypeS2C type, unsigned int index) const {
+  if (!m_row) return 0;
+  if (index >= GetNumTattooTextures(type) || type >= 3 || type < 0) return 0;
+  unsigned char list[604];
+  GetTattoosForLocation(type, list);
+  const unsigned char* rec = Record(4, list[index], 0x14);
+  return GetGameStateTextureID(rec ? ERQuickdata::U32(rec, 0) : 0u);
+}
+
 // 8016CC9C
 unsigned int CasSimPartsS2C::GetIconTattooTextureId(eTattooTextureTypeS2C type, unsigned int index) const {
   if (!m_row || index >= GetNumTattooTextures(type) || type > 2 || type < 0) return 0;

@@ -1,7 +1,6 @@
 // GENERATED stubs for unported functions of game/object.cpp. Do not edit.
 #include "simmy/types_gen.hpp"
 
-RET_UNKNOWN cXObject::GetFreeWill() { SIMMY_STUB("cXObject::GetFreeWill(void)", 0x800D95F4); return {}; }
 RET_UNKNOWN cXObject::GetAutoCenter() { SIMMY_STUB("cXObject::GetAutoCenter(void)", 0x800D95FC); return {}; }
 void cXObject::SetAutoCenter(bool) { SIMMY_STUB("cXObject::SetAutoCenter(bool)", 0x800D9604); }
 RET_UNKNOWN cXObject::GetAutoReset() { SIMMY_STUB("cXObject::GetAutoReset(void)", 0x800D960C); return {}; }
@@ -13,8 +12,6 @@ void cXObjectImpl::Reset(bool) { SIMMY_STUB("cXObjectImpl::Reset(bool)", 0x800DA
 void cXObjectImpl::Cleanup(cXObject *) { SIMMY_STUB("cXObjectImpl::Cleanup(cXObject *)", 0x800DB16C); }
 RET_UNKNOWN cXObjectImpl::GetHilite() { SIMMY_STUB("cXObjectImpl::GetHilite(void)", 0x800DB5C4); return {}; }
 void cXObjectImpl::SetHilite(int) { SIMMY_STUB("cXObjectImpl::SetHilite(int)", 0x800DB5D0); }
-void cXObject::SetFreeWill(bool) { SIMMY_STUB("cXObject::SetFreeWill(bool)", 0x800DB954); }
-void cXObject::SetGlobalFreeWillOverride(bool) { SIMMY_STUB("cXObject::SetGlobalFreeWillOverride(bool)", 0x800DB9A0); }
 void cXObjectImpl::UpdateAge() { SIMMY_STUB("cXObjectImpl::UpdateAge(void)", 0x800DBB18); }
 RET_UNKNOWN cXObjectImpl::GetRootObject(FTilePt &, int) { SIMMY_STUB("cXObjectImpl::GetRootObject(FTilePt &, int)", 0x800DCA2C); return {}; }
 RET_UNKNOWN cXObjectImpl::GetPlacementInfo(FTilePt *, int *, cXObject **, short *, bool *) { SIMMY_STUB("cXObjectImpl::GetPlacementInfo(FTilePt *, int *, cXObject **, short *, bool *)", 0x800DCACC); return {}; }
@@ -84,7 +81,6 @@ RET_UNKNOWN cXObjectImpl::GetSyncObject() { SIMMY_STUB("cXObjectImpl::GetSyncObj
 void cXObjectImpl::ClearSyncObject() { SIMMY_STUB("cXObjectImpl::ClearSyncObject(void)", 0x800EAB40); }
 RET_UNKNOWN cXObjectImpl::WaitingForSync() { SIMMY_STUB("cXObjectImpl::WaitingForSync(void)", 0x800EAB4C); return {}; }
 void cXObjectImpl::RunTree(char *) { SIMMY_STUB("cXObjectImpl::RunTree(char *)", 0x800EAB54); }
-RET_UNKNOWN cXObjectImpl::GetFreeWill() { SIMMY_STUB("cXObjectImpl::GetFreeWill(void)", 0x800EABC4); return {}; }
 RET_UNKNOWN cXObjectImpl::GetAutoCenter() { SIMMY_STUB("cXObjectImpl::GetAutoCenter(void)", 0x800EABCC); return {}; }
 void cXObjectImpl::SetAutoCenter(bool) { SIMMY_STUB("cXObjectImpl::SetAutoCenter(bool)", 0x800EABD4); }
 RET_UNKNOWN cXObjectImpl::GetAutoReset() { SIMMY_STUB("cXObjectImpl::GetAutoReset(void)", 0x800EABDC); return {}; }
@@ -95,15 +91,11 @@ void cXObjectImpl::GetFnTable() { SIMMY_STUB("cXObjectImpl::GetFnTable(void)", 0
 RET_UNKNOWN cXObjectImpl::IsOccupied() { SIMMY_STUB("cXObjectImpl::IsOccupied(void)", 0x800EACE8); return {}; }
 RET_UNKNOWN cXObjectImpl::IsPortal() { SIMMY_STUB("cXObjectImpl::IsPortal(void)", 0x800EAD18); return {}; }
 RET_UNKNOWN cXObjectImpl::IsWindow() { SIMMY_STUB("cXObjectImpl::IsWindow(void)", 0x800EAD98); return {}; }
-void cXObjectImpl::SetTemp(int, short) { SIMMY_STUB("cXObjectImpl::SetTemp(int, short)", 0x800EAF0C); }
-void cXObjectImpl::SetAttr(int, short) { SIMMY_STUB("cXObjectImpl::SetAttr(int, short)", 0x800EAF1C); }
 RET_UNKNOWN cXObjectImpl::GetObjectProbe() { SIMMY_STUB("cXObjectImpl::GetObjectProbe(void)", 0x800EAF2C); return {}; }
 void cXObjectImpl::SetObjectProbe(ObjectProbe *) { SIMMY_STUB("cXObjectImpl::SetObjectProbe(ObjectProbe *)", 0x800EAF34); }
 RET_UNKNOWN cXObjectImpl::GetFolder() { SIMMY_STUB("cXObjectImpl::GetFolder(void)", 0x800EAF38); return {}; }
 bool cXObjectImpl::SimIndependent() { SIMMY_STUB("cXObjectImpl::SimIndependent(void)", 0x800EAF44); return {}; }
 RET_UNKNOWN cXObjectImpl::GetRect() { SIMMY_STUB("cXObjectImpl::GetRect(void)", 0x800EB0BC); return {}; }
-RET_UNKNOWN cXObjectImpl::GetTemp(int) { SIMMY_STUB("cXObjectImpl::GetTemp(int)", 0x800EB0EC); return {}; }
-RET_UNKNOWN cXObjectImpl::GetAttr(int) { SIMMY_STUB("cXObjectImpl::GetAttr(int)", 0x800EB0FC); return {}; }
 RET_UNKNOWN cXObjectImpl::GetModule() { SIMMY_STUB("cXObjectImpl::GetModule(void)", 0x800EB10C); return {}; }
 void cXObjectImpl::GetAdultAnimTable() { SIMMY_STUB("cXObjectImpl::GetAdultAnimTable(void)", 0x800EB114); }
 void cXObjectImpl::GetChildAnimTable() { SIMMY_STUB("cXObjectImpl::GetChildAnimTable(void)", 0x800EB138); }

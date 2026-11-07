@@ -345,9 +345,19 @@ float g_hlPhase[2] = {};
 const float g_hlFreq = 0.2f;
 const float g_hlPulseLen = 0.7f;
 int g_hlLastFrame = 0;
-// GC: DAT_80475E98, the player whose highlight is being worked out (0 or 1). PC: player 1.
-int g_hlPlayer = 0;
+// _hlcolor / _hlcolor2 (80485424 / 80485430, set by the unit's static initialiser): player 1's
+// highlight (1, 1, 0.65), player 2's (1.1, 0.65, 0.65).
+const float g_hlColor[2][3] = {{1.0f, 1.0f, 0.65f}, {1.1f, 0.65f, 0.65f}};
+const float g_hlStartAmp = 0.6f;       // _hlstartamp (804FDA60)
+const float g_hlStartLen = 0.35f;      // _hlstartlen
+const float g_hlPulseAmp = 0.0f;       // _hlpulseamp (0 on the disc: no pulse after the start)
+const float g_hlMinScaleStart = 1.3f;  // _hlminscalestart
+const float g_hlMinScalePulse = 1.2f;  // _hlminscalepulse
 }  // namespace
+
+// DAT_80475E98 (livemode.cpp): the player whose view is being drawn (ELiveMode::DrawMain sets it before
+// the house draws); still the last drawn player while the objects update.
+extern int g_livemode80475E98;
 
 // 8004DDEC
 // Advances the shared pulse phases once a frame; each player's highlight (cursor flag 1 for player 1,
@@ -361,6 +371,7 @@ void ISimsObjectModel::UpdateHighlightAnim() {
       while (phase > 1.0f) phase -= 1.0f;
     }
   }
+  const int g_hlPlayer = g_livemode80475E98;
   if (g_hlPlayer == 0 && (m_cursFlags & kHighlight)) {
     if (m_hlTime[0] == 0.0f) g_hlPhase[0] = g_hlPulseLen * 0.5f;
     m_hlTime[0] += _dt * g_hlFreq;
@@ -675,8 +686,57 @@ void ISimsObjectModel::DoLightingCalculation() {
     m_lights = m_level->m_skyLights;
     if (m_shaderFlags) m_otherSideLights = m_level->m_skyLights;
   }
-  if (m_cursFlags & (kHighlight | kHighlight2))
-    SIMMY_STUB("ISimsObjectModel::DoLightingCalculation: highlights (BlendHighlights)", 0x8004F02C);
+  // GC: DAT_80476124 (never set) would turn the highlights off. Only the drawing player's highlight.
+  bool on[2] = {g_livemode80475E98 == 0 && (m_cursFlags & kHighlight) != 0,
+                g_livemode80475E98 == 1 && (m_cursFlags & kHighlight2) != 0};
+  if (on[0] || on[1]) BlendHighlights(&m_lights, on);
+}
+
+namespace {
+float Mag3(const float* v) { return std::sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]); }
+}  // namespace
+
+// 8004F02C
+// The highlight: a flash in the player's colour as it comes on (_hlstartamp, fading over _hlstartlen of
+// the highlight's time, +0x3F8) or the shared pulse (_hlpulseamp, 0 on the disc), each scaled by the
+// lights' total brightness (at least _hlminscale*). The blend (at most 1) takes the ambient toward the
+// highlight colour and the directional and point lights toward black.
+void ISimsObjectModel::BlendHighlights(ELights* lights, bool* players) {
+  ELights out;
+  out.m_numDir = lights ? lights->m_numDir : 0;
+  out.m_numPoint = lights ? lights->m_numPoint : 0;
+  for (int i = 0; i < static_cast<int>(out.m_numDir); ++i)
+    for (int k = 0; k < 3; ++k) out.m_dir[i].m_dir[k] = lights->m_dir[i].m_dir[k];
+  for (int i = 0; i < static_cast<int>(out.m_numPoint); ++i) {
+    for (int k = 0; k < 3; ++k) out.m_point[i].m_pos[k] = lights->m_point[i].m_pos[k];
+    out.m_point[i].m_range = lights->m_point[i].m_range;
+  }
+  float total = Mag3(lights->m_ambient);
+  for (int i = 0; i < static_cast<int>(lights->m_numDir); ++i) total += Mag3(lights->m_dir[i].m_color);
+  for (int i = 0; i < static_cast<int>(lights->m_numPoint); ++i) total += Mag3(lights->m_point[i].m_color);
+  float blend = 0.0f;
+  float target[3] = {0.0f, 0.0f, 0.0f};
+  for (int p = 0; p < 2; ++p) {
+    if (!players[p]) continue;
+    const float start = m_hlTime[p] < g_hlStartLen
+                            ? std::max(total, g_hlMinScaleStart) * g_hlStartAmp * (1.0f - m_hlTime[p] / g_hlStartLen)
+                            : 0.0f;
+    const float pulseScale = std::max(total, g_hlMinScalePulse) * g_hlPulseAmp;
+    const float pulse = g_hlPhase[p] < g_hlPulseLen
+                            ? (pulseScale + pulseScale) * (0.5f - std::fabs(0.5f - g_hlPhase[p] / g_hlPulseLen))
+                            : 0.0f;
+    const float v = std::max(pulse, start);
+    blend += v;
+    for (int k = 0; k < 3; ++k) target[k] += g_hlColor[p][k] * v;
+  }
+  if (blend > 1.0f) blend = 1.0f;
+  for (int k = 0; k < 3; ++k) out.m_ambient[k] = lights->m_ambient[k] + (target[k] - lights->m_ambient[k]) * blend;
+  for (int i = 0; i < static_cast<int>(out.m_numDir); ++i)
+    for (int k = 0; k < 3; ++k) out.m_dir[i].m_color[k] = lights->m_dir[i].m_color[k] + (0.0f - lights->m_dir[i].m_color[k]) * blend;
+  for (int i = 0; i < static_cast<int>(out.m_numPoint); ++i)
+    for (int k = 0; k < 3; ++k)
+      out.m_point[i].m_color[k] = lights->m_point[i].m_color[k] + (0.0f - lights->m_point[i].m_color[k]) * blend;
+  *lights = out;
 }
 
 // 8004FE28

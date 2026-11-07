@@ -26,14 +26,17 @@ int s_familyJustMovedIn = 0;      // DAT_80475F24 the family is new in the house
 int s_playerNeighbor[2] = {};     // DAT_80475C54 / DAT_80475C58 the players' neighbour ids
 
 int g_livemode8047622C = 0;  // DAT_8047622C (going to another house, not the main menu)
-int g_livemode80475E98 = 0;
-int s_leftHouse = 0;  // DAT_80476228 the house just left  // DAT_80475E98 the player being drawn
+int s_leftHouse = 0;  // DAT_80476228 the house just left
 
 const unsigned int kSimsMachine = 0x53494d53;  // 'SIMS', TheSimsStateMachine
 
 bool BGDone() { return BG::s_bBGComplete != 0; }
 
 }  // namespace
+
+// DAT_80475E98: the player whose view is being drawn (also read by the objects' highlights,
+// isimsobjectmodel.cpp).
+int g_livemode80475E98 = 0;
 
 // 80014DB4
 void BGExec_SetCurHouse() {
@@ -1186,7 +1189,7 @@ void ELiveMode::Update() {
     _globals.SetCameraDirector(_globals.CameraDirectorOf(0));
     _globals.SetCam(players[0].m_cam);
   }
-  SIMMY_STUB("ELiveMode::Update: CameraManager, free will", 0x8008E4C0);
+  SIMMY_STUB("ELiveMode::Update: CameraManager", 0x8008E4C0);
   ESpriteRenderMan::Instance()->Update();  // GC: after the rooms (DAT_80475ED8)
   if (Globs_pSimulator) Globs_pSimulator->Simulate();
   for (int i = 0; i < 2; ++i)
@@ -1220,6 +1223,18 @@ void ELiveMode::Update() {
     _globals.m_house->Update();
   }
   if (Globs_pSimulator) Globs_pSimulator->RestoreTrueDt();
+  // GC: EVibrate::UpdateVibration here. Then the free will: the options' Free Will (OptionsRecon +0,
+  // DAT_80475F14), unless simulator global 0x27 (generic sim call 0x15) overrides it.
+  if (Globs_pSimulator) {
+    const int override_ = Globs_pSimulator->GetGlobal(0x27);
+    if (override_ == -1) {
+      const auto* options = static_cast<const OptionsRecon*>(_globals.m_optionsRecon);
+      cXObject::SetFreeWill(options ? options->m_opt00 != 0 : true);  // PC: GC has the options from boot
+    } else {
+      const short v = static_cast<short>(override_ < 0 ? 0 : static_cast<short>(override_) > 1 ? 1 : override_);
+      cXObject::SetFreeWill(v == 1);
+    }
+  }
   // A house change or save asked for (cXObjectImpl::TransitionToNewHouse: DAT_8047621C / DAT_80476224):
   // the HUD goes, the lot and the family are saved; for a change the live mode starts leaving (the
   // loading screen), else the simulator stops here.

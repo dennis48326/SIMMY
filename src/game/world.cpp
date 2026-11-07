@@ -428,7 +428,8 @@ void cFixedWorldImpl::DeleteArrays() {
   delete m_flags;
   delete m_walls;
   m_floors = m_rooms = m_flags = m_walls = nullptr;
-  m_influence = nullptr;  // GC: the InfluenceMap (not ported)
+  delete m_influence;
+  m_influence = nullptr;
   delete m_passiveInfluence;
   m_passiveInfluence = nullptr;
 }
@@ -454,7 +455,7 @@ int cFixedWorldImpl::SetSize(int xSize, int ySize, bool keep) {
   m_flags = new _c2DArray(1, xSize, ySize, EmptyName());
   m_walls = new _c2DArray(8, xSize, ySize, EmptyName());
   m_rooms = new _c2DArray(2, xSize, ySize, EmptyName());
-  SIMMY_STUB("cFixedWorldImpl::SetSize: the InfluenceMap", 0x8014C630);
+  m_influence = new InfluenceMap(xSize, ySize);
   m_passiveInfluence = new PassiveInfluenceMap(xSize, ySize);
   m_xSize = xSize;
   m_ySize = ySize;
@@ -485,7 +486,8 @@ int cFixedWorldImpl::Load(iResFile* file, int) {
   if (xSize != m_xSize || ySize != m_ySize) {
     delete m_rooms;
     m_rooms = new _c2DArray(2, xSize, ySize, EmptyName());
-    SIMMY_STUB("cFixedWorldImpl::Load: the InfluenceMap", 0x8014CC0C);
+    delete m_influence;
+    m_influence = new InfluenceMap(xSize, ySize);
     delete m_passiveInfluence;
     m_passiveInfluence = new PassiveInfluenceMap(xSize, ySize);
     m_xSize = xSize;

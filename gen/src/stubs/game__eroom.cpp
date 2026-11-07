@@ -13,14 +13,10 @@ RET_UNKNOWN operator>>(EFile &, EIWallPart *&) { SIMMY_STUB("operator>>(EFile &,
 void LightVertex(EVec4 &, EVec4 &, float, unsigned int *, ELights &, EMat4 *) { SIMMY_STUB("LightVertex(EVec4 &, EVec4 &, float, unsigned int *, ELights &, EMat4 *)", 0x8002AB14); }
 RET_UNKNOWN Light(bool, float, unsigned int *, ESMSStrip *, ELights &, EMat4 *) { SIMMY_STUB("Light(bool, float, unsigned int *, ESMSStrip *, ELights &, EMat4 *)", 0x8002AF58); return {}; }
 RET_UNKNOWN EIWallPart::GetAdjacentRoom() { SIMMY_STUB("EIWallPart::GetAdjacentRoom(void)", 0x8002B99C); return {}; }
-void ERoomWall::GetWallDims(TileWallsSegment, DiagonalSideSelector, EVec3 &, EVec3 &) { SIMMY_STUB("ERoomWall::GetWallDims(TileWallsSegment, DiagonalSideSelector, EVec3 &, EVec3 &)", 0x8002C860); }
 RET_UNKNOWN ERoomWall::DrawWall(ERC *) { SIMMY_STUB("ERoomWall::DrawWall(ERC *)", 0x8002CE4C); return {}; }
 RET_UNKNOWN ERoomWall::getRoomIdFromPoint(CTilePt &) { SIMMY_STUB("ERoomWall::getRoomIdFromPoint(CTilePt &)", 0x8002D1F8); return {}; }
-RET_UNKNOWN ERoomWall::getWallNormalOnSideOfCursor(EVec3 &, EVec3 &, EVec2 &, EVec2 &) { SIMMY_STUB("ERoomWall::getWallNormalOnSideOfCursor(EVec3 &, EVec3 &, EVec2 &, EVec2 &)", 0x8002D308); return {}; }
-RET_UNKNOWN ERoomWall::DrawWallpaperPreview(ERC *, EVec2 &) { SIMMY_STUB("ERoomWall::DrawWallpaperPreview(ERC *, EVec2 &)", 0x8002D3C0); return {}; }
 RET_UNKNOWN ERoomWall::GetWallPaperCost(int, unsigned short) { SIMMY_STUB("ERoomWall::GetWallPaperCost(int, unsigned short)", 0x8002DE70); return {}; }
 RET_UNKNOWN ERoom::GetWallPaperCost(unsigned int, unsigned short) { SIMMY_STUB("ERoom::GetWallPaperCost(unsigned int, unsigned short)", 0x8002DFEC); return {}; }
-RET_UNKNOWN ERoom::DrawWallpaperPreview(ERC *, unsigned short, EVec2 &) { SIMMY_STUB("ERoom::DrawWallpaperPreview(ERC *, unsigned short, EVec2 &)", 0x8002E0C4); return {}; }
 RET_UNKNOWN ERoom::IsRoomWallsOpaque(int, int) { SIMMY_STUB("ERoom::IsRoomWallsOpaque(int, int)", 0x8002E168); return {}; }
 void ERoom::CalAllRoomOpaque(int) { SIMMY_STUB("ERoom::CalAllRoomOpaque(int)", 0x8002E1C4); }
 double ERoom::GetShortDistToCam(int, int) { SIMMY_STUB("ERoom::GetShortDistToCam(int, int)", 0x8002E268); return {}; }

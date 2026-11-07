@@ -10,6 +10,22 @@
 unsigned short MSGTarget_s_playerMessages[2][0x14] = {};  // 80439D90 MSGTarget::s_playerMessages
 unsigned char PDATarget_m_pdaOpenMessages[2][0xe] = {};   // 80439DE0 PDATarget::m_pdaOpenMessages
 
+// 801F9D48
+// Message `message` joins player `player`'s (1: player 1, else player 2) list: kept if there, else the
+// first free slot; a full list drops its oldest.
+void MSGTarget::DeliverXamMessage(int player, unsigned short message) {
+  unsigned short* list = MSGTarget_s_playerMessages[player != 1 ? 1 : 0];
+  for (int i = 0; i < 0x14; ++i) {
+    if (list[i] == message) return;
+    if (list[i] == 0) {
+      list[i] = message;
+      return;
+    }
+  }
+  for (int i = 1; i < 0x14; ++i) list[i - 1] = list[i];
+  list[0x13] = message;
+}
+
 namespace {
 unsigned int* m_pLoadBuffers[4] = {};  // 80436C10 SerializeUIGameData::m_pLoadBuffers (0x400 bytes each)
 unsigned int* m_pBuffer = nullptr;     // 804FDE48 SerializeUIGameData::m_pBuffer

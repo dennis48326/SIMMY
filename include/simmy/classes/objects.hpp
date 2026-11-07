@@ -651,6 +651,8 @@ struct cXObjectImpl : public cXObject {
   static void TransitionToNewHouse(short, short, short);  // 80104EC0
   void RewriteDialogParamIndices(unsigned char* param);  // 8010502C
   int TryDialog(StackElem* frame, const unsigned char* params, bool testing);  // 8010515C
+  static int sFreeWill;                // 804FDC78 the options' Free Will (cXObject::SetFreeWill)
+  static int sGlobalFreeWillOverride;  // 804FDC7C (written only)
   static int overrideDialogReturnCode;  // 4 while no dialog answer is waiting
   RET_UNKNOWN TryShowString(StackElem *, XPrimParam *);  // 80105420
   int TryKillObject(StackElem* frame, const unsigned char* params, short* id);  // 8010553C
@@ -741,7 +743,7 @@ struct EIObjectMan {
   RET_UNKNOWN Find(ISimInstance *);  // 80054B54
   static bool AllPlayersActiveInputInteractors();  // 80054B88
   void TurnOffAllHighlights(unsigned int);  // 80054C4C
-  void GetObjectsInRect(int, TNodeList<ISimInstance *> &);  // 80054CA0
+  void GetObjectsInRect(int player, std::vector<ISimInstance*>& out);  // 80054CA0 (PC: a vector for the TNodeList)
   void GetObjects(TNodeList<ISimInstance *> &);  // 80054D08
   void FreeSimsObjectInstance(ISimInstance* instance);  // 80054D54
   void AttachObject(ISimInstance* instance);  // 80054DD8

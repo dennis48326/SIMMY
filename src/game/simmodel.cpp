@@ -1155,6 +1155,34 @@ void SimModel::GetSkinTextureDef(ETextureDef& def, bool highRes) {
   def.m_flags = (def.m_flags & ~3u) | 0x80;
 }
 
+// 80072CBC
+// After the welds: the head (unless shared) gets its morphs applied, the face sliders' targets and the
+// head-shape lattice that ApplyAllMorphTargets left pending; with `final` the other parts are morphed
+// too (the head stays as it is now) and the morph data is let go.
+void SimModel::UpdateReweld(bool final) {
+  RebuildModified();
+  ERModel* model = m_parts[eBodyPartS2C::kHead] ? m_parts[eBodyPartS2C::kHead]->m_model : nullptr;
+  if (!model) return;
+  if (!(m_partFlags[eBodyPartS2C::kHead] & kShared)) {
+    model->ApplyMorph();
+    m_partFlags[eBodyPartS2C::kHead] |= kChanged;
+  }
+  if (final) {
+    SimRenderer::MorphParts(m_parts, false);
+    DeallocateMorphResources();
+  }
+}
+
+// 80072D3C
+// CAS: the same with the head morphed by MorphParts (CAS keeps morphing it as the sliders move).
+void SimModel::UpdateReweldCAS(bool final) {
+  RebuildModified();
+  if (!(m_partFlags[eBodyPartS2C::kHead] & kShared) && final) {
+    SimRenderer::MorphParts(m_parts, true);
+    DeallocateMorphResources();
+  }
+}
+
 // 80072E30
 // GC: models whose shared vertices were welded are rebuilt (ERModel::RebuildAfterWelding).
 void SimModel::RebuildModified() {

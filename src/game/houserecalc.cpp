@@ -35,7 +35,7 @@ void EHouse::ReCalcHouse() {
     if (m_roomCount != m_level->m_roomCount) m_level->SetRoomCount(m_roomCount);
     InitRoomLighting();
     EIFloor::CreateFloors(this);
-    // GC: Globs::pObjectModule vtable 0x27C UpdateInteractionInfluences (the world side's; not ported).
+    if (Globs_pObjectModule) Globs_pObjectModule->UpdateInteractionInfluences();  // vtable 0x27C
   }
   if (m_objectMan) m_objectMan->ReOrientHouse(false);
   // PC development aid: SIMMY_BUILD_TRACE=1 reports the rebuilt house.

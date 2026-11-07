@@ -39,7 +39,6 @@ float gMinAutonomySittingScore = 0.1f;   // 804FDD20
 int gInteractionRandCount = 5;           // 804FDD24
 bool sAutonomyConstantsLoaded = false;
 const int sUseScalingInteractionRange = 1;     // cXPerson::sUseScalingInteractionRange
-const int sFreeWill = 1;                       // cXObjectImpl::sFreeWill
 
 bool TraceAutonomy() {
   static const bool on = std::getenv("SIMMY_AUTO_TRACE") != nullptr;
@@ -410,7 +409,7 @@ int cXPersonImpl::TryFindBestAction(StackElem* frame) {
   // GC: the plumb bob over a selected sim (PlumbBobOwner::GetPlumbBob) counts as the player's; PC:
   // a selected sim has one.
   const bool plumbBob = SelectedByPlayer(this);
-  if (freeWill == 0 || (SelectedByPlayer(this) && freeWill == -1 && (!plumbBob || sFreeWill == 0))) return no("free will off");
+  if (freeWill == 0 || (SelectedByPlayer(this) && freeWill == -1 && (!plumbBob || cXObjectImpl::sFreeWill == 0))) return no("free will off");
 
   if (!m_motiveEffects) {  // PC: a person Initialize has not run for
     m_motiveEffects = new MotiveEffects(this);

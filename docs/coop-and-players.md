@@ -47,6 +47,9 @@ data, its Flash movies and much of its code.
 - **Sim selection**: Y skips the other player's sim (`EGlobal::SimInUseByOtherPlayer`).
 - **Social mode**: one player can socialise with the other's sim; `CheckSecondPlayerForFailedSocialModeEntry`
   (8012B978, two players only) and `CheckNewSimInSocialMode` (80213C60) handle the second player.
+- **Free will and saving**: one Free Will option for both players (`ELiveMode::Update` applies it to
+  every sim); saving before a quit is refused when either player's camera director holds a shot or
+  either player is in social mode (`EGlobal::IsSaveGameEnabled` / `IsPlayerInSocialMode`, [ui.md](ui.md)).
 - **Audio**: one listener per player camera, summed into one stereo mix ([audio.md](audio.md)).
 - **Input**: keyboard/mouse is player 1's (port 1); the mouse only counts inside player 1's window/half
   ([input-and-control.md](input-and-control.md)).
@@ -96,6 +99,7 @@ at once (the second waits). Food creation costs game time in co-op.
 - **Input**: `TryAutoMapPlayer` loops two players; `KbmPlayer` is the port-1 player.
 - **Audio** listeners: two cameras.
 - **Range checks**: `GameData::SetBuildBuyPlayer` accepts only -1..1.
+- **Generic sim calls**: 0x03 (tombstone), 0x1A/0x1B, 0x1F/0x20, 0x24, 0x25, 0x28 and 0x2A name player 1 or 2.
 
 ## Gotchas
 

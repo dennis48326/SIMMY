@@ -168,27 +168,27 @@ struct InteractorModule__InteractorVisualizer {
   InteractorModule__InteractorVisualizer& operator=(const InteractorModule__InteractorVisualizer&) = delete;
   void Initialize();  // 80213E74
   void Shutdown();  // 80213F54
-  RET_UNKNOWN CreateResources(InteractorModule__FloorPainter &);  // 80213F98
-  void DestroyResources(InteractorModule__FloorPainter &);  // 802140E0
-  void PreDraw(InteractorModule__FloorPainter &);  // 80214100
-  void Draw(InteractorModule__FloorPainter &);  // 8021414C
-  bool DrawFloorRectPreview(ERC *, EVec3 &, EVec3 &);  // 802147E4
-  RET_UNKNOWN DrawFloorRoomPreview(ERC *, EVec3 &);  // 80214B04
-  RET_UNKNOWN CreateResources(InteractorModule__WallPainter &);  // 80214E80
-  void DestroyResources(InteractorModule__WallPainter &);  // 80214F18
-  void PreDraw(InteractorModule__WallPainter &);  // 80214F38
-  void Draw(InteractorModule__WallPainter &);  // 80214F94
-  void DrawWallpaperRoomPreview(InteractorModule__WallPainter &);  // 80215218
-  RET_UNKNOWN DrawWallpaperPreviewOnAffectedWalls(InteractorModule__WallPainter &);  // 802153F4
-  RET_UNKNOWN CreateResources(InteractorModule__WallManipulator &);  // 802155E8
-  void DrawWallpaperRectPreview(ERShader *, EVec2 &, EVec2 &, float);  // 8021577C
-  RET_UNKNOWN DestroyResources(InteractorModule__WallManipulator &);  // 80215C14
-  void PreDraw(InteractorModule__WallManipulator &);  // 80215C34
-  void Draw(InteractorModule__WallManipulator &);  // 80215C90
-  void DrawWallRectPreview(InteractorModule__WallManipulator &);  // 80215F08
-  void DrawVerticalRect(ERShader *, EVec2 &, EVec2 &, float, int, float);  // 80215FDC
-  RET_UNKNOWN DrawRoomPreview(InteractorModule__WallManipulator &);  // 80216488
-  bool DrawPreviewOnAffectedWalls(InteractorModule__WallManipulator &);  // 802166D0
+  bool CreateResources(InteractorModule__FloorPainter& in);  // 80213F98
+  void DestroyResources(InteractorModule__FloorPainter& in);  // 802140E0
+  void PreDraw(InteractorModule__FloorPainter& in);  // 80214100
+  void Draw(InteractorModule__FloorPainter& in);  // 8021414C
+  bool DrawFloorRectPreview(ERC* rc, EVec3& anchor, EVec3& cursor);  // 802147E4
+  int DrawFloorRoomPreview(ERC* rc, EVec3& cursor);  // 80214B04
+  bool CreateResources(InteractorModule__WallPainter& in);  // 80214E80
+  void DestroyResources(InteractorModule__WallPainter& in);  // 80214F18
+  void PreDraw(InteractorModule__WallPainter& in);  // 80214F38
+  void Draw(InteractorModule__WallPainter& in);  // 80214F94
+  void DrawWallpaperRoomPreview(InteractorModule__WallPainter& in);  // 80215218
+  int DrawWallpaperPreviewOnAffectedWalls(InteractorModule__WallPainter& in);  // 802153F4
+  bool CreateResources(InteractorModule__WallManipulator& in);  // 802155E8
+  int DrawWallpaperRectPreview(ERShader* shader, EVec3& from, EVec3& to, float height);  // 8021577C (GC: EVec2s)
+  int DestroyResources(InteractorModule__WallManipulator& in);  // 80215C14
+  void PreDraw(InteractorModule__WallManipulator& in);  // 80215C34
+  void Draw(InteractorModule__WallManipulator& in);  // 80215C90
+  void DrawWallRectPreview(InteractorModule__WallManipulator& in);  // 80215F08
+  void DrawVerticalRect(ERShader* shader, EVec3& from, EVec3& to, float height, int texGen, float uvStep);  // 80215FDC (GC: EVec2s)
+  void DrawRoomPreview(InteractorModule__WallManipulator& in);  // 80216488
+  int DrawPreviewOnAffectedWalls(InteractorModule__WallManipulator& in);  // 802166D0
   RET_UNKNOWN CreateResources(InteractorModule__ObjectManipulator &);  // 80216C90
   void DestroyResources(InteractorModule__ObjectManipulator &);  // 80216CE8
   void PreDraw(InteractorModule__ObjectManipulator &);  // 80216D08
@@ -209,7 +209,8 @@ struct InteractorModule__InteractorVisualizer {
   void SetupDrawCallback(EHouse* house, int player);  // 80217388
   RET_UNKNOWN CreateSimpleResourceSet(InteractorModule__Interactor &, int);  // 802173E8
   RET_UNKNOWN DrawSimpleResourceSet(InteractorModule__Interactor &, int, EVec3 &, float);  // 80217438
-  RET_UNKNOWN SelectShader(InteractorModule__Interactor &, int);  // 80217550
+  bool SelectShader(InteractorModule__Interactor& in, unsigned int id);  // 80217550
+  void SetDefaultLights();  // 803C06D4 (inline in the header)
   RET_UNKNOWN Draw(InteractorModule__PlacementObject &, EVec3 &);  // 802175EC
   void DrawResource(InteractorModule__Interactor& in, unsigned int model, EVec3& color, EMat4* m);  // 80217B30
   InteractorModule__InteractorResourceSet* CreateResourceSet(InteractorModule__Interactor& in);  // 80217D00

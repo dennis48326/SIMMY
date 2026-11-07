@@ -191,7 +191,7 @@ void cSimulatorImpl::DoStream(ReconBuffer* b, int version) {
     }
     SetSpeed(m_globals[kSavedSpeed]);
     m_globals[kDaysInMonth] = static_cast<short>(GameTime::CountDaysInMonth(m_globals[kYear], m_globals[kMonth]));
-    m_globals[kFreeWill] = 1;  // cXObject::GetFreeWill (PC: free will is always on)
+    m_globals[kFreeWill] = static_cast<short>(cXObject::GetFreeWill());
   }
   if (version > 0x5b && m_passiveInfluence) m_passiveInfluence->DoStream(b, version);
   m_streaming = 0;

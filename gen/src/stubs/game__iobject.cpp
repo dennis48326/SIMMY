@@ -8,7 +8,6 @@ void ISimsObjectModel::PropigateFlagsToSubModels() { SIMMY_STUB("ISimsObjectMode
 void ISimsObjectModel::SetPosStatic(EVec3 &, float) { SIMMY_STUB("ISimsObjectModel::SetPosStatic(EVec3 &, float)", 0x8004EB6C); }
 void ISimsObjectModel::SetOutOfWorld() { SIMMY_STUB("ISimsObjectModel::SetOutOfWorld(void)", 0x8004ED20); }
 void ISimsObjectModel::StartBurp(int) { SIMMY_STUB("ISimsObjectModel::StartBurp(int)", 0x8004ED24); }
-void ISimsObjectModel::BlendHighlights(ELights *, bool *) { SIMMY_STUB("ISimsObjectModel::BlendHighlights(ELights *, bool *)", 0x8004F02C); }
 void ISimsObjectModel::CalcLightsFromPos(ELights *, bool) { SIMMY_STUB("ISimsObjectModel::CalcLightsFromPos(ELights *, bool)", 0x8004F658); }
 void ISimsObjectModel::DrawBounds(ERC *) { SIMMY_STUB("ISimsObjectModel::DrawBounds(ERC *)", 0x80050418); }
 void PortalRoom(unsigned int, bool, short &, short &) { SIMMY_STUB("PortalRoom(unsigned int, bool, short &, short &)", 0x80050C38); }

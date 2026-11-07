@@ -222,7 +222,6 @@ RET_UNKNOWN KEYTarget::GetName() { SIMMY_STUB("KEYTarget::GetName(void)", 0x801F
 RET_UNKNOWN KEYTarget::IsModeValid() { SIMMY_STUB("KEYTarget::IsModeValid(void)", 0x801F99FC); return {}; }
 void KEYTarget::SetVariable(char *, char *) { SIMMY_STUB("KEYTarget::SetVariable(char *, char *)", 0x801F9A1C); }
 RET_UNKNOWN KEYTarget::GetVariable(char *) { SIMMY_STUB("KEYTarget::GetVariable(char *)", 0x801F9BC8); return {}; }
-void MSGTarget::DeliverXamMessage(int, unsigned short) { SIMMY_STUB("MSGTarget::DeliverXamMessage(int, unsigned short)", 0x801F9D48); }
 MSGTarget::MSGTarget(int) { SIMMY_STUB("MSGTarget::MSGTarget(int)", 0x801F9E00); }
 MSGTarget::~MSGTarget() { SIMMY_STUB("MSGTarget::~MSGTarget(void)", 0x801FA99C); }
 void MSGTarget::SetupTitles(int) { SIMMY_STUB("MSGTarget::SetupTitles(int)", 0x801FAB84); }

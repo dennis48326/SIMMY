@@ -24,6 +24,13 @@ the pause menu set it through `H2DTarget::IncPause/ReleasePause`). Simulator sta
 globals" (0x30 shorts, scope 6 in trees; names in [`simulator.hpp`](../include/simmy/classes/simulator.hpp)
 `enum Global`): clock, funds, speed, free will. `SIMMY_SIM_TRACE=1` prints the dispatches.
 
+Free will: `ELiveMode::Update` (8008E4C0) calls `cXObject::SetFreeWill` (800DB954) every frame after the
+simulation with the options' Free Will (`OptionsRecon` +0, the pause menu's Other Options), unless global
+0x27 (set by generic sim call 0x15; -1 at reset) overrides it. `SetFreeWill` keeps it in
+`cXObjectImpl::sFreeWill` and mirrors it in global 0x1E, which the person trees and `TryFindBestAction`
+read: with it off no selectable sim (the player family) acts on its own. One option for both players, as
+on GC; the option is in the replayed input like any other menu change, and global 0x1E is hashed.
+
 ## Objects
 
 | Piece | Where | Notes |
@@ -83,7 +90,8 @@ Mode - Test Job HUD"). Unknown opcodes set error 5. Unknown variable scopes (2, 
 | 0x33 preload | `TryPreloadObject` 80100C84 | PC: object data is read when needed, so a known GUID is ready at once (GC could wait) |
 | 0x34 room effect | `TryRoomEffect` 80105F54 | Room light scale / colour, rain, fair weather; lightning (`EHouse::TriggerLightningEffect`) is empty in the release build |
 | 0x36 GBA | `TryGbaCommunication` 80106568 | False, as on a GameCube with nothing connected (GC tests EyeToy hardware in one-player games) |
-| 0x1F set to next, kind 9 | `TrySetToNext` 80101110 | The objects east, south, west, north of an object (counters and tables find their neighbours); `IsInteractionTile` (800E318C, flag 0x40) is a part with a "dynamic multi-tile" tree (function entry 8) |
+| 0x1F set to next | `TrySetToNext` 80101110 | Kinds 0 any object, 1 person, 2 non-person, 4 GUID, 6 data 0x3B = param 0, 0xC in the world, 8 the target's tile (round it), 3 the next part of a multi-tile group, 5 / 7 neighbours (any / of a GUID), 9 the objects east, south, west, north of an object (counters and tables find their neighbours), 0xA careers, 0xB neighbour houses; 0xD-0xF error 0x1E. Flag 0x40 (not kinds 1, 0xC): interaction tiles only (`IsInteractionTile` 800E318C: a part with a "dynamic multi-tile" tree, function entry 8). On "none left" kinds 1, 3, 4, 5, 7 clear the target, the others keep it (trees loop on it: kind 4 restarts only from a target past the last object). PC: kinds 0/1/2/6/0xC/8 walk ids in order (GC: the module's object/person lists, the tile's list) |
+| 0x01 generic sim call | `TryGenericSimCall` 80102A24 | Every call id a disc tree uses is ported (scan of `edithtre.arc`: 0x02-0x06, 0x0A, 0x0B, 0x0D-0x0F, 0x16, 0x18, 0x1A, 0x1B, 0x21, 0x22, 0x24-0x27, 0x29, 0x2C-0x31), plus the unused ones that are simple (0x0C, 0x10, 0x13-0x15, 0x1E-0x20, 0x23, 0x28, 0x2A, 0x2B) and GC's errors (5 for 0/8/9/0x11/0x12/0x1D, 0x2A for unknown ids). Not ported: 0x01 (two people swap seats, used by no tree) and 0x21 (`ShowAllObjectDialogs`, only the debug object `zz_move_a__tron`); they log once and return true. Highlights: 0x03 a selected sim's death opens that player's tombstone screen; 0x04 / 0x05 / 0x06 move-in and move-out (story: the player family, the new member takes the other's last name; free play: the roommate); 0x15 sets global 0x27, the free-will override; 0x30 adds aspiration points to family 1. `SIMMY_GSC_TRACE=1` logs each id's first use |
 
 Check-tree ad scopes (0x0C range, 0x1C personality, 0x1D min of a motive's ad): only for the TTAB entries
 `IsPermittedToRunCheckTreeForAds` (801270E0) allows, autonomy copies the entry's ads
@@ -93,6 +101,10 @@ so it can change them, zeroes the social ad when the object is in another room, 
 
 The tree RNG is `GetNextRandomNumber` (800A64F8, in [`cassimstate.cpp`](../src/game/cassimstate.cpp)): the
 simulator's seed inside a tick, an outer seed for check trees run from menus.
+
+Check trees run on the person's own temps: `ObjTestSim` (objtestsim.cpp) saves the 8 temps before the
+first one and its destructor (801120A4) puts them back with `cXObjectImpl::SetTemp` (800EAF0C), so a menu
+or an autonomy check during an action does not change what the running tree reads.
 
 ## People
 
@@ -167,9 +179,11 @@ is the person's ring of ten; the running one first; an object tree run with the 
 object the running action's icon (`SetIconObject` 8011A150).
 
 Menu path: A in direct control -> `DirectInteractor::ExecuteActionMenu` (802057C8) ->
-`FlashPiMenu::CreateObjectMenuFromObjList` over `MenuObjectsNear` (PC: objects within 2 tiles, nearest
-first, max 4; then, as on GC, the object the sim holds, `GetContainedObject(0)`, moved or added to the
-head of the list wherever it is) -> `CollectInteractionsForObject` (TTAB walk + check trees) -> `HUDTarget::AddMenu/
+`FlashPiMenu::CreateObjectMenuFromObjList` over the objects the player's direct control highlights
+(`EIObjectMan::GetObjectsInRect` 80054CA0, in the object manager's order; see
+[input-and-control.md](input-and-control.md); then the object the sim holds, `GetContainedObject(0)`, moved or
+added to the head of the list wherever it is) -> `CollectInteractionsForObject` (TTAB walk + check trees; for a
+sim under direct control only the entries whose activation area holds the sim) -> `HUDTarget::AddMenu/
 ShowMenu` -> `ActionMenu` (priority-100 pad filter) -> `FlashPiMenu::ChooseAction` -> social mode, or
 `StartMenuInteraction` -> `cXPersonImpl::AddAction`. In classic control the `SimInteractor` builds the
 same menu from the highlighted objects (the held object goes first only when it is highlighted, GC 8021EA98).
@@ -278,3 +292,21 @@ functions first each frame; without them a failed Socialize leaves the player st
 - Vtable offsets in comments are GC offsets: use `tools/vslot.py` to name them, never index C++ vtables.
 - The scenario (story lot 9) and the tutorial are objects too; `SIMMY_STORY=0` keeps them still so an
   interaction can be tried on its own.
+
+## Interaction influence map ([`influencemap.cpp`](../src/game/influencemap.cpp), [`influencemap.hpp`](../include/simmy/classes/influencemap.hpp))
+
+Per lot tile (`cFixedWorldImpl::GetInfluenceMap` 8015235C, made with the world's arrays in `SetSize` /
+`Load`), the objects whose interactions can be started from it. An object's area comes from its tree table
+entries (`InfluenceMap::CalculateAffectedArea` 800489EC): an entry with custom activation (flags 0x1000) has
+its sub-tile and four extents in +0x20, every other entry shares one area: the object's footprint
+(`GetNumTiles`) with half a tile round it; a multi-tile part is offset by its place in the group, an object
+(not a person) is turned by its direction, and the area is kept on the lot. Each tile of it whose centre
+the object's location reaches without a wall (`CollisionMap::DoesCollideEnvironment`, radius 0.1) lists the
+object (`AddObjectEntry` 80048EA8). Only interaction leaders in the world with a model are added, never
+people or objects held by a person. Upkeep: `ObjectModuleImpl::UpdateInteractionInfluences` (800F5DD0)
+rebuilds it when the house is rebuilt (`EHouse::ReCalcHouse`); `cXObjectImpl::SetLocation` takes an object
+out at its old place and puts it in at the new one (PC: the port's location setters, objectplace.cpp and
+objectsim.cpp); `cXObjectImpl::PostLoad` does the same after a load. PC deviation: a destroyed object is
+taken out of every tile (GC leaves it; `ValidateMissing` always says 1). In the release game its readers
+are the direct-control highlights and the activation-area filter of direct control's menu; it is not part
+of the `SIMMY_DET` hash (it is rebuilt from the objects).

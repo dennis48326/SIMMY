@@ -76,6 +76,15 @@ game, `InLevelBaseState::Update` (80089F2C, [`inlevel.cpp`](../src/game/inlevel.
 5 Wardrobe, 0x19 MixIngredients, 0x2A/0x2B tombstone, 0xB..0x14 PDA (logged: no movie issues them). Others
 log `[inlevel] flow request N not ported`.
 
+Saving from the game: the Save/Quit tab of O2T. "Quit" opens M2M with source 7: when
+`EGlobal::IsSaveGameEnabled` (80042718: the HUD is not in a job mode, HUD +0xC8, and no player's camera
+director holds a shot, state 1 with +0x234 set) and no player is in social mode
+(`EGlobal::IsPlayerInSocialMode` 800409D8) and simulator global 0x18 is clear, it asks "save before you
+quit?" (yes: the slot list, the save, then the main menu); otherwise "the game cannot be saved at this
+time". "Save" refuses in social mode ("option_social_no_save") or with global 0x18 set
+("option_generic_no_save") in the help dialog. The pause menu's build/buy status (`PAZBase::GetVariable`)
+is "0" while the trees lock build/buy or a player is in social mode.
+
 ## The HUD ([`hudtarget.hpp`](../include/simmy/classes/hudtarget.hpp))
 
 `HUDTarget` (`_gd.m_hudTarget`, made by `LiveModeInitState` / the "ingame" flow) serves `HUD_*`

@@ -391,8 +391,10 @@ M2MTarget::M2MTarget() {
     m_flow = 0xf;
     m_widgetState = kFill;
   } else if (source == 7) {
-    // EGlobal::IsPlayerInSocialMode / the simulator's busy check (in game, not ported): not busy.
-    if (!EGlobal::IsSaveGameEnabled()) {
+    // A player in social mode or the simulator busy (global 0x18) also rules out saving.
+    const bool busy = _globals.IsPlayerInSocialMode(0) || _globals.IsPlayerInSocialMode(1) ||
+                      (Globs_pSimulator && Globs_pSimulator->GetGlobal(0x18) != 0);
+    if (!EGlobal::IsSaveGameEnabled() || busy) {
       m_flow = 0xc;
       SpawnNoSaveBeforeQuitDialog();
     } else {

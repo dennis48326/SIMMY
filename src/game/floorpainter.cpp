@@ -46,12 +46,14 @@ InteractorModule__FloorPainter::~InteractorModule__FloorPainter() {}
 // 80206364
 // GC: the visualizer's resources; the extents (1, 0.1); a count per floor pattern.
 void InteractorModule__FloorPainter::OnCreate() {
+  if (InteractorModule__InteractorVisualizer* v = InteractorVisualizer()) v->CreateResources(*this);
   m_extents.x = 1.0f;
   m_extents.y = 0.1f;
   m_counts.assign(static_cast<size_t>(std::max(PatternCount(), 0)), 0);
 }
 // 802063D8
 void InteractorModule__FloorPainter::OnDestroy() { m_counts.clear(); }
+
 
 // 80206424 OnStart
 // The params kept (the stock changes into the painter's own list unless given one); the cursor at the
@@ -69,6 +71,10 @@ void InteractorModule__FloorPainter::Start(BuildToolParams& params) {
   m_cam = nullptr;
   m_stock = m_params.stock;
   m_state = 0;
+  // The pattern's shader (FloorTile +0x0C) into the visualizer's resource set.
+  if (InteractorModule__InteractorVisualizer* v = InteractorVisualizer())
+    if (InteractorModule__InteractorResourceSet* set = v->GetInteractorResourceSet(this))
+      if (const void* floor = GetSelectedFloorData()) set->AddShader(ERQuickdata::U32(floor, 0xc));
 }
 
 // 80206684
@@ -310,9 +316,9 @@ void InteractorModule__FloorPainter::OnCommandUpdate(InteractorModule__Interacto
 }
 
 // 802079B8
-void InteractorModule__FloorPainter::PreDraw(InteractorModule__InteractorVisualizer&) {}
+void InteractorModule__FloorPainter::PreDraw(InteractorModule__InteractorVisualizer& v) { v.PreDraw(*this); }
 // 802079E4
-void InteractorModule__FloorPainter::Draw(InteractorModule__InteractorVisualizer&) {}
+void InteractorModule__FloorPainter::Draw(InteractorModule__InteractorVisualizer& v) { v.Draw(*this); }
 
 // 80207A10
 // A tile of the lot's inside (flag 1) that is not locked (0x20); laying a pattern (not 0) needs every

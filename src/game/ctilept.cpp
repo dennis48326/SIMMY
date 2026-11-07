@@ -13,6 +13,14 @@ CTilePt::CTilePt(const CTilePt& other) : m_x(other.m_x), m_y(other.m_y), m_level
 
 // 800B463C
 // Coordinates that do not fit a signed byte become 0.
+// 800B43EC
+// The tile of a point (x, y truncated), on level 1.
+CTilePt::CTilePt(EVec3& v) {
+  m_x = static_cast<signed char>(static_cast<int>(v.x));
+  m_y = static_cast<signed char>(static_cast<int>(v.y));
+  m_level = 1;
+}
+
 CTilePt::CTilePt(int x, int y, int level) {
   m_x = static_cast<signed char>(x);
   m_y = static_cast<signed char>(y);

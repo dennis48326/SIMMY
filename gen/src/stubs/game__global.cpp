@@ -22,7 +22,6 @@ void EGlobal::GetNghFamilyName(BString2 &) { SIMMY_STUB("EGlobal::GetNghFamilyNa
 void EGlobal::GetNghHouseName(BString2 &) { SIMMY_STUB("EGlobal::GetNghHouseName(BString2 &)", 0x80040414); }
 void EGlobal::ConvertUnicodeToShiftJIS(unsigned short *, unsigned short *, unsigned int) { SIMMY_STUB("EGlobal::ConvertUnicodeToShiftJIS(unsigned wchar_t *, unsigned wchar_t *, unsigned int)", 0x80040550); }
 RET_UNKNOWN EGlobal::GetFenceIndex(FenceData *) { SIMMY_STUB("EGlobal::GetFenceIndex(FenceData *)", 0x80040754); return {}; }
-RET_UNKNOWN EGlobal::IsPlayerInSocialMode(int) { SIMMY_STUB("EGlobal::IsPlayerInSocialMode(int)", 0x800409D8); return {}; }
 void EGlobal::PlaceObjectInHouse(cXObject *) { SIMMY_STUB("EGlobal::PlaceObjectInHouse(cXObject *)", 0x80041214); }
 void EGlobal::PickUpInHouseObject(cXObject *) { SIMMY_STUB("EGlobal::PickUpInHouseObject(cXObject *)", 0x80041218); }
 void EGlobal::GetCursorPosAsFtile(FTilePt &) { SIMMY_STUB("EGlobal::GetCursorPosAsFtile(FTilePt &)", 0x8004121C); }
@@ -52,7 +51,6 @@ bool EGlobal::InLevelState() { SIMMY_STUB("EGlobal::InLevelState(void)", 0x80042
 RET_UNKNOWN EGlobal::GetPlayerCheats() const { SIMMY_STUB("EGlobal::GetPlayerCheats(void) const", 0x80042338); return {}; }
 void EGlobal::TogglePlayerCheat(int) { SIMMY_STUB("EGlobal::TogglePlayerCheat(int)", 0x80042388); }
 void EGlobal::InitPlayerCheats() { SIMMY_STUB("EGlobal::InitPlayerCheats(void)", 0x8004246C); }
-RET_UNKNOWN EGlobal::IsSaveGameEnabled() { SIMMY_STUB("EGlobal::IsSaveGameEnabled(void)", 0x80042718); return {}; }
 void SetUIStatusTextV(char *, va_list) { SIMMY_STUB("SetUIStatusTextV(char *, __va_list_tag *)", 0x800428D0); }
 void SetUIStatusText(char *,...) { SIMMY_STUB("SetUIStatusText(char *,...)", 0x800428D4); }
 RET_UNKNOWN GetUIStatusText() { SIMMY_STUB("GetUIStatusText(void)", 0x80042920); return {}; }

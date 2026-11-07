@@ -1,7 +1,6 @@
 // GENERATED stubs for unported functions of game/ctilept.cpp. Do not edit.
 #include "simmy/types_gen.hpp"
 
-CTilePt::CTilePt(EVec3 &) { SIMMY_STUB("CTilePt::CTilePt(EVec3 &)", 0x800B43EC); }
 void CTilePt::GetEVec3() const { SIMMY_STUB("CTilePt::GetEVec3(void) const", 0x800B4430); }
 void CTilePt::GetEVec3M() const { SIMMY_STUB("CTilePt::GetEVec3M(void) const", 0x800B44C8); }
 double CTilePt::GetXf() const { SIMMY_STUB("CTilePt::GetXf(void) const", 0x800B4560); return {}; }

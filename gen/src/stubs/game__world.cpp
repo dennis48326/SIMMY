@@ -13,4 +13,3 @@ RET_UNKNOWN cFixedWorldImpl::IsGrassAt(CTilePt &) { SIMMY_STUB("cFixedWorldImpl:
 RET_UNKNOWN cFixedWorldImpl::GetWallStorage(CTilePt &) { SIMMY_STUB("cFixedWorldImpl::GetWallStorage(CTilePt &)", 0x80152080); return {}; }
 void DestroyTheWorld() { SIMMY_STUB("DestroyTheWorld(void)", 0x801522C0); }
 void ValidateTheWorld() { SIMMY_STUB("ValidateTheWorld(void)", 0x8015230C); }
-RET_UNKNOWN cFixedWorldImpl::GetInfluenceMap() { SIMMY_STUB("cFixedWorldImpl::GetInfluenceMap(void)", 0x8015235C); return {}; }

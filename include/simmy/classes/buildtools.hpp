@@ -21,7 +21,7 @@
 // UpdatePlaceManipulator (placemanipulator.cpp) with the pad read through the GC's button and stick
 // semantics (803FE0F8 / 803FE118: pad commands 5 -> 0 (A), 6 -> 4 (B), 0x2F -> 1 (Y), 0x17 -> 2 (the
 // triggers); the sticks -> 7/8, 0xB/0xC). The InteractorVisualizer (the cursor, the line and room
-// previews) is not ported (PreDraw/Draw draw nothing).
+// previews) is ported in interactorvisualizer.cpp.
 #pragma once
 #include <vector>
 
@@ -146,6 +146,7 @@ struct InteractorModule__WallManipulator : public InteractorModule__Interactor {
   int m_fenceIndex = 0;                     // +0xDC
   BuildToolParams m_params;                 // +0xE0
   int m_startStock = 0;                     // +0x104 the stock at the last commit
+  EVec3 m_previewPos{-1000.0f, -1000.0f, -1000.0f};  // PC: as FloorPainter's (GC previewPos_9221)
 };
 
 struct InteractorModule__WallPainter : public InteractorModule__Interactor {
@@ -265,6 +266,9 @@ struct InteractorModule__FloorPainter : public InteractorModule__Interactor {
   std::vector<BuildSellCount> m_ownStock;   // +0xA8 (when the params bring none)
   std::vector<int> m_counts;                // +0xB8 per floor pattern
   std::vector<BuildSellCount>* m_stockChanges = nullptr;  // +0xA0
+  // PC: the position the visualizer's draw record sorts by (GC: previewPos_9171, -1000 each, one shared
+  // by both players' floor tools), kept per tool so the record finds its tool.
+  EVec3 m_previewPos{-1000.0f, -1000.0f, -1000.0f};
 };
 
 // PC glue (see buildtools.cpp). GC: InteractorManager::ChangeActiveInteractor(player, 3/4/5, params) and
@@ -285,6 +289,7 @@ void MoveCursorOneTileAlongCameraTargetVector(EVec3& pos, const EVec2& stick, ES
 void MoveCursorAlongCameraTargetVector(float speed, EVec3& pos, EVec2& stick, ESimsCam* cam);  // 8021097C
 void ConvertVertsToTiles(const EVec3& from, const EVec3& to, CTilePt& a, CTilePt& b);  // 80212D58
 int GetVisibleSideOfWall(ESimsCam* cam, const EVec3& a, const EVec3& b, EVec3* offset);  // 80212AD8
+void GetAdjacentTileCoordinates(int dir, int n, EVec3& pos);                         // 80212FE8
 void ForcePointDir(CTilePt& a, CTilePt& b);                                           // 802132D8
 void EorGetAdjacentTile(int& segment, int front, int& side, CTilePt& a, CTilePt& b);  // 8021358C
 void IncrementSellCountForPattern(int pattern, std::vector<BuildSellCount>& counts);  // 80213828

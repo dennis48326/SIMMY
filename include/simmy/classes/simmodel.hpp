@@ -188,7 +188,7 @@ struct CasSimPartsS2C {
   RET_UNKNOWN GetTextureIDFromVector(VECTOR<unsigned int> &, int, bool, unsigned char, char *) const;  // 8016B8BC
   unsigned int GetTextureID(eBodyPartS2C part, CasSimDescriptionS2C* desc, bool reflection) const;  // 8016B910
   unsigned int GetReflectionTextureID(eBodyPartS2C part, CasSimDescriptionS2C* desc) const;  // 8016C82C
-  RET_UNKNOWN GetTattooTextureID(eTattooTextureTypeS2C, unsigned int) const;  // 8016C850
+  unsigned int GetTattooTextureID(eTattooTextureTypeS2C type, unsigned int index) const;  // 8016C850
   RET_UNKNOWN IsGamecubeOnly(eBodyPartS2C, unsigned int) const;  // 8016C8E8
   unsigned int GetIconTextureId(eBodyPartS2C, unsigned int) const;  // 8016CAC4
   unsigned int GetIconTattooTextureId(eTattooTextureTypeS2C, unsigned int) const;  // 8016CC9C

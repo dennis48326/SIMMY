@@ -4,6 +4,7 @@
 #include "simmy/types_gen.hpp"
 #include "simmy/classes/placement.hpp"
 #include "simmy/unported_globals.hpp"
+#include "simmy/classes/influencemap.hpp"
 #include "simmy/classes/interaction.hpp"
 
 #include <algorithm>
@@ -337,6 +338,8 @@ unsigned int GetShaderForObject(cXObjectImpl* object, ERShader** thumbnail) {
 // the available ones. PC: the object's tree table (ResFile +0x24, 0x24 bytes an entry: +0 check tree,
 // +2 action tree, +0x10 flags (0x80 debug), +0x16 attenuation code (> 99 not offered), +0x1C name) with
 // each check tree run on the person's stack, in table order, as the A-button stand-in did.
+bool PlayerUsesDirectInteractor(int player);  // directinteractor.cpp
+
 void CollectInteractionsForObject(cXObjectImpl* object, MenuInteractionList& list, int player, int max) {
   cXPersonImpl* person = SelectedPersonImpl(player);
   if (!object || !person || !person->m_treeSim) return;
@@ -347,6 +350,14 @@ void CollectInteractionsForObject(cXObjectImpl* object, MenuInteractionList& lis
   const auto* entries = static_cast<const unsigned char*>(ERQuickdata::Ptr(tables, 0));
   const unsigned int n = entries ? ERQuickdata::U32(entries - 4, 0) : 0;
   Behavior* behavior = object->GetBehavior();
+  // ObjTestSim::AppendInteractionsForMenu: is the person a player's sim under direct control
+  // (InteractorManager::GetPlayerInteractor(player, 0))?
+  bool direct = false;
+  for (int p = 0; p < 2; ++p) {
+    cXPerson* sel = _globals.GetSelectedPerson(p);  // DAT_80475E88
+    if (sel && sel->AsObject() == person && PlayerUsesDirectInteractor(p)) direct = true;
+  }
+  InfluenceMap* map = Globs_pFixedWorld ? Globs_pFixedWorld->GetInfluenceMap() : nullptr;
   int added = 0;
   for (unsigned int i = 0; i < n && added < max; ++i) {
     const unsigned char* e = entries + i * 0x24;
@@ -354,6 +365,14 @@ void CollectInteractionsForObject(cXObjectImpl* object, MenuInteractionList& lis
     const bool debug = (ERQuickdata::U32(e, 0x10) & 0x80) != 0 || (name && name[0] == '!');
     const short check = ERQuickdata::S16(e, 0), action = ERQuickdata::S16(e, 2);
     if (debug || !action) continue;  // GC: entry vtable 0xCC (debug, unless the cheat), then RunMenuCheckTree
+    // A player's sim under direct control is offered only the entries whose activation area holds it
+    // (InfluenceMap::CalculateAffectedArea).
+    if (direct && map) {
+      int r[4];
+      map->CalculateAffectedArea(object, e, r);
+      const int* at = person->m_location;
+      if (!(at[1] < r[1] && r[3] <= at[1] && at[0] < r[0] && r[2] <= at[0])) continue;
+    }
     if (ERQuickdata::U32(e, 0x10) & 0x40) continue;  // ObjTestSim::TestInteraction: not for adults
     // TestInteraction: the check tree runs with {not autonomous, not a pushed type}; the person's data
     // 0x32 it may set hides the entry (1; 2 greys it: SetupInteractionColors).
@@ -388,48 +407,6 @@ void CollectInteractionsForObject(cXObjectImpl* object, MenuInteractionList& lis
     list.push_back(m);
     ++added;
   }
-}
-
-// (DirectInteractor::ExecuteActionMenu, directinteractor.cpp)
-// PC stand-in for the highlighted objects (UpdateObjectHighlights / EIObjectMan::GetObjectsInRect):
-// the objects within two tiles of the player's sim on its level, nearest first, one per multi-tile
-// group, at most four; other people too (PC: the people by id, as they are not in the module's list).
-std::vector<cXObjectImpl*> MenuObjectsNear(int player) {
-  std::vector<cXObjectImpl*> out;
-  cXPerson* selected = _globals.GetSelectedPerson(player);
-  cXObject* self = selected ? selected->AsObject() : nullptr;
-  auto* person = self ? dynamic_cast<cXPersonImpl*>(self->GetObjectImplementation()) : nullptr;
-  if (!person || !Globs_pObjectModule) return out;
-  const float px = static_cast<float>(person->m_location[1]) / 16.0f, py = static_cast<float>(person->m_location[0]) / 16.0f;
-  std::vector<std::pair<float, cXObjectImpl*>> near;
-  std::vector<cXObjectImpl*> all;
-  for (cXObjectImpl* o = Globs_pObjectModule->m_first; o; o = o->m_nextObject)
-    if (o->GetType() != 2) all.push_back(o);
-  for (int id = 1; id <= Globs_pObjectModule->GetNumObjects(); ++id) {
-    cXObject* x = Globs_pObjectModule->GetObjectFromID(id);
-    cXObjectImpl* o = x ? x->GetObjectImplementation() : nullptr;
-    if (o && o != person && o->GetType() == 2 && dynamic_cast<cXPersonImpl*>(o)) all.push_back(o);
-  }
-  for (cXObjectImpl* o : all) {
-    if (o->m_level != person->m_level) continue;
-    const CTilePt t = o->GetCTilePt();
-    const float dx = static_cast<float>(t.GetX()) + 0.5f - px, dy = static_cast<float>(t.GetY()) + 0.5f - py;
-    const float d2 = dx * dx + dy * dy;
-    if (d2 <= 4.0f) near.emplace_back(d2, o);
-  }
-  std::sort(near.begin(), near.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
-  std::vector<short> groups;
-  for (const auto& n : near) {
-    const short group = n.second->m_def ? objdef::MasterID(n.second->m_def) : 0;
-    if (group && std::find(groups.begin(), groups.end(), group) != groups.end()) continue;
-    if (group) groups.push_back(group);
-    MenuInteractionList list;
-    CollectInteractionsForObject(n.second, list, player, 1);
-    if (list.empty()) continue;
-    out.push_back(n.second);
-    if (out.size() >= 4) break;
-  }
-  return out;
 }
 
 // GC: cXPersonImpl::AddAction (the person's action queue, then its main loop's TryGosubFoundAction):

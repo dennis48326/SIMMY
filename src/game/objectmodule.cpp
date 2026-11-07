@@ -6,6 +6,7 @@
 // influences), saving.
 #include "simmy/types_gen.hpp"
 #include "simmy/unported_globals.hpp"
+#include "simmy/classes/influencemap.hpp"
 #include "simmy/classes/placement.hpp"
 
 #include <algorithm>
@@ -149,7 +150,11 @@ void cXObjectImpl::PostLoad(int version, bool loaded) {
     }
   }
   if (version < 0x23) m_data.WriteVar(4, 1);
-  SIMMY_STUB("cXObjectImpl::PostLoad: SetLevel / SetLocation again, auto-reset objects", 0x800DADBC);
+  // GC: first (before the data fixes) SetLevel(1) for an object without a level, then SetLocation at its
+  // own location. PC: of SetLocation, the interaction influence map's part (the rest is done by the load).
+  InfluenceMapObjectLeaving(this);
+  InfluenceMapObjectArrived(this);
+  SIMMY_STUB("cXObjectImpl::PostLoad: SetLevel / the rest of SetLocation again, auto-reset objects", 0x800DADBC);
   // GC: unless the house was loaded from a save (DAT_80475C74; PC: never).
   short params[4] = {static_cast<short>(loaded ? 1 : 0), 0, 0, 0};
   if (m_treeSim && GetTreeID(2)) RunTree(2, 0, params);

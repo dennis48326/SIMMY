@@ -1,9 +1,9 @@
 // Port of game/interactor.cpp and game/directinteractor.cpp (partial): the player interactor base and
 // the direct-control interactor, which steers the selected sim with the left stick. Ported: the base's
 // state, the direct interactor's start, update, control status and the free-move input to the sim's
-// animator. Not ported: the input manager's sessions (PC: Update reads the pad's sticks itself, the
-// commands OnCommandUpdate would get), the object highlights (PC: MenuObjectsNear gives the action
-// menu its objects), cancelling queued actions, the plumb bob (PlumbBob), the idle timeout to autonomy (the input
+// animator, and the object highlights (UpdateObjectHighlights, from the interaction influence map) that
+// the A menu offers. Not ported: the input manager's sessions (PC: Update reads the pad's sticks itself,
+// the commands OnCommandUpdate would get), cancelling queued actions, the plumb bob (PlumbBob), the idle timeout to autonomy (the input
 // manager adds the idle time), social mode, and the interactor visualizer.
 #include "simmy/types_gen.hpp"
 #include <cstdio>
@@ -11,6 +11,9 @@
 #include <cstdlib>
 #include "simmy/unported_globals.hpp"
 #include "simmy/platform.hpp"
+#include "simmy/classes/influencemap.hpp"
+#include "simmy/classes/collisionmap.hpp"
+#include "simmy/classes/placement.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -75,7 +78,50 @@ float GetCameraRelativeStickAngle(EVec2& stick, ESimsCam* cam, float* stickAngle
 
 // PC: the interactor manager's per-player direct-control interactors.
 InteractorModule__DirectInteractor* s_direct[2] = {};
+
+cXPersonImpl* PersonOf(cXPerson* p) {
+  cXObject* o = p ? p->AsObject() : nullptr;
+  return o ? dynamic_cast<cXPersonImpl*>(o->GetObjectImplementation()) : nullptr;
+}
+
+// cXObjectImpl / cXMTObjectImpl::GetAverageLocation (800E2A68 / 800C7884): its location; a multi-tile
+// object's the mean of its parts'.
+void AverageLocationOf(cXObjectImpl* o, int out[2]) {
+  out[0] = o->m_location[0], out[1] = o->m_location[1];
+  PlacementGroup* g = o->IsMultiTile() ? PlacementGroupOf(o) : nullptr;
+  if (!g || g->parts.empty()) return;
+  int s0 = 0, s1 = 0, n = 0;
+  for (auto& part : g->parts) {
+    s0 += part.object->m_location[0];
+    s1 += part.object->m_location[1];
+    ++n;
+  }
+  out[0] = s0 / n, out[1] = s1 / n;
+}
 }  // namespace
+
+// 803070A8
+// Whether `p` is right of the line from `a` toward `b`.
+bool IsOnRightOf(EVec2 p, EVec2 a, EVec2 b) { return (p.y - a.y) * (b.x - a.x) - (p.x - a.x) * (b.y - a.y) < 0.0f; }
+
+// 803070F0
+// Whether the rectangle lo..hi touches the cone from `centre` along `dir` (`angle` each side): the centre
+// inside it, or some corner in front of the centre right of the cone's left edge and some corner in
+// front left of its right edge.
+RET_UNKNOWN IsRectTouchingArc(EVec2 centre, EVec2 dir, float angle, EVec2 lo, EVec2 hi) {
+  if (!(centre.x < lo.x || centre.y < lo.y || hi.x < centre.x || hi.y < centre.y)) return 1;
+  const EVec2 corners[4] = {{lo.x, lo.y}, {hi.x, hi.y}, {lo.x, hi.y}, {hi.x, lo.y}};
+  const float c = std::cos(angle), s = std::sin(angle);
+  const EVec2 left{centre.x + (c * dir.x - s * dir.y), centre.y + (s * dir.x + c * dir.y)};
+  const EVec2 right{centre.x + (c * dir.x - -s * dir.y), centre.y + (-s * dir.x + c * dir.y)};
+  bool rightOfLeft = false, leftOfRight = false;
+  for (const EVec2& p : corners) {
+    if (!(0.0 < static_cast<double>(dir.x * (p.x - centre.x) + dir.y * (p.y - centre.y)))) continue;
+    if (!rightOfLeft && IsOnRightOf(p, centre, left)) rightOfLeft = true;
+    if (!leftOfRight && IsOnRightOf(p, right, centre)) leftOfRight = true;
+  }
+  return rightOfLeft && leftOfRight ? 1 : 0;
+}
 
 // ---------------------------------------------------------------------------------------------------
 // InteractorModule::Interactor
@@ -463,20 +509,28 @@ bool InteractorModule__DirectInteractor::CameraDirectorPermitsDirectControl() {
 }
 
 // 802057C8
-// A: the player's pie menu for the objects the interactor highlights (the one the sim holds first),
-// or the refuse sound when the HUD's menu is not available or nothing is near.
+// A: the player's pie menu for the objects the interactor highlights (EIObjectMan::GetObjectsInRect, in
+// the object manager's order; the one the sim holds first), or the refuse sound when the HUD's menu is
+// not available (or the sim's idle state is 3) or nothing is highlighted.
 void InteractorModule__DirectInteractor::ExecuteActionMenu() {
   HUDTarget* hud = _gd.m_hudTarget;
-  if (!hud || !hud->IsMenuAvailable(m_player)) {
+  cXPersonImpl* me = PersonOf(m_person);
+  if (!hud || !hud->IsMenuAvailable(m_player) || (me && me->GetIdleState() == 3)) {
     UIAUDIO::Instance()->PlaySound(0x3804219f);  // GC: unless the camera director hides the HUD (+0x234)
     m_actionMenu = 0;
     return;
   }
-  // GC: refused too while the person's vtable 0x16C is 3.
-  std::vector<cXObjectImpl*> objects = MenuObjectsNear(m_player);  // GC: EIObjectMan::GetObjectsInRect
-  // The object the selected sim holds (person vtable 0x2BC, slot 0: carried trash, a newspaper, a plate)
-  // always heads the list, highlighted or not (out of it first if it was there): the held object's own
-  // interactions ("Throw Away", "Drop", ...) are offered wherever the sim stands.
+  std::vector<cXObjectImpl*> objects;
+  if (EHouse* house = _globals.m_house)  // DAT_80475E94
+    if (house->m_objectMan) {
+      std::vector<ISimInstance*> lit;
+      house->m_objectMan->GetObjectsInRect(m_player, lit);
+      for (ISimInstance* inst : lit)
+        if (cXObjectImpl* o = inst->m_xob ? inst->m_xob->GetObjectImplementation() : nullptr) objects.push_back(o);
+    }
+  // The object the selected sim holds (object slot 0: carried trash, a newspaper, a plate) always heads
+  // the list, highlighted or not (out of it first if it was there): the held object's own interactions
+  // ("Throw Away", "Drop", ...) are offered wherever the sim stands.
   if (cXPerson* sel = _globals.GetSelectedPerson(m_player))  // DAT_80475E88
     if (cXObjectImpl* self = sel->AsObject() ? sel->AsObject()->GetObjectImplementation() : nullptr)
       if (cXObjectImpl* held = self->GetContainedObject(0)) {
@@ -489,6 +543,73 @@ void InteractorModule__DirectInteractor::ExecuteActionMenu() {
     if (pi->CreateObjectMenuFromObjList(objects)) UIAUDIO::Instance()->PlaySound(0x374bdcea);
   }
   ResetInputState();
+}
+
+// 80204C5C
+// Whether `object` lights up for this player: not the player's own sim (unless its motive 0xB is
+// negative); its (average) location within `radius` of the interactor; its model's bounds touching the
+// selection cone (c_SelectionConeAngle each side) along the sim's facing; and it has something for the
+// player to do (ISimInstance::HasInteractions).
+RET_UNKNOWN InteractorModule__DirectInteractor::ShouldHighlightObject(cXObject* object, float radius) {
+  cXPerson* sel = _globals.GetSelectedPerson(m_player);  // DAT_80475E88
+  if (!sel || !object) return 0;
+  if (object == sel->AsObject() && sel->GetMotive(0xb) >= 0.0) return 0;
+  cXObjectImpl* impl = object->GetObjectImplementation();
+  if (!impl) return 0;
+  int at[2];
+  AverageLocationOf(impl, at);
+  const float dx = static_cast<float>(at[0]) * 0.0625f - m_pos.x, dy = static_cast<float>(at[1]) * 0.0625f - m_pos.y,
+              dz = 0.0f - m_pos.z;
+  if (radius * radius <= dx * dx + dy * dy + dz * dz) return 0;
+  ISimInstance* inst = impl->m_instance;
+  SAnimator2* anim = sel->GetSAnimator();
+  if (!inst || !anim) return 0;
+  const float a = static_cast<float>(anim->GetRealDir() + 1.5707963705062866);
+  EVec2 centre{m_pos.x, m_pos.y};
+  EVec2 dir{std::cos(a), std::sin(a)};
+  EVec2 lo{inst->m_bounds[0], inst->m_bounds[1]};
+  EVec2 hi{inst->m_bounds[3], inst->m_bounds[4]};
+  if (!IsRectTouchingArc(centre, dir, m_coneAngle, lo, hi)) return 0;
+  return inst->HasInteractions(m_player);
+}
+
+// 80205C4C
+// Every frame: the player's highlights off, then on for the objects listed at the sim's tile in the
+// interaction influence map that pass ShouldHighlightObject within 5 tiles, and the people within 1.5
+// tiles that pass it with no wall between the player's sim and them.
+void InteractorModule__DirectInteractor::UpdateObjectHighlights(EIObjectMan* objects) {
+  if (!objects) return;
+  objects->TurnOffAllHighlights(static_cast<unsigned int>(m_player));
+  InfluenceMap* map = Globs_pFixedWorld ? Globs_pFixedWorld->GetInfluenceMap() : nullptr;
+  ObjectList* list = map ? map->GetObjectList(static_cast<int>(m_pos.y), static_cast<int>(m_pos.x)) : nullptr;
+  if (!list) return;
+  const unsigned int flag = m_player == 0 ? 1u : 8u;
+  for (cXObject* object : list->m_objects) {
+    if (!ShouldHighlightObject(object, 5.0f)) continue;
+    cXObjectImpl* impl = object->GetObjectImplementation();
+    if (ISimInstance* inst = impl ? impl->m_instance : nullptr) {
+      inst->SetHighlight(flag, true);
+      inst->PropigateFlagsToSubModels();
+    }
+  }
+  // GC: the module's people list (GetNumPeople / GetPeople); PC: the people by id.
+  cXPerson* sel = _globals.GetSelectedPerson(m_player);
+  cXObjectImpl* selImpl = sel && sel->AsObject() ? sel->AsObject()->GetObjectImplementation() : nullptr;
+  if (!Globs_pObjectModule || !selImpl) return;
+  for (int id = 1; id <= Globs_pObjectModule->GetNumObjects(); ++id) {
+    cXObject* x = Globs_pObjectModule->GetObjectFromID(static_cast<short>(id));
+    cXObjectImpl* o = x ? x->GetObjectImplementation() : nullptr;
+    if (!o || o->GetType() != 2 || !dynamic_cast<cXPersonImpl*>(o)) continue;
+    if (!ShouldHighlightObject(o, 1.5f)) continue;
+    EVec2 to{static_cast<float>(o->m_location[0]) * 0.0625f, static_cast<float>(o->m_location[1]) * 0.0625f};
+    EVec2 from{static_cast<float>(selImpl->m_location[0]) * 0.0625f, static_cast<float>(selImpl->m_location[1]) * 0.0625f};
+    EVec2 hit;
+    if (CollisionMap::DoesCollideEnvironment(from, to, 0.0625f, false, false, hit)) continue;
+    if (ISimInstance* inst = o->m_instance) {
+      inst->SetHighlight(flag, true);
+      inst->PropigateFlagsToSubModels();
+    }
+  }
 }
 
 // 80206180
@@ -597,8 +718,12 @@ void UpdateDirectInteractorsOf(int count, float dt) {
       d->OnStart(player);
     }
     // In social mode the player's interactor is the SocialModeInteractor (7, socialmode.cpp), which
-    // takes no commands: the social menu has the pad.
-    if (PlayerInSocialMode(player)) continue;
+    // takes no commands: the social menu has the pad. Its highlights are the base interactor's (all off).
+    if (PlayerInSocialMode(player)) {
+      if (EHouse* house = _globals.m_house)
+        if (house->m_objectMan) house->m_objectMan->TurnOffAllHighlights(static_cast<unsigned int>(player));
+      continue;
+    }
     // The pad's left stick (and C stick) as the input manager's stick commands would give them.
     pads[player] = _pCtrlMan->GetController(static_cast<unsigned int>(_pCtrlMan->GetPlayerControllerIndex(player)));
     if (EController* pad = pads[player]) {
@@ -655,6 +780,37 @@ void UpdateDirectInteractorsOf(int count, float dt) {
         d->OnCommandPressed(InteractorModule__InteractorInputManager__InteractorCommand{0xe}, 1.0f);
     }
     d->Update(dt);
+    // InteractorManager::UpdateActivePlayerInteractors: then the interactor's highlights (vtable 0x5C).
+    if (EHouse* house = _globals.m_house)  // DAT_80475E94
+      if (house->m_objectMan) {
+        d->UpdateObjectHighlights(house->m_objectMan);
+        // PC dev trace: SIMMY_HL_TRACE=1 prints the objects the player's direct control highlights every
+        // 60 frames.
+        static const bool hlTrace = std::getenv("SIMMY_HL_TRACE") != nullptr;
+        if (hlTrace && _framecount % 60 == 0) {
+          std::vector<ISimInstance*> lit;
+          house->m_objectMan->GetObjectsInRect(player, lit);
+          InfluenceMap* map = Globs_pFixedWorld ? Globs_pFixedWorld->GetInfluenceMap() : nullptr;
+          ObjectList* l = map ? map->GetObjectList(static_cast<int>(d->m_pos.y), static_cast<int>(d->m_pos.x)) : nullptr;
+          int total = 0;
+          if (map)
+            for (ObjectList& ol : map->m_lists) total += static_cast<int>(ol.m_objects.size());
+          std::printf("[hl] f%d p%d at %.2f %.2f: %d listed (map %dx%d, %d in all), %d lit:", _framecount, player + 1, d->m_pos.x,
+                      d->m_pos.y, l ? static_cast<int>(l->m_objects.size()) : -1, map ? map->m_xSize : 0, map ? map->m_ySize : 0, total,
+                      static_cast<int>(lit.size()));
+          for (ISimInstance* inst : lit)
+            if (cXObjectImpl* o = inst->m_xob ? inst->m_xob->GetObjectImplementation() : nullptr) std::printf(" %s", o->DebugName());
+          if (l) {
+            std::printf(" | listed:");
+            for (cXObject* x : l->m_objects)
+              if (cXObjectImpl* o = x->GetObjectImplementation()) std::printf(" %s", o->DebugName());
+          }
+          if (cXPersonImpl* me = PersonOf(d->m_person))
+            std::printf(" | sim loc %d %d dir %.2f", me->m_location[0], me->m_location[1],
+                        me->GetSAnimator() ? me->GetSAnimator()->GetRealDir() : 0.0);
+          std::printf("\n");
+        }
+      }
     // PC dev trace: SIMMY_COOP_TRACE=1 prints each player's sim, camera and stick every 60 frames.
     static const bool trace = std::getenv("SIMMY_COOP_TRACE") != nullptr;
     if (trace && _framecount % 60 == 0) {
@@ -668,6 +824,14 @@ void UpdateDirectInteractorsOf(int count, float dt) {
   }
 }
 }  // namespace
+
+// PC stand-in for InteractorManager::GetPlayerInteractor(player, 0) != 0: the player's active
+// interactor is direct control (not classic, social mode or a build/buy manipulator).
+bool PlayerUsesDirectInteractor(int player) {
+  if (player < 0 || player > 1 || !s_direct[player]) return false;
+  InteractorModule__InteractorInfo info;
+  return PlayerInteractorType(player) != 1 && !PlayerInSocialMode(player) && !PlaceManipulatorInfo(player, info);
+}
 
 InteractorModule__DirectInteractor* PlayerDirectInteractor(int player) {
   return PlayerInteractorType(player) == 1 ? nullptr : s_direct[player & 1];  // GetPlayerInteractor(player, 0)

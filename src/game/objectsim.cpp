@@ -434,8 +434,10 @@ int cXObjectImpl::TryUpdate(StackElem* frame, const unsigned char* params) {
 // its multi-tile group (round the group), 4 objects of the operand GUID, 6 objects whose data 0x3B is
 // param 0, 8 objects on the target's tile (round the tile), 9 the objects east, south, west and north
 // of the object in a local (in its room), 0xC objects in the world; 5 / 7 neighbours, 0xA careers, 0xB
-// neighbour houses. Flag 0x40: interaction tiles only. False: no more (target 0; kinds 8, 9: kept).
-// PC: objects in id order (GC: the module's object list), people from the module's ids.
+// neighbour houses. Flag 0x40: interaction tiles only (not kinds 1, 0xC). False: no more (kinds 1, 3,
+// 4, 5, 7: the target 0; the others keep it); kinds 0xD..0xF: error 0x1E.
+// PC: objects in id order (GC: the module's object list for kinds 0, 2, 6, 0xC and 0xD..0xF, the
+// module's person list for kind 1, the tile's object list for kind 8).
 int cXObjectImpl::TrySetToNext(StackElem*, const unsigned char* params) {
   const unsigned char flags = params[4];
   const int scope = flags & 0x80 ? static_cast<signed char>(params[5]) : 10;
@@ -468,7 +470,7 @@ int cXObjectImpl::TrySetToNext(StackElem*, const unsigned char* params) {
     if (flags & 0x40) {
       for (; next && next != part; next = after(next))
         if (next->IsInteractionTile()) break;
-      if (next == part) next = nullptr;
+      if (next == part) return 0;  // round the group to the target: false, the target kept
     }
     return set(next ? next->m_id : 0);
   }
@@ -566,21 +568,27 @@ int cXObjectImpl::TrySetToNext(StackElem*, const unsigned char* params) {
       return set(f->m_id);
     }
   }
+  // Flag 0x40 (interaction tiles only) does not apply to kinds 1 and 0xC.
+  const bool tilesOnly = (flags & 0x40) && kind != 0xc && kind != 1;
   if (kind != 0 && kind != 1 && kind != 2 && kind != 4 && kind != 6 && kind != 8 && kind != 0xc) {
-    static char name[64];
-    std::snprintf(name, sizeof name, "primitive 0x1f TrySetToNext: kind %d", kind);
-    SIMMY_STUB(name, 0x80101110);
-    return 0;  // PC: none found, the target kept
+    // Kinds 0xD..0xF walk the object list and fail on its first object: error 0x1E (none: false).
+    cXObject* t = *target ? GetObjectFromID(*target) : nullptr;
+    const bool any = *target ? t != nullptr && module && module->GetNumObjects() > *target : module && module->GetNumObjects() > 0;
+    if (!any) return 0;
+    m_treeSim->SetError(0x1e);
+    Error(0x1e);
+    return -1;
   }
   cXObject* start = GetObjectFromID(*target);
+  cXObjectImpl* startImpl = start ? start->GetObjectImplementation() : nullptr;
   const CTilePt startTile = start ? start->GetCTilePt() : CTilePt();
-  if (kind == 8 && !start) return 0;
+  // Kind 8: the target must be an object in the world (GC: from the target's tile's object list).
+  if (kind == 8 && (!startImpl || !ObjIsInWorld(startImpl))) return 0;
+  // Kinds 0, 2, 6, 0xC continue from the target (gone: false, the target kept).
+  if ((kind == 0 || kind == 2 || kind == 6 || kind == 0xc) && *target != 0 && !start) return 0;
   const unsigned int guid = simmy::be32(params);
   const int count = module ? module->GetNumObjects() : 0;
-  for (int id = *target + 1; id <= count; ++id) {
-    cXObject* o = module->GetObjectFromID(id);
-    cXObjectImpl* impl = o ? o->GetObjectImplementation() : nullptr;
-    if (!impl) continue;
+  auto matches = [&](cXObjectImpl* impl) {
     const bool isPerson = impl->GetType() == 2;
     bool match = true;
     switch (kind) {
@@ -593,23 +601,35 @@ int cXObjectImpl::TrySetToNext(StackElem*, const unsigned char* params) {
         match = t.GetX() == startTile.GetX() && t.GetY() == startTile.GetY() && t.GetLevel() == startTile.GetLevel();
         break;
       }
+      case 0xc: match = ObjIsInWorld(impl) != 0; break;
       default: break;
     }
-    if (match) return set(id);
+    return match && (!tilesOnly || impl->IsInteractionTile());
+  };
+  // Kind 4 starts again from the first object when the target is past the last (index target - 1
+  // out of range, unsigned).
+  const int first =
+      kind == 4 && static_cast<unsigned int>(*target - 1) >= static_cast<unsigned int>(count) ? 1 : *target + 1;
+  for (int id = first; id <= count; ++id) {
+    cXObject* o = module->GetObjectFromID(id);
+    cXObjectImpl* impl = o ? o->GetObjectImplementation() : nullptr;
+    if (impl && matches(impl)) return set(id);
   }
   if (kind == 8) {
     // Past the tile's last object: round to its first (GC: the tile's ObjectIterator starts again), the
-    // target itself when it is alone there.
+    // target itself when it is alone there (flag 0x40: back at the target is false).
     for (int id = 1; id <= *target && id <= count; ++id) {
       cXObject* o = module->GetObjectFromID(id);
       cXObjectImpl* impl = o ? o->GetObjectImplementation() : nullptr;
       if (!impl) continue;
-      const CTilePt t = impl->GetCTilePt();
-      if (t.GetX() == startTile.GetX() && t.GetY() == startTile.GetY() && t.GetLevel() == startTile.GetLevel()) return set(id);
+      if ((flags & 0x40) && id == *target) return 0;
+      if (matches(impl)) return set(id);
     }
     return 0;
   }
-  return set(0);
+  // None left: kinds 1 and 4 clear the target; the object-list kinds keep it.
+  if (kind == 1 || kind == 4) return set(0);
+  return 0;
 }
 
 namespace {
@@ -1582,6 +1602,7 @@ int cXObjectImpl::TrySnap(StackElem* frame, const unsigned char* params) {
   }
   const int was[2] = {m_location[0], m_location[1]};
   HierUnlink(this);  // Place: TestAndPlace out of the world
+  InfluenceMapObjectLeaving(this);  // SetLocation
   m_location[0] = pos[0];
   m_location[1] = pos[1];
   m_data.WriteVar(1, static_cast<short>(dir));
@@ -1594,6 +1615,7 @@ int cXObjectImpl::TrySnap(StackElem* frame, const unsigned char* params) {
   }
   m_data.WriteVar(0x34, 0);
   UpdateObjectRoomID(this);  // Place -> SetLocation: ResolveRoomID, data 0x1D
+  InfluenceMapObjectArrived(this);
   PassiveInfluenceLocationChanged(this, was[0], was[1]);
   if (GetType() == 2)
     if (auto* person = dynamic_cast<cXPersonImpl*>(this)) person->UpdateCurrentRoom();  // cXPersonImpl::Place
@@ -1705,6 +1727,7 @@ void StepToward(int pos[2], int dir) {
 void PlaceObject(cXObjectImpl* object, const int pos[2], int level, cXObjectImpl* container, int slot = 0) {
   HierUnlink(object);
   const int was[2] = {object->m_location[0], object->m_location[1]};
+  InfluenceMapObjectLeaving(object);  // SetLocation
   object->m_location[0] = pos[0];
   object->m_location[1] = pos[1];
   object->m_level = level;
@@ -1715,6 +1738,7 @@ void PlaceObject(cXObjectImpl* object, const int pos[2], int level, cXObjectImpl
     HierLink(object, spec);
   }
   UpdateObjectRoomID(object);  // GC Place -> SetLocation: ResolveRoomID, data 0x1D
+  InfluenceMapObjectArrived(object);
   PassiveInfluenceLocationChanged(object, was[0], was[1]);
   if (object->GetType() == 2) {
     if (object->m_instance) object->m_instance->SetObjOrient();
@@ -2963,15 +2987,42 @@ int cXObjectImpl::TryCompleteGoal(StackElem*, const unsigned char* params) {
 // The generic sim call (primitive 0x01)
 
 // 80102A24
-// Operand +0 the call (true unless a call says otherwise). Ported: 0x02 my current action's icon = the
-// stack object, 0x0E simulator global 0x1F, 0x29 a person check, 0x2C / 0x2E / 0x2F the HUD (modeless
-// dialogs, the interaction panel's animation and values), 0x0F a person leaves the object
-// (person data 0x48 = temp 0, 0x49 = 0; with temp 0 clear its footprint is recomputed), 0x18 / 0x19
-// simulator globals 0x29 (temp 0 clear) / 0x28 (temp 0), 0x2D the player's interactor (UI: operand +2
-// the command; PC: none), 0x31 the stack neighbour's wants and fears (logged). Any other is logged once
-// and returns true.
+// Operand +0 the call (true unless a call says otherwise; temps are mine). 0x02 my current action's
+// icon = the stack object; 0x03 the stack object (a player's selected sim) died: that player's
+// tombstone screen; 0x04 the stack neighbour moves in (story: joins the player family, taking the last
+// name of neighbour temp 0; free play: the player's roommate); 0x05 funds += family temp 0's net worth;
+// 0x06 the stack neighbour moves out (story: leaves its family; false if it cannot) / the roommate
+// leaves; 0x0A / 0x0B buy and build locked / unlocked; 0x0C temp 0 = 1 (the stack object exists);
+// 0x0D the people using the stack object stop (CleanupPeople); 0x0E simulator global 0x1F = temp 0;
+// 0x0F a person leaves the object (person data 0x48 = temp 0, 0x49 = 0); 0x10, 0x23 nothing;
+// 0x13 / 0x14 / 0x15 / 0x19 simulator globals 0x25 / 0x26 / 0x27 (the free-will override) / 0x28 =
+// temp 0, 0x18 global 0x29 = (temp 0 == 0); 0x16 the game leaves the lot; 0x1A / 0x1B player 1 / 2
+// takes the previous sim; 0x1E the players swap sims; 0x1F / 0x20 player 1 / 2 selects person temp 0;
+// 0x22 the wardrobe; 0x24 the ringtone of player temp 0; 0x25 message temp 1 to player temp 0's
+// messages; 0x26 temp 1 = object temp 0 is in the world (none: false); 0x27 food creation; 0x28 temp 0
+// = player temp 0's message temp 1 is open; 0x29 a person check; 0x2A temp 0 = player temp 0's camera
+// director is free; 0x2B temp 0 = the HUD's modeless dialogs; 0x2C / 0x2E / 0x2F the HUD; 0x2D the
+// player's interactor; 0x30 family 1's aspiration points += temp 0 (and its unlocks); 0x31 the stack
+// neighbour's wants and fears. 0, 8, 9, 0x11, 0x12, 0x1D: error 5; any other: error 0x2A.
+// Not ported: 0x01 (two people swap seats; no tree on the disc uses it) and 0x21 (ShowAllObjectDialogs:
+// only the debug object zz_move_a__tron).
 int cXObjectImpl::TryGenericSimCall(StackElem* frame, const unsigned char* params) {
   const int call = static_cast<short>(simmy::be16(params));
+  auto fail = [this](short code) {
+    m_treeSim->SetError(code);
+    Error(code);
+    return -1;
+  };
+  // PC development aid: SIMMY_GSC_TRACE=1 logs each call id's first use (which tree, which object).
+  static const bool trace = std::getenv("SIMMY_GSC_TRACE") != nullptr;
+  if (trace && call >= 0 && call < 0x40) {
+    static bool used[0x40];
+    if (!used[call]) {
+      used[call] = true;
+      StackElem* cur = m_treeSim->GetCurElem();
+      std::printf("[vm] generic sim call 0x%02x first used by %s (tree %#x)\n", call, DebugName(), cur ? cur->GetTreeID() : 0);
+    }
+  }
   switch (call) {
     case 0x0f: {
       if (GetType() != 2) {
@@ -3097,15 +3148,159 @@ int cXObjectImpl::TryGenericSimCall(StackElem* frame, const unsigned char* param
       }
       return 1;
     }
-    default: {
+    case 0x03: {
+      // The stack object (a player's selected sim) died: that player's tombstone screen.
+      cXObject* o = GetObjectFromID(frame->m_stackObject);
+      cXObjectImpl* oi = o ? o->GetObjectImplementation() : nullptr;  // PC: GC dereferences it
+      auto* dead = oi ? dynamic_cast<cXPersonImpl*>(oi) : nullptr;
+      if (!dead) return fail(0x1c);
+      if (static_cast<cXPerson*>(dead) == _globals.GetSelectedPerson(0))
+        UIObjectBase::UIRouter_SetVariable(const_cast<char*>("flowGoto"), const_cast<char*>("PAUSE_DEATH_TOMBSTONE_PLAYER1"));
+      else if (static_cast<cXPerson*>(dead) == _globals.GetSelectedPerson(1))
+        UIObjectBase::UIRouter_SetVariable(const_cast<char*>("flowGoto"), const_cast<char*>("PAUSE_DEATH_TOMBSTONE_PLAYER2"));
+      else
+        return fail(0x14);
+      return 1;
+    }
+    case 0x04: {
+      // The stack neighbour moves in. Story: it leaves its family and joins the player's (false if
+      // either fails), taking neighbour temp 0's last name (its selector and its sim on the lot).
+      // Free play: it becomes the player's roommate.
+      NeighborhoodImpl* hood = Globs_pNeighborhood;
+      Neighbor* n = hood->FindNeighborByID(frame->m_stackObject);
+      if (!n) return fail(0x38);
+      if (!_gd.m_fieldE8) {
+        hood->AddAsPlayerRoommate(n);
+        return 1;
+      }
+      FamilyImpl* family = hood->GetFamily(_gd.m_fieldD8);
+      if (n->m_pers[0x3d] != 0 && hood->RemoveFromFamily(n) != 0) return 0;  // +0xEA its family
+      if (hood->AddToFamily(n, family) != 0) return 0;
+      Neighbor* other = hood->FindNeighborByID(m_temps[0]);
+      if (!other) return 1;
+      n->m_selector->SetUserLastName(other->m_selector->GetUserLastName());
+      cXPersonImpl* person = NeighborPerson(n);  // GC: the neighbour's person (+0x18); PC: by search
+      if (!person) return 1;
+      if (auto* desc = reinterpret_cast<CasSimDescriptionS2C*>(person->GetNormalSimDescription())) {
+        const std::u16string& last = other->m_selector->GetUserLastName();
+        // wcsncpy(+0x44, last, 0x20): copied up to its end, the rest zeroed.
+        size_t i = 0;
+        for (; i < 0x20 && i < last.size() && last[i]; ++i) desc->m_lastName[i] = static_cast<unsigned short>(last[i]);
+        for (; i < 0x20; ++i) desc->m_lastName[i] = 0;
+      }
+      return 1;
+    }
+    case 0x05: {
+      // The funds gain family temp 0's net worth (Spend type 2 of its negative); no family: false.
+      FamilyImpl* family = Globs_pNeighborhood->GetFamily(m_temps[0]);
+      if (!family) return 0;
+      Globs_pSimulator->Spend(ExpenseType{2}, -family->GetNetWorth(), cSimulator__tFundsPlayerNumber{0});
+      return 1;
+    }
+    case 0x06: {
+      // The stack neighbour moves out. Story: it leaves its family (false: it could not); free play:
+      // the player's roommate leaves.
+      NeighborhoodImpl* hood = Globs_pNeighborhood;
+      Neighbor* n = hood->FindNeighborByID(frame->m_stackObject);
+      if (!n) return fail(0x38);
+      if (_gd.m_fieldE8) return hood->RemoveFromFamily(n) != 0 ? 0 : 1;
+      hood->RemovePlayerRoommate();
+      return 1;
+    }
+    case 0x0c:
+      // Temp 0 = 1: the stack object exists.
+      if (!GetObjectFromID(frame->m_stackObject)) return fail(10);
+      m_temps[0] = 1;
+      return 1;
+    case 0x0d: {
+      // The people using the stack object stop.
+      cXObject* o = GetObjectFromID(frame->m_stackObject);
+      if (!o) return fail(10);
+      Globs_pObjectModule->CleanupPeople(o);
+      return 1;
+    }
+    case 0x10:
+    case 0x23:
+      return 1;
+    case 0x13:
+    case 0x14:
+    case 0x15:
+      // Simulator global 0x25 / 0x26 / 0x27 (the free-will override, ELiveMode::Update) = temp 0.
+      Globs_pSimulator->SetGlobal(static_cast<short>(0x25 + call - 0x13), m_temps[0]);
+      return 1;
+    case 0x1e:
+      // The players swap their selected sims.
+      _globals.SwapSelectedSims();
+      return 1;
+    case 0x1f:
+    case 0x20: {
+      // Player 1 (0x1F) / 2 (0x20) selects person temp 0.
+      cXObject* o = Globs_pObjectModule->GetObjectFromID(m_temps[0]);
+      cXObjectImpl* oi = o ? o->GetObjectImplementation() : nullptr;
+      if (auto* person = oi ? dynamic_cast<cXPersonImpl*>(oi) : nullptr) _globals.SetSelectedPerson(call - 0x1f, person);
+      return 1;
+    }
+    case 0x24: {
+      // The ringtone of player temp 0 (1 or 2; else the default) as a UI sound.
+      unsigned int tone = 0;
+      if (m_temps[0] == 1) tone = static_cast<unsigned int>(UIDB::UIDBGetInt(const_cast<char*>("P1RingtoneSample")));
+      else if (m_temps[0] == 2) tone = static_cast<unsigned int>(UIDB::UIDBGetInt(const_cast<char*>("P2RingtoneSample")));
+      if (tone == 0) tone = 0x457536c3;
+      UIAUDIO::Instance()->PlaySound(tone);
+      return 1;
+    }
+    case 0x25:
+      // Message temp 1 to player temp 0's messages (MSGTarget; saved with the game).
+      MSGTarget::DeliverXamMessage(m_temps[0], static_cast<unsigned short>(m_temps[1]));
+      return 1;
+    case 0x28: {
+      // Temp 0 = player temp 0's (1 or 2) message temp 1 (1..13, else 10) is open.
+      extern unsigned char PDATarget_m_pdaOpenMessages[2][0xe];  // tsupport.cpp
+      const int player = static_cast<unsigned short>(m_temps[0] - 1) > 1 ? 0 : m_temps[0] - 1;
+      const int message = static_cast<unsigned int>(m_temps[1] - 1) > 0xc ? 10 : m_temps[1];
+      m_temps[0] = PDATarget_m_pdaOpenMessages[player][message] != 0 ? 1 : 0;
+      return 1;
+    }
+    case 0x2a: {
+      // Temp 0 = player temp 0's (1 or 2) camera director is free (idle or with the game camera).
+      const int player = static_cast<unsigned short>(m_temps[0] - 1) > 1 ? 0 : m_temps[0] - 1;
+      const CameraDirector* d = _globals.CameraDirectorOf(player);
+      const bool busy = d && d->m_state != CameraDirector::kIdle && d->m_state != CameraDirector::kGame;  // PC: GC has both
+      m_temps[0] = busy ? 0 : 1;
+      return 1;
+    }
+    case 0x2b:
+      // Temp 0 = the HUD's modeless dialogs.
+      m_temps[0] = static_cast<short>(_gd.m_h2dTarget ? _gd.m_h2dTarget->CountModelessDialogs() : 0);
+      return 1;
+    case 0x30: {
+      // Family 1's aspiration points += temp 0 (at most kTotalAspirationMax), then its object unlocks.
+      auto* family = dynamic_cast<PlayerFamilyImpl*>(Globs_pNeighborhood->GetFamily(1));
+      if (!family) return 1;
+      int total = family->m_totalAspirationScore + m_temps[0];
+      if (total > kTotalAspirationMax) total = kTotalAspirationMax;
+      family->m_totalAspirationScore = total;
+      FamilyGoalUnlock(1).GrantObjectUnlocks(total);
+      return 1;
+    }
+    case 0x00:
+    case 0x08:
+    case 0x09:
+    case 0x11:
+    case 0x12:
+    case 0x1d:
+      return fail(5);
+    case 0x01:
+    case 0x21: {
       static bool seen[0x40];
-      if (call >= 0 && call < 0x40 && !seen[call]) {
+      if (!seen[call]) {
         seen[call] = true;
         std::printf("[vm] %s: generic sim call 0x%x is not ported (true)\n", DebugName(), call);
       }
-      (void)frame;
       return 1;
     }
+    default:
+      return fail(0x2a);
   }
 }
 

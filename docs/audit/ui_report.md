@@ -6,6 +6,7 @@ MISSING-M 38 (7 features), MISSING-L 2, UNSURE 1.
 ## MISSING, by priority
 
 ### H1. Buy catalogue: the locked-object text shows a raw tag (80177CA8)
+- **Ported** (hB): `UIObjectBase::doUIQDStringSubstitution` in `src/game/uitargets.cpp`.
 - GC: `UIObjectBase::doUIQDStringSubstitution` is one line: it calls `UIQDTarget::UIQDSubstitutionStrings`.
 - Port: `PCTTarget::GetLocalizable` (src/game/pcttarget.cpp:578) calls the generated stub, so nothing is
   substituted. It was hit in play logs.
@@ -14,6 +15,7 @@ MISSING-M 38 (7 features), MISSING-L 2, UNSURE 1.
 - Effort: S (one line in uibase, or call `UIQDTarget::UIQDSubstitutionStrings` at pcttarget.cpp:578).
 
 ### H2. Tattoos never appear on sims (8016C850)
+- **Ported** (hB): `GetTattooTextureID` in `src/game/cassimstate.cpp`; the compositor passes 0, 1, 2.
 - GC: `CasSimPartsS2C::GetTattooTextureID(type, index)` picks the tattoo texture for location `type` (0..2)
   from `GetTattoosForLocation`. `SkinCompositor::GetTextureIDs` blends it into the skin.
 - Port: the stub returns 0. It was hit in play logs. src/game/skincompositor.cpp:186 also passes

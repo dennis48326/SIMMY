@@ -24,6 +24,24 @@ EIObjectMan::~EIObjectMan() {
 // GC: records the unit rectangle display list (_pBoundRectDL) object bounds are drawn with.
 void EIObjectMan::Init() { SIMMY_STUB("EIObjectMan::Init: the bound rectangle display list", 0x80054A08); }
 
+// 80054C4C
+// Player 1's highlight and placement-error flags (1 | 4) or player 2's (8 | 0x20) off on every instance.
+void EIObjectMan::TurnOffAllHighlights(unsigned int player) {
+  unsigned int flags = 0;
+  if (player == 0) flags = 5;
+  else if (player == 1) flags = 0x28;
+  for (auto& item : m_items) item.second->m_cursFlags &= ~flags;
+}
+
+// 80054CA0
+// The instances player `player` highlights (cursor flag 1 for player 1, 8 for player 2), in the
+// manager's order.
+void EIObjectMan::GetObjectsInRect(int player, std::vector<ISimInstance*>& out) {
+  const unsigned int flag = player == 0 ? 1u : 8u;
+  for (auto& item : m_items)
+    if (item.second->m_cursFlags & flag) out.push_back(item.second);
+}
+
 // 80054DD8
 void EIObjectMan::AttachObject(ISimInstance* instance) { m_items[m_nextHandle++] = instance; }
 

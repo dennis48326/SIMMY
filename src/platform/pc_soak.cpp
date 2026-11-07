@@ -333,8 +333,13 @@ void dev_pad_soak(PADStatus* pads) {
   const double dt = std::chrono::duration<double>(now - lastWall).count();
   lastWall = now;
   if (dt > 2.0) std::printf("[soak] slow frame %d: %.1f s\n", frame, dt);
-  if (s.rssEvery > 0 && frame % s.rssEvery == 0)
-    std::printf("[soak] rss frame %d: %ld KB house %d macros %d\n", frame, RssKb(), _globals.m_house ? 1 : 0, s.macros);
+  if (s.rssEvery > 0 && frame % s.rssEvery == 0) {
+    // The lot's clock too (days running, hour:minute), to tell how much game time a soak covered.
+    cSimulatorImpl* sim = _globals.m_house ? Globs_pSimulator : nullptr;
+    std::printf("[soak] rss frame %d: %ld KB house %d macros %d clock day %d %02d:%02d\n", frame, RssKb(), _globals.m_house ? 1 : 0,
+                s.macros, sim ? sim->GetGlobal(cSimulatorImpl::kDaysRunning) : -1, sim ? sim->GetGlobal(cSimulatorImpl::kHour) : 0,
+                sim ? sim->GetGlobal(cSimulatorImpl::kMinute) : 0);
+  }
 
   if (s.phase < 4) {
     DriveMenu(pads, frame);

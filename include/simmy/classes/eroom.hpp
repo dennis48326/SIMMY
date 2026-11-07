@@ -24,7 +24,7 @@ struct ERoom {
   void InitRoomLookupTab();  // 8002DCF0
   int GetNumWalls(unsigned short room);  // 8002DF7C
   RET_UNKNOWN GetWallPaperCost(unsigned int, unsigned short);  // 8002DFEC
-  RET_UNKNOWN DrawWallpaperPreview(ERC *, unsigned short, EVec2 &);  // 8002E0C4
+  int DrawWallpaperPreview(ERC* rc, unsigned short room, EVec2& cursor);  // 8002E0C4
   RET_UNKNOWN IsRoomWallsOpaque(int, int);  // 8002E168
   void CalAllRoomOpaque(int);  // 8002E1C4
   double GetShortDistToCam(int, int);  // 8002E268
@@ -50,8 +50,8 @@ struct ERoom {
   // (GC: TNodeList<ERoomWall*>, 0x0C bytes each, with an array of pointers to them at +0x70).
   std::vector<ERoomWall*> m_walls[8];
   std::vector<ERoomWall*> m_fences;          // +0x64
-  // +0x94 ERedBlackTree: per room id, its runs (InitRoomLookupTab; GetNumWalls). +0xA0: per room a 0x20-byte
-  // buffer (the wallpaper preview's: DrawWallpaperPreview, not ported; PC: not kept).
+  // +0x94 ERedBlackTree: per room id, its runs (InitRoomLookupTab; GetNumWalls, DrawWallpaperPreview).
+  // +0xA0: per room a 0x20-byte buffer (unused by the release game's preview; PC: not kept).
   std::map<unsigned short, std::vector<ERoomWall*>> m_roomWalls;
   float m_field_AC = 300.0f;                 // +0xAC
   float m_field_B0 = 200.0f;                 // +0xB0
@@ -69,13 +69,13 @@ struct ERoomWall {
   virtual double CalShortDistToCam(int);  // 80029654
   ERoomWall(TileWallsSegment segment, DiagonalSideSelector side, CTilePt& tile, bool create);  // 8002C5CC
   virtual ~ERoomWall();  // 8002C7B8
-  static void GetWallDims(TileWallsSegment, DiagonalSideSelector, EVec3 &, EVec3 &);  // 8002C860
+  static void GetWallDims(TileWallsSegment segment, DiagonalSideSelector side, EVec3& a, EVec3& b);  // 8002C860
   void SetWallUpDownMode(EWallUpDownStateType state, bool force);  // 8002CD84
   void AddTile(CTilePt& tile, TileWalls& walls, TileWallsSegment segment, DiagonalSideSelector side, bool create);  // 8002CDD8
   RET_UNKNOWN DrawWall(ERC *);  // 8002CE4C
   static RET_UNKNOWN getRoomIdFromPoint(CTilePt &);  // 8002D1F8
-  RET_UNKNOWN getWallNormalOnSideOfCursor(EVec3 &, EVec3 &, EVec2 &, EVec2 &);  // 8002D308
-  RET_UNKNOWN DrawWallpaperPreview(ERC *, EVec2 &);  // 8002D3C0
+  void getWallNormalOnSideOfCursor(EVec3& a, EVec3& b, EVec2& cursor, EVec2& normal);  // 8002D308
+  int DrawWallpaperPreview(ERC* rc, EVec2& cursor);  // 8002D3C0
   static RET_UNKNOWN GetWallPaperCost(int, unsigned short);  // 8002DE70
   int CountWalls();  // 8002F81C
   RET_UNKNOWN HasSegment(TileWallsSegment, CTilePt &, CTilePt &);  // 8002F84C

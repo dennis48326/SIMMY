@@ -62,6 +62,18 @@ fields, as on GC). Done path: `SaveSimToFamilySlot` -> `GameData::ReplaceSimData
 re-enables CAS input (`CASTarget::SetHandleInput(1)`). `SIMMY_CAS_ACCEPT=<frames>` auto-accepts CAS
 (`SIMMY_CAS_ACCEPT_WARDROBE` for the wardrobe's).
 
+## A sim's look in the game ([`simmodel.cpp`](../src/game/simmodel.cpp), [`skincompositor.cpp`](../src/game/skincompositor.cpp))
+
+`ESim::initModel` / `ChangeCostume` build the sim from its description as on GC: `SetAllModels`, the
+lattice morphs (body, arms, legs, head shape), `ApplyAllMorphTargets` (the face sliders: each region off
+its middle registers and weights its two head morph targets), then `SimModel::UpdateReweld(true)`
+(80072CBC), which applies the head's pending morph (`ERModel::ApplyMorph`), morphs the other parts
+(`SimRenderer::MorphParts(.., false)`) and frees the morph data (`DeallocateMorphResources`: the parts keep
+their shapes and count as shared). CAS uses `UpdateReweldCAS` (80072D3C, `MorphParts(.., true)`). The skin
+is composited per map quadrant (`SkinCompositor`): base skin, the quadrant's tattoo (locations 0, 1, 2 =
+`CasSimDescriptionS2C::m_tattoos[0..2]` through `CasSimPartsS2C::GetTattooTextureID` 8016C850; the
+game state uses the `_GAME` texture), then each part's texture.
+
 ## Portraits
 
 `SimImageMaker` ([`simimagemaker.cpp`](../src/game/simimagemaker.cpp)) renders a sim's head into a render

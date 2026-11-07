@@ -6,6 +6,8 @@
 #include <cstdlib>
 #include <cstring>
 
+extern int g_devBuildBuyAlways;  // DAT_804761B0 (urbzmode.cpp)
+
 namespace {
 UIScreenManager* ScreenManager() { return static_cast<UIScreenManager*>(_globals.m_uiScreenManager); }
 AptViewer* Viewer() { return static_cast<AptViewer*>(_globals.m_aptViewer); }
@@ -162,9 +164,12 @@ char* PAZBase::GetVariable(char* name) {
   } else if (!std::strcmp(m_strings[kGetEyeToyStatus], name)) {
     std::strcpy(out, "0");
   } else if (!std::strcmp(m_strings[kGetBuildBuyStatus], name)) {
-    // GC: "0" when DAT_804761B0 is clear and Globs::pObjectModule (vtable 0x224) or a player's social
-    // mode (EGlobal::IsPlayerInSocialMode) is busy; neither runs here.
-    std::strcpy(out, "1");
+    // "0" when DAT_804761B0 (the development menu's override) is clear and the trees lock build/buy
+    // (ObjectModule vtable 0x224) or a player is in social mode.
+    const bool allowed = g_devBuildBuyAlways ||
+                         (!(Globs_pObjectModule && Globs_pObjectModule->IsBuyAndBuildDisabled()) &&
+                          !_globals.IsPlayerInSocialMode(0) && !_globals.IsPlayerInSocialMode(1));
+    std::strcpy(out, allowed ? "1" : "0");
   } else if (!std::strcmp(m_strings[kGetProgressStatus], name)) {
     std::strcpy(out, _gd.m_fieldE8 == 0 ? "1" : "0");  // DAT_80475C6C
   } else if (!std::strcmp(m_strings[kGetGameStatus], name)) {

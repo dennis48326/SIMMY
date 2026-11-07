@@ -326,10 +326,12 @@ std::vector<cXObjectImpl*> ObjectsAtTile(CTilePt& tile) {
 // hierarchy is TestAndPlace's), its room, its model moved (ISimInstance::SetObjOrient).
 void SetLocation(cXObjectImpl* o, const int pos[2], int level) {
   const int was[2] = {o->m_location[0], o->m_location[1]};
+  InfluenceMapObjectLeaving(o);
   o->m_location[0] = pos[0];
   o->m_location[1] = pos[1];
   o->m_level = level;
   UpdateObjectRoomID(o);  // 800DF784: ResolveRoomID, data 0x1D
+  InfluenceMapObjectArrived(o);
   PassiveInfluenceLocationChanged(o, was[0], was[1]);
 }
 

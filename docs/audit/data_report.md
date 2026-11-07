@@ -17,6 +17,7 @@ Method: each stub's GC callers come from `graph.tsv`. I walked up chains of stub
 ## MISSING, by priority
 
 ### 1. MISSING-H: in-game sim heads are never morphed (face sliders, head shape)
+- **Ported** (work package hB): `SimModel::UpdateReweld` and `UpdateReweldCAS` are in `src/game/simmodel.cpp`.
 - GC: `SimModel::UpdateReweld` (80072CBC) runs after `ApplyAllMorphTargets`. It calls `RebuildModified`. If the head part (index 1) has a model and is not shared (flag 4), it calls `ERModel::ApplyMorph` on the head and sets flag 2. Then it calls `SimRenderer::MorphParts(parts, false)` and `DeallocateMorphResources`.
 - Port: the stub is called from `src/game/esim.cpp:254` (initModel) and `:395` (ChangeCostume), and it shows up as a hit in real runs. If the head has face morph targets, `ApplyAllMorphTargets` (`simmodel.cpp:950`) returns without `ApplyMorph`, exactly as on GC. In-game drawing then calls `MorphParts(..., morphHead=false)` (`esim.cpp:963`, `:1033`), which skips part 1. So the head's `m_morphDirty` is never applied, and it keeps the base display list (`e_submodelshader.cpp:416`).
 - Player sees: in live mode, every sim's face looks like the base head for its style. CAS face sliders (chin, nose, eyes, mouth regions) and the head-lattice "fat/thin" shape are lost. CAS itself looks right because it draws with `morphHead=true`.
@@ -48,7 +49,7 @@ Method: each stub's GC callers come from `graph.tsv`. I walked up chains of stub
 - **InLevelBaseState::Shutdown** (80089EB0, hit). Resets 80485900/04 to 0 and 80485908/0C to 1 (`MUStateMachine::s_field90x`), deletes the HUD and clears 80475C10. The port deletes the HUD in livemode. I found no port reader that cares about the other globals today. Effort S.
 - **EGraphics::DeselectTextures** (802F1034, hit at `e_graphics.cpp:82`). GC unbinds texture stages 0 and 1 at the end of every frame. No symptom seen. Effort S.
 - **8-bit texture copies** (`CopyTexture32To8` 8030B228, `CopyTexture8To8` 8030B960, and the ERTQuantize4D class, 21 rows). Reachable from `SkinCompositor::FinalizeSkinTexture` and `TextureUtils::LoadTexture` only when the target is 8-bit. The skin is 32 bpp and these were never logged. Effort M.
-- **UpdateReweldCAS** (80072D3C, hit, `castarget.cpp:390`). CAS draws with `MorphParts(true)` every frame, so only the morph-memory release is lost. Effort S (with item 1).
+- **UpdateReweldCAS** (80072D3C, hit, `castarget.cpp:390`). **Ported** (hB). CAS draws with `MorphParts(true)` every frame, so only the morph-memory release is lost. Effort S (with item 1).
 
 ### UNSURE
 - `EShader::ChangeMaterial` (802FA390). `ENgcShader::ChangeMaterial` (`e_ngcshader.cpp:30`) forwards to this stub. GC copies 12 material words and calls a vtable update. It was never logged. To decide: run a long live-mode soak with many object types, then grep the log for 802FA390.

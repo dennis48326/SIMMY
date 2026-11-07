@@ -5256,20 +5256,8 @@ struct ImageProcessingManager__eFilter {
 };
 #include "simmy/classes/livemode.hpp"  // hand-written
 #include "simmy/classes/ingamecas.hpp"  // hand-written
-struct InfluenceMap {
-    InfluenceMap() = default;  // generated: lets derived stubs construct the base
-    InfluenceMap(int, int);  // 80048844
-    ~InfluenceMap();  // 800488BC
-    void RemoveAll();  // 80048968
-    void CalculateAffectedArea(cXObject *, ITreeTableEntry *, FTileRect &);  // 800489EC
-    void AddObjectToMap(cXObject *);  // 80048D44
-    static void AddObjectEntry(cXObject *, ITreeTableEntry *);  // 80048EA8
-    void RemoveObjectFromMap(cXObject *);  // 80049074
-    static void RemoveObjectEntry(cXObject *, ITreeTableEntry *);  // 800491CC
-    RET_UNKNOWN GetObjectList(int, int);  // 80049294
-    RET_UNKNOWN ValidateMissing(cXObject *);  // 800492E0
-    void Validate();  // 800492E8
-};
+#include "simmy/classes/influencemap.hpp"  // hand-written
+#include "simmy/classes/influencemap.hpp"  // hand-written
 struct Ingredient {
     Ingredient() = default;  // generated: lets derived stubs construct the base
 };
@@ -6005,12 +5993,6 @@ struct ObjectIndex {
 };
 #include "simmy/classes/objects.hpp"  // hand-written
 #include "simmy/classes/objects.hpp"  // hand-written
-struct ObjectList {
-    ObjectList();  // 80048570
-    void AddObject(cXObject *);  // 80048590
-    void RemoveObject(cXObject *);  // 80048714
-    void RemoveAll();  // 80048798
-};
 struct ObjectModule {
     using SimFlag = ::ObjectModule__SimFlag;
     ObjectModule() = default;  // generated: lets derived stubs construct the base

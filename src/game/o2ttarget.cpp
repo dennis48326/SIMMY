@@ -165,8 +165,30 @@ void O2TTarget::SetVariable(char* name, char* value) {
     if (o) o->m_vol29 = static_cast<signed char>(volume());
     SetVolumes();
   } else if (!std::strcmp("O2T_Save_Game", name)) {
-    // GC: EGlobal::IsPlayerInSocialMode (either player) or the simulator busy (vtable 0x34, 0x18)
-    // spawn the help dialog "option_social_no_save" / "option_generic_no_save" instead.
+    // A player in social mode or the simulator busy (global 0x18): a one-button notice in the help
+    // dialog instead (set up here field by field; it does not mark the help as up).
+    const char* noSave = nullptr;
+    if (_globals.IsPlayerInSocialMode(0) || _globals.IsPlayerInSocialMode(1)) noSave = "option_social_no_save";
+    else if (Globs_pSimulator && Globs_pSimulator->GetGlobal(0x18) != 0) noSave = "option_generic_no_save";
+    if (noSave) {
+      auto text = [](const char* id) {
+        std::vector<unsigned short> v;
+        for (const unsigned short* c = EGlobal::NewUIText(id); c && *c; ++c) v.push_back(*c);
+        return v;
+      };
+      m_help.m_body = text(noSave);
+      m_help.m_numSelections = 1;
+      m_help.m_field20 = 0;
+      m_help.m_continueType = 0;
+      m_help.m_field14 = 0;
+      m_help.m_onSelection = [this](int selection) { m_help.SelectionCallback(selection); };
+      m_help.m_onZeroInput = [this] { m_help.ZeroInputCallback(); };
+      m_help.m_onClosed = [this] { m_help.DialogClosedCallback(); };
+      m_help.m_sel[0] = text("ok");  // DAT_803EF83C
+      m_help.m_field24 = 0;
+      m_help.SpawnDialog();
+      return;
+    }
     if (m_help.m_active || m_closing) return;
     startSave(4);
   } else if (!std::strcmp("O2T_Close_Screen", name)) {

@@ -155,11 +155,9 @@ std::u16string GetObjectMenuName(cXObjectImpl* object);
 // (not ported: null).
 unsigned int GetShaderForObject(cXObjectImpl* object, ERShader** thumbnail);
 // CollectInteractionsForObject (80041B9C/80041BE0, game/global.cpp): what player `player`'s sim can
-// do with the object, at most `max`. PC stand-in for ObjTestSim::AppendInteractionsForMenu.
+// do with the object, at most `max`. PC stand-in for ObjTestSim::AppendInteractionsForMenu (with its
+// direct-control filter: only entries whose activation area holds the sim).
 void CollectInteractionsForObject(cXObjectImpl* object, MenuInteractionList& list, int player, int max);
-// PC stand-in for the objects player `player`'s direct interactor highlights (DirectInteractor::
-// UpdateObjectHighlights, EIObjectMan::GetObjectsInRect), for its action menu (directinteractor.cpp).
-std::vector<cXObjectImpl*> MenuObjectsNear(int player);  // (flashpimenu.cpp)
 // PC: starts a chosen interaction (GC: the interactor's ChooseAction -> cXPerson vtable 0xB4, the
 // action queue). 1: started.
 int StartMenuInteraction(const MenuInteraction& interaction);

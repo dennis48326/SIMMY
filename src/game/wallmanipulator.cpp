@@ -54,6 +54,7 @@ InteractorModule__WallManipulator::~InteractorModule__WallManipulator() {}
 // 8021F7BC
 // GC: the visualizer's resources; the extents (0.5, 3).
 void InteractorModule__WallManipulator::OnCreate() {
+  if (InteractorModule__InteractorVisualizer* v = InteractorVisualizer()) v->CreateResources(*this);
   m_extents.x = 0.5f;
   m_extents.y = 3.0f;
 }
@@ -460,9 +461,9 @@ void InteractorModule__WallManipulator::OnCommandUpdate(InteractorModule__Intera
 int InteractorModule__WallManipulator::GetTexGenMode() { return (m_flags & 0x80) && (m_flags & 4) ? 2 : 0; }
 
 // 80221B7C
-void InteractorModule__WallManipulator::PreDraw(InteractorModule__InteractorVisualizer&) {}
+void InteractorModule__WallManipulator::PreDraw(InteractorModule__InteractorVisualizer& v) { v.PreDraw(*this); }
 // 80221BA8
-void InteractorModule__WallManipulator::Draw(InteractorModule__InteractorVisualizer&) {}
+void InteractorModule__WallManipulator::Draw(InteractorModule__InteractorVisualizer& v) { v.Draw(*this); }
 
 // 80221BD4
 // The line's segments that may be added (or, `remove`, deleted: negative), from its first tile until

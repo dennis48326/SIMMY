@@ -190,7 +190,7 @@ struct cFixedWorldImpl {
   virtual void SetWallStorage(CTilePt& tile, TileWallStorage& storage);  // 801520D4
   virtual int MayEditTile(CTilePt& tile) const;  // 8015213C
   virtual unsigned short GetRoomIdFromPoint(CTilePt& tile);  // 801521AC
-  virtual RET_UNKNOWN GetInfluenceMap();  // 8015235C
+  virtual InfluenceMap* GetInfluenceMap();  // 8015235C
   virtual PassiveInfluenceMap* GetPassiveInfluenceMap();  // 80152364
 
   int m_xSize = 0;                  // +0x14
@@ -204,6 +204,6 @@ struct cFixedWorldImpl {
   _c2DArray* m_flags = nullptr;     // +0x34 'Arry' 8: tile flags (ComputeRooms: 1 inside the edge,
                                     //   2 visited, 4 outside; 0x10 off the lot's extent)
   _c2DArray* m_walls = nullptr;     // +0x38 'Arry' 12: TileWallStorage (8 bytes) per tile
-  void* m_influence = nullptr;      // +0x3C InfluenceMap
+  InfluenceMap* m_influence = nullptr;  // +0x3C
   PassiveInfluenceMap* m_passiveInfluence = nullptr;  // +0x40
 };

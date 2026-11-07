@@ -121,6 +121,7 @@ struct WantFearManager {
 };
 
 WantFearManager* TheWantFearManager();
+extern const int kTotalAspirationMax;  // 80500630 the player family's aspiration points at most
 // The person on the lot whose neighbour this is (GC: Neighbor +0x18), else null.
 cXPersonImpl* NeighborPerson(Neighbor* n);
 // PC: active slot `slot` (0..3 wants, 4..6 fears) of the neighbour for the HUD (GetType, GetBaseShader,

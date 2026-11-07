@@ -14,6 +14,23 @@
 // 800D9484
 cXObject::~cXObject() {}
 
+int cXObjectImpl::sFreeWill = 1;                // 804FDC78
+int cXObjectImpl::sGlobalFreeWillOverride = 1;  // 804FDC7C
+
+// 800D95F4
+RET_UNKNOWN cXObject::GetFreeWill() { return cXObjectImpl::sFreeWill; }
+
+// 800DB954
+// The options' Free Will (ELiveMode::Update, every frame); mirrored in simulator global 0x1E, which
+// the autonomy and the trees read.
+void cXObject::SetFreeWill(bool on) {
+  cXObjectImpl::sFreeWill = on;
+  if (Globs_pSimulator) Globs_pSimulator->SetGlobal(0x1e, static_cast<short>(cXObjectImpl::sFreeWill));
+}
+
+// 800DB9A0
+void cXObject::SetGlobalFreeWillOverride(bool on) { cXObjectImpl::sGlobalFreeWillOverride = on; }
+
 // ---------------------------------------------------------------------------------------------------
 // cXObjectImpl
 
@@ -41,6 +58,9 @@ cXObjectImpl::~cXObjectImpl() {
   delete m_relations;
   if (PassiveInfluenceSystem* influence = Globs_pSimulator ? Globs_pSimulator->GetPassiveInfluenceSystem() : nullptr)
     influence->RemoveObjectFromMap(this);
+  // GC: the interaction influence map keeps the object unless ValidateMissing says otherwise (it never
+  // does). PC: it is taken out of every tile so the map holds no freed object.
+  if (InfluenceMap* map = Globs_pFixedWorld ? Globs_pFixedWorld->GetInfluenceMap() : nullptr) map->ForgetObject(this);
   EGlobal::FreeSpriteRenderer(this);  // its sprite renderer goes on the next ESpriteRenderMan::Update
   delete m_treeSim;
 }
@@ -54,6 +74,16 @@ CTilePt cXObjectImpl::GetCTilePt() const { return CTilePt(m_location[1] >> 4, m_
 
 // 800EB0C4
 int cXObjectImpl::GetData(int index) { return m_data[index]; }
+// 800EABC4
+RET_UNKNOWN cXObjectImpl::GetFreeWill() { return sFreeWill; }
+// 800EAF0C
+void cXObjectImpl::SetTemp(int index, short value) { m_temps[index] = value; }
+// 800EB0EC
+RET_UNKNOWN cXObjectImpl::GetTemp(int index) { return m_temps[index]; }
+// 800EAF1C
+void cXObjectImpl::SetAttr(int index, short value) { m_attrs[index] = value; }
+// 800EB0FC
+RET_UNKNOWN cXObjectImpl::GetAttr(int index) { return m_attrs[index]; }
 // 800EB4F8
 // It lights its room: data 0x28 bit 0x400.
 int cXObjectImpl::CanContributeLight() { return static_cast<unsigned short>(m_data[0x28]) >> 10 & 1; }

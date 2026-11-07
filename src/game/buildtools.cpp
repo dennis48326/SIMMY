@@ -15,6 +15,25 @@
 
 namespace ibuild {
 
+// 80212FE8
+// `pos` moved `n` tiles in direction `dir` (TilePtDir: 0 -x, 1 +x, 2 -y, 3 +y, 4 -x -y, 5 +x +y,
+// 6 -x +y, 7 +x -y), on the ground.
+void GetAdjacentTileCoordinates(int dir, int n, EVec3& pos) {
+  const float d = static_cast<float>(n);
+  switch (dir) {
+    case 0: pos.x -= d; break;
+    case 1: pos.x += d; break;
+    case 2: pos.y -= d; break;
+    case 3: pos.y += d; break;
+    case 4: pos.y -= d, pos.x -= d; break;
+    case 5: pos.y += d, pos.x += d; break;
+    case 6: pos.y += d, pos.x -= d; break;
+    case 7: pos.y -= d, pos.x += d; break;
+    default: break;
+  }
+  pos.z = 0.0f;
+}
+
 // 802106C4
 // Snap 0 none; else the tile's corner (2), centre (1), or the middle of its x (3) or y (4) edge.
 void SnapPositionToTile(const EVec3& in, EVec3& out, int snap) {
@@ -457,6 +476,37 @@ bool UpdateBuildTool(int player, float dt) {
   if (t.active == &t.wall) t.wall.Update(dt);
   else if (t.active == &t.paper) t.paper.Update(dt);
   else if (t.active == &t.floor) t.floor.Update(dt);
+  return true;
+}
+
+// InteractorVisualizer::SetupDrawCallback for a player's build tool: its PreDraw (vtable 0xB4).
+bool BuildToolPreDraw(int player, InteractorModule__InteractorVisualizer& v) {
+  PlayerTools& t = s_tools[player & 1];
+  if (!t.active) return false;
+  if (t.active == &t.wall) t.wall.PreDraw(v);
+  else if (t.active == &t.paper) t.paper.PreDraw(v);
+  else if (t.active == &t.floor) t.floor.PreDraw(v);
+  return true;
+}
+
+// InteractorVisualizer::InteractorOrderTableCallback for a player's build tool: the record's draw state
+// to the tool (+0x4C; 1 for the tools' own records, 0 for the visualizer's per-player ones), then its
+// Draw (vtable 0xBC). PC: the tool is known by the position the record sorts by.
+bool BuildToolDraw(int player, EOrderTableData* otd, InteractorModule__InteractorVisualizer& v) {
+  PlayerTools& t = s_tools[player & 1];
+  if (!t.active || !otd) return false;
+  if (t.active == &t.wall && (otd->m_pos == &t.wall.m_anchorDraw.x || otd->m_pos == &t.wall.m_previewPos.x)) {
+    t.wall.m_drawState = otd->m_pos == &t.wall.m_previewPos.x ? 1 : 0;
+    t.wall.Draw(v);
+  } else if (t.active == &t.paper && otd->m_pos == &t.paper.m_pos.x) {
+    t.paper.m_drawState = 0;
+    t.paper.Draw(v);
+  } else if (t.active == &t.floor && otd->m_pos == &t.floor.m_previewPos.x) {
+    t.floor.m_drawState = 1;
+    t.floor.Draw(v);
+  } else {
+    return false;
+  }
   return true;
 }
 

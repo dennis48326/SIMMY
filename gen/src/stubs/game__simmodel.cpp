@@ -9,8 +9,6 @@ RET_UNKNOWN SimModel::SetModelPartASync(eBodyPartS2C, unsigned int) { SIMMY_STUB
 RET_UNKNOWN SimModel::VerifyRequiredModels() const { SIMMY_STUB("SimModel::VerifyRequiredModels(void) const", 0x800714C4); return {}; }
 void SimModel::WeldAllSharedVertices() { SIMMY_STUB("SimModel::WeldAllSharedVertices(void)", 0x800714CC); }
 void SimModel::WeldSharedVertices(eBodyPartS2C, eBodyPartS2C, bool) { SIMMY_STUB("SimModel::WeldSharedVertices(eBodyPartS2C, eBodyPartS2C, bool)", 0x80071558); }
-void SimModel::UpdateReweld(bool) { SIMMY_STUB("SimModel::UpdateReweld(bool)", 0x80072CBC); }
-void SimModel::UpdateReweldCAS(bool) { SIMMY_STUB("SimModel::UpdateReweldCAS(bool)", 0x80072D3C); }
 void SimModel::UpdateSimDescriptionIndices(unsigned int *) { SIMMY_STUB("SimModel::UpdateSimDescriptionIndices(unsigned int *)", 0x80072D94); }
 RET_UNKNOWN SimModel::GetModelName(eBodyPartS2C, EString &) { SIMMY_STUB("SimModel::GetModelName(eBodyPartS2C, EString &)", 0x80074340); return {}; }
 RET_UNKNOWN SimModel::GetTextureName(eBodyPartS2C, EString &) { SIMMY_STUB("SimModel::GetTextureName(eBodyPartS2C, EString &)", 0x800743B0); return {}; }

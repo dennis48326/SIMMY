@@ -16,8 +16,6 @@ double AngleRange90(float, bool *) { SIMMY_STUB("AngleRange90(float, bool *)", 0
 double LineCircleIntersect(EVec2, EVec2, EVec2, float, EVec2 &, EVec2 &) { SIMMY_STUB("LineCircleIntersect(EVec2, EVec2, EVec2, float, EVec2 &, EVec2 &)", 0x80306D88); return {}; }
 RET_UNKNOWN CalcDeterminant(float, float, float, float) { SIMMY_STUB("CalcDeterminant(float, float, float, float)", 0x80306F64); return {}; }
 bool LineLineIntersect(EVec2, EVec2, EVec2, EVec2, EVec2 &) { SIMMY_STUB("LineLineIntersect(EVec2, EVec2, EVec2, EVec2, EVec2 &)", 0x80306F70); return {}; }
-bool IsOnRightOf(EVec2, EVec2, EVec2) { SIMMY_STUB("IsOnRightOf(EVec2, EVec2, EVec2)", 0x803070A8); return {}; }
-RET_UNKNOWN IsRectTouchingArc(EVec2, EVec2, float, EVec2, EVec2) { SIMMY_STUB("IsRectTouchingArc(EVec2, EVec2, float, EVec2, EVec2)", 0x803070F0); return {}; }
 void CalcTwoSides(float &, float &, float, float, float) { SIMMY_STUB("CalcTwoSides(float &, float &, float, float, float)", 0x80307370); }
 void CalcAdjacentSide(float &, float, float, float) { SIMMY_STUB("CalcAdjacentSide(float &, float, float, float)", 0x80307408); }
 RET_UNKNOWN CalcThreeAngles(float &, float &, float &, float, float, float) { SIMMY_STUB("CalcThreeAngles(float &, float &, float &, float, float, float)", 0x8030746C); return {}; }

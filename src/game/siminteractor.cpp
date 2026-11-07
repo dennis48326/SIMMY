@@ -10,6 +10,7 @@
 #include "simmy/platform.hpp"
 
 #include <algorithm>
+#include <string>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -138,7 +139,7 @@ double InteractorModule__Interactor::GetSelectionRadius() {
 
 // 80209454
 void InteractorModule__Interactor::UpdateObjectHighlights(EIObjectMan* objects) {
-  for (ISimInstance* inst : HouseInstances(objects)) inst->SetHighlight(HighlightFlag(m_player), false);
+  if (objects) objects->TurnOffAllHighlights(static_cast<unsigned int>(m_player));
 }
 
 // ---------------------------------------------------------------------------------------------------
@@ -737,14 +738,19 @@ bool UpdateSimInteractor(int player, float dt) {
   static const bool trace = std::getenv("SIMMY_CTL_TRACE") != nullptr;
   if (trace && _framecount % 60 == 0) {
     int lit = 0;
+    std::string names;
     EHouse* house = _globals.m_house;
     for (ISimInstance* inst : HouseInstances(house ? house->m_objectMan : nullptr))
-      if (inst->m_cursFlags & HighlightFlag(player)) ++lit;
+      if (inst->m_cursFlags & HighlightFlag(player)) {
+        ++lit;
+        if (cXObjectImpl* o = inst->m_xob ? inst->m_xob->GetObjectImplementation() : nullptr) (names += ' ') += o->DebugName();
+      }
     PlumbBob* bob = in->m_plumbBob;
     std::printf("[ctl] f%d p%d cursor %.2f %.2f state %d r %.2f lit %d bob %.2f %.2f %.2f model %p flags %x\n", _framecount,
                 player + 1, in->m_pos.x, in->m_pos.y, in->m_state, in->GetSelectionRadius(), lit, bob ? bob->m_pos.x : 0.0f,
                 bob ? bob->m_pos.y : 0.0f, bob ? bob->m_pos.z : 0.0f, bob && bob->m_model ? static_cast<void*>(bob->m_model->m_model) : nullptr,
                 bob ? bob->m_flags : 0u);
+    if (lit) std::printf("[ctl] f%d p%d lit:%s\n", _framecount, player + 1, names.c_str());
   }
   return true;
 }

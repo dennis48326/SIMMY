@@ -92,7 +92,9 @@ Entry: pause menu tab 4 (buy) / 5 (build) -> flow 0x24 `PAUSE_BUY` / 0x25 `PAUSE
 `InLevelBaseState` makes **`PCTTarget`** ([`pcttarget.cpp`](../src/game/pcttarget.cpp), screen 0x1E "PCT";
 mode 0 buy, 1 build, 2 tombstone). Tabs come from the ELF tables (`sPCT_TabInfo_Buy` 9, `_Build` 7); cells
 are catalogue entries sorted by price; prices, ratings, locks (`GoalUnlock`) and funds
-(`GetSimFunds`/`SetSimFunds`) are shown. While open in a two-player game, only the build/buy player's view is
+(`GetSimFunds`/`SetSimFunds`) are shown. A locked object's description is `cat_locked_msg` with its
+`<unlock_aspiration_points>` tag filled in (`UIDB` string set by `GetLocalizable`, substituted by
+`UIObjectBase::doUIQDStringSubstitution` 80177CA8 -> `UIQDTarget::UIQDSubstitutionStrings`). While open in a two-player game, only the build/buy player's view is
 drawn, full screen (`GameData::SetBuildBuyPlayer`, `ELiveMode::DrawMain`).
 
 **Interactors** (numbers as on GC; PC stand-ins run them from `UpdatePlaceManipulator` in
@@ -140,14 +142,27 @@ flags; run on every room update (`PrepareForBudgetWindow`), each day (0xD8) and 
   (`ISimsObjectModel`, isimsobjectmodel.cpp; `SIMMY_SLOT_OFFSET_OFF=1` to compare, `SIMMY_SLOT_TRACE=1`). A
   multi-tile container's side with room (`IsLegalToPlaceSingleTileAtLocation`) is not chosen.
 - The grid tile object (GUID 0x437) cannot be constructed by the port's object module; its model is drawn
-  directly. The build tools draw no cursor/line preview (their `PreDraw`/`Draw` are empty).
+  directly.
+- The build tools' cursors and previews (`InteractorVisualizer`, interactorvisualizer.cpp; drawn through the
+  house's order table like the other interactors: `SetupDrawCallback` -> `BuildToolPreDraw`, the record's
+  callback -> `BuildToolDraw`, buildtools.cpp). Floor tool: the cursor's two models; with the trigger the
+  room under it in the pattern (`DrawFloorRoomPreview`); anchored, the corner models (the far one green) and
+  the rectangle in the pattern just above the floor (`DrawFloorRectPreview`), lit red while invalid. Wall
+  tool: the anchor and cursor models; dragging, the line-end model green or red and the line as an upright
+  strip 3 high (`DrawVerticalRect`; a room: its four sides), the walls a delete would remove
+  (`DrawPreviewOnAffectedWalls`). Wallpaper tool: the anchor and brush models; dragging, the paper on the wall
+  sides it would cover (`DrawWallpaperRectPreview`) and the strip (red when none), with the trigger the
+  paper round the room (`ERoom/ERoomWall::DrawWallpaperPreview`). The models are drawn in
+  `Player::GetInteractorColor` (1, 1, 3). PC deviation: `DrawVerticalRect` sends EGEVerts
+  (`ERC::TriStrip(EGEVert*)`; the arrays variant of `ERC::TriStrip` is not ported).
 - A wall holding a door or window is not deleted (GC: `ERoom::DeleteWallAtTile` 8002FF8C asks
   `KillArchitecturalObject` 80030104 without killing; the object's GUID is returned and the wall stays).
 - Room wallpaper (the wall painter with the trigger held): `CountWallsInRoomSelection` 802256FC /
   `FinalizePaperForRoom` 80225D70 over the room's tiles and `ERoom::GetNumWalls` (8002DF7C, the rooms'
   lookup table `InitRoomLookupTab` 8002DCF0). GC quirk kept: a diagonal's sides are written after the
-  previous segment's into a small array whose last entry is the room id. The preview drawing
-  (`DrawWallpaperPreview`) is not ported (the tools draw nothing).
+  previous segment's into a small array whose last entry is the room id. The preview is drawn per wall
+  run (`ERoom::DrawWallpaperPreview` 8002E0C4, `ERoomWall::DrawWallpaperPreview` 8002D3C0, `GetWallDims`
+  8002C860).
 - Mouse support stops here: build/buy cursors move with WASD / the stick ([input-and-control.md](input-and-control.md)).
 - `SIMMY_BUILD_TRACE=1` reports rebuilds and tool state; `=2` dumps the wall segments; `SIMMY_DUMP_WORLD=1`
   dumps tiles, rooms and walls at house load.

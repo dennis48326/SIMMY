@@ -7,7 +7,7 @@
 struct Player {
   Player();  // 800594F4
   void Reset(int index);  // 8005950C
-  static RET_UNKNOWN GetInteractorColor();  // 800595AC
+  static EVec3& GetInteractorColor();  // 800595AC (s_interactorColor: 1, 1, 3)
   Neighbor* GetPrimaryNeighbor();  // 800595B8
   RET_UNKNOWN GetSelectedNeighbor();  // 8005965C
 

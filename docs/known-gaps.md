@@ -12,13 +12,20 @@ summary and the deliberate GC behaviour.
 
 - Stale header comments (they say "not ported" for ported code): livemode.cpp, hudtarget.hpp,
   aptviewer.cpp, `thesims.cpp`'s NewState comment.
+- Two-player story start: player 2's sim (neighbour 60) has every morph value 0.0 (head shape and the
+  four face regions; a description's defaults are 1.0 and head 3.0). Since `SimModel::UpdateReweld` is
+  ported these zeros show (minimum face sliders). Check whether that is the GC data or a port default.
+- `SimModel::RebuildModified` (80072E30) only clears the changed flags; GC also rebuilds welded models
+  (`ERModel::RebuildAfterWelding`), which matters only once vertex welding is ported.
 
 ## Simulation
 
 - Unported primitives (logged once, then **treated as true**), none used by a tree on the disc: 0x0A
   tutorial, 0x15 show string, 0x22 UI effect, 0x3D particle effect, person 0x2F reach (it should use the router); 0x39-0x3C HUD
-  primitives (only the debug object `zz_move_a__tron`). `TrySetToNext` kinds other than 0-12 return
-  false.
+  primitives (only the debug object `zz_move_a__tron`). Generic sim calls 0x01 (seat swap, no tree uses
+  it) and 0x21 (`ShowAllObjectDialogs`, only `zz_move_a__tron`) log once and return true.
+- `TrySetToNext` kinds 0/1/2/6/0xC/8 walk object ids in order (GC: the object module's object and person
+  lists, the tile's object list); the order can differ from GC's once ids are reused.
 - `TryUserEvent` formats its string (`ParseUIString`) without showing it, as GC does; `TryPreloadObject`
   never waits (object data is read on demand).
 - Placement: a multi-tile container's side with room is not chosen for a surface object; the grid object
@@ -43,7 +50,7 @@ summary and the deliberate GC behaviour.
 - `ISimsObjectModel::Update`: an object in the slot of an object that is itself carried (stub 8004CBDC
   "carried objects", logged for every held object but only acting for a nested carry, e.g. food on a carried
   plate) does not follow the outer holder's hand; objects held by a sim do (the hand position is ported).
-- `MoveFamilyOntoLot`, `MenuObjectsNear`, the interactor manager, input manager and `SocialModeInteractor`
+- `MoveFamilyOntoLot`, the interactor manager, input manager and `SocialModeInteractor`
   are PC stand-ins (the interactors are tied to the PC keyboard/mouse and co-op layers).
 
 ## UI
@@ -69,8 +76,9 @@ summary and the deliberate GC behaviour.
   modes, `ENCamera` cuts) and the camera's room opacity (`ERoom::IsRoomWallsOpaque/IsRoomRoofOpaque`,
   written but never read) ([camera.md](camera.md)). CAS morph/portrait paths depend on
   aurora readback (headless: blank).
-- Walls: the wallpaper preview drawing (`ERoom::DrawWallpaperPreview`; the build tools draw nothing) and
-  its per-room buffers; `ERoom::GetWallPaperCost` (no caller in the release build). Bound-tree level files
+- Walls: the wallpaper preview's per-room buffers (unused by the preview); `ERoom::GetWallPaperCost` (no
+  caller in the release build). `ERC::TriStrip(int, float*, ...)` (the arrays variant) is not ported; the
+  wall tool's strip is sent as EGEVerts. Bound-tree level files
   (versions 0/1; not reached by any level loaded in the logged runs).
 - A minimised window may accumulate GX work written outside `CanDraw` (untested on Windows).
 

@@ -282,6 +282,15 @@ void cXPersonImpl::SetMotive(int index, float value) {
 
 int ServiceNPCKind(const unsigned char* npc) { return npc ? ERQuickdata::S32(npc, 4) : -1; }
 
+// 8012C2B8
+// The description of the sim's own clothes: kept by its animator while in a costume (+0x604), else
+// its description.
+RET_UNKNOWN cXPersonImpl::GetNormalSimDescription() {
+  SAnimator2* animator = GetSAnimator();
+  if (animator && animator->m_ownClothes) return reinterpret_cast<RET_UNKNOWN>(animator->m_ownClothes);
+  return reinterpret_cast<RET_UNKNOWN>(GetSimDescription());
+}
+
 // 8012B354
 // A person without a sim description whose service NPC record is a dog, cat or monkey (kinds 2..4).
 int cXPersonImpl::IsPet() {

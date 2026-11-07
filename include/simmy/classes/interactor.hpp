@@ -64,6 +64,7 @@ struct InteractorModule__Interactor {
   EVec2 m_rightStick;             // +0x3C the C stick (commands 0x0B, 0x0C)
   int m_leftNeutral = 0;          // +0x44
   int m_rightNeutral = 0;         // +0x48
+  int m_drawState = 0;            // +0x4C set from its draw record before it draws (SetDrawState)
   EVec2 m_extents;                // +0x50
   float m_idleTime = 0.0f;        // +0x58 seconds without input
 };

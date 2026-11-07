@@ -37,7 +37,6 @@ RET_UNKNOWN cXPersonImpl::IsModelLoaded() { SIMMY_STUB("cXPersonImpl::IsModelLoa
 void cXPersonImpl::IncrementSimSocialInterest(float) { SIMMY_STUB("cXPersonImpl::IncrementSimSocialInterest(float)", 0x8012BB8C); }
 double cXPersonImpl::GetSimSocialInterestAsMotiveValue(cXPerson *) { SIMMY_STUB("cXPersonImpl::GetSimSocialInterestAsMotiveValue(cXPerson *)", 0x8012BDD8); return {}; }
 void cXPersonImpl::SetSimSocialIntrestFromMotiveValue(cXPerson *, float) { SIMMY_STUB("cXPersonImpl::SetSimSocialIntrestFromMotiveValue(cXPerson *, float)", 0x8012BF48); }
-RET_UNKNOWN cXPersonImpl::GetNormalSimDescription() { SIMMY_STUB("cXPersonImpl::GetNormalSimDescription(void)", 0x8012C2B8); return {}; }
 cXPerson::cXPerson(int) { SIMMY_STUB("cXPerson::cXPerson(int)", 0x8012C4D0); }
 void cXPerson::setPersonImpl(cXPersonImpl *) { SIMMY_STUB("cXPerson::setPersonImpl(cXPersonImpl *)", 0x8012C684); }
 void cXPerson::CastToPerson() { SIMMY_STUB("cXPerson::CastToPerson(void)", 0x8012C694); }

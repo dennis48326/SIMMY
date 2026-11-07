@@ -33,7 +33,7 @@ use `SIMMY_FIXED_DT=1` or `SIMMY_DET=1` for repeatable timing.
 | Names | `start a b x y z l r up down left right`, sticks `lup ldown lleft lright` / `cup cdown cleft cright` (full deflection), joined with `+`, `p2:` for pad 2 |
 | `SIMMY_PAD_HOLD` | default hold frames (6) |
 | `SIMMY_PAD_GATE` | holds pad 1's scripted presses in the house until conditions hold (`any free dlg idle calm soc rmd bb t<hex> nt<hex> on<id> g<guid> e<guid> w<n> x<cond> k !c a\|b`; see [`padgate.cpp`](../src/game/padgate.cpp)) |
-| `SIMMY_SOAK=<seed>` | random play (walks, camera, interactions, B, Y, X, Z, d-pad, pause tabs, buy/build, quit) with RSS/slow-frame/hang watchdog ([`pc_soak.cpp`](../src/platform/pc_soak.cpp)) |
+| `SIMMY_SOAK=<seed>` | random play (walks, camera, interactions, B, Y, X, Z, d-pad, pause tabs, buy/build, quit) with RSS/slow-frame/hang watchdog ([`pc_soak.cpp`](../src/platform/pc_soak.cpp)); its `[soak] rss` lines also give the lot's clock (days running, hour:minute) |
 | `SIMMY_KBM_TEST` | `"<frame>:<action>;..."`: `key: keyup: tap: move:x,y glide:x,y/n at:<id> ldown lup lclick rdown rup rclick mdown mup wheel:n drag:dx,dy/n mouseout`; the mouse is drawn as a cross in shots |
 | `SIMMY_OVERLAY_TEST` | `"<frame>:<action>,..."`: `f1 open close up down left right a b start l r set:<key>=<value> save sdlquit close2`; the overlay is painted into shots |
 | `SIMMY_DET_REPLAY` | replay a recorded input file ([determinism-and-netplay.md](determinism-and-netplay.md)) |
@@ -167,6 +167,7 @@ Development only: the launcher removes all of them except `SIMMY_INI` from the g
 | `SIMMY_SIM_SPEED=<n>[@<house>]`, `SIMMY_SIM_SPEED_JOB=<n>` | Simulator speed once a house is up / once player 1 has a job |
 | `SIMMY_SIM_TRACE=1` | Simulator dispatches, motives, routes, careers |
 | `SIMMY_TRACE_IDS=98,126` | Also trace those objects |
+| `SIMMY_GSC_TRACE=1` | Each generic sim call id (primitive 0x01) on its first use: the object and tree |
 | `SIMMY_VM_TRACE=1\|<id>`, `SIMMY_VM_TRACE_TREES=<hex>,...`, `SIMMY_VM_TRACE_WHO=<text>` | Primitive trace (all / one object / some trees / name filter) |
 | `SIMMY_INFLUENCE_TRACE=1\|2` | Passive influences added/removed, targets' trees; 2 also every motive change |
 | `SIMMY_FIRE_TEST=<tick>,<id>[,burn]` | Start a fire at object `<id>` when the simulator reaches the tick (`,burn`: run the burn primitive 0x09 on it from player 1's sim) |
@@ -193,6 +194,7 @@ Development only: the launcher removes all of them except `SIMMY_INI` from the g
 | `SIMMY_PLACE_TRACE=1` | Placement event trees run (placed, picked up, user placed / picked up, wall adjacency) |
 | `SIMMY_PLACE_TEST="<tick>:<action>;..."` | At sim ticks: `<guid hex>@x,y[,dir]` buy-place a new object, `grab#<id>` grab and put back, `wall@x,y,seg` delete a wall segment, `chain@x,y` print a tile's object chain, `paperroom@x,y,i[,sell]` paper (strip) the room with WallSet entry i ([`placemanipulator.cpp`](../src/game/placemanipulator.cpp)) |
 | `SIMMY_CTL_TRACE=1`, `SIMMY_COOP_TRACE=1`, `SIMMY_SWITCH_TRACE=1`, `SIMMY_CAM_TRACE=1` | Classic cursor; both players; sim switching; the lot intro camera's steps |
+| `SIMMY_HL_TRACE=1` | Direct control's highlights every 60 frames: the objects the influence map lists at the sim's tile, the lit ones, the sim's location and facing |
 | `SIMMY_KBM_TRACE=1`, `SIMMY_KBM_NOPICK=1` | Keyboard/mouse input made; floor-only mouse picking |
 | `SIMMY_LEAVE_LOT_TEST=<frames>[,<mode>[,<house>]]` | Leave the lot (mode 5 to a house, 4 the story end) |
 | `SIMMY_PRISTINE_SAVE=1` | Save as author mode (pristine reset first) |

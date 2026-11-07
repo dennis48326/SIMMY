@@ -14,12 +14,13 @@
 
 extern float kAspirationPointToMeterRatio;  // treesim.cpp (motive.cpp)
 
+extern const int kTotalAspirationMax = 999999;  // 80500630 (playerfamilyimpl.cpp)
+
 namespace {
 const short kNoActiveIndex = -1;  // WantFear::kNoActiveIndex 8050063A
 const short kNoTarget = 0;        // WantFear::kNoTarget 8050063E
 const int kMaxAdMax = 0x7f;       // WantFear::kMaxAdMax 80500640
 const unsigned int kWantsObjectGUID = 0x9e12bf3cu;
-const int kTotalAspirationMax = 999999;  // 804FDxxx kTotalAspirationMax (playerfamilyimpl.cpp)
 const short kEventBuildBuyCategory = WantFearEvent::kBuildBuyCategory;
 const short kEventBuildBuyWorth = WantFearEvent::kBuildBuyWorth;
 const short kEventBuildBuyWorthPlatinum = WantFearEvent::kBuildBuyWorthPlatinum;

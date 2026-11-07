@@ -64,13 +64,36 @@ so Y cycles forward round the family.
 
 The left stick sets the animator's desired state and direction (walk/run cut at 0.98; Shift on the
 keyboard gives half deflection = walk). `OnCommandPressed` (8020506C): A opens the action menu
-(`ExecuteActionMenu` 802057C8: the objects near the sim, with the object the sim holds always first, so
-carried trash or a newspaper can be used anywhere), B cancels all actions (`[sim] player N cancels: n`), 0x11 switches to
+(`ExecuteActionMenu` 802057C8: the objects the player's direct control highlights, `EIObjectMan::GetObjectsInRect`,
+with the object the sim holds always first, so carried trash or a newspaper can be used anywhere), B cancels all actions (`[sim] player N cancels: n`), 0x11 switches to
 classic control, 0xD/0xE switch sims. A, 0x11 and the switch are **ignored while the selected sim is in
 social mode** (the GC gate). `Update` (80204838) first runs the failed-social-mode-entry checks
 ([simulation.md](simulation.md)). After 120 s without input (`SIMMY_AUTONOMY_IDLE`) the idle player's sim
 is handed to autonomy. Under the HUD, B is read by `H2DTarget::UpdateCancelButton` instead (short: cancel
 the last action; held 30 frames: the action queue's cancel mode).
+
+Highlights (GC): after each update the interactor manager has the interactor redo its highlights
+(`UpdateObjectHighlights` 80205C4C): all the player's highlights off (`EIObjectMan::TurnOffAllHighlights`
+80054C4C), then on for the objects the interaction influence map lists at the sim's tile
+([simulation.md](simulation.md)) that pass `ShouldHighlightObject` (80204C5C): within 5 tiles, their model's
+bounds touching the selection cone (`IsRectTouchingArc` 803070F0, 20 degrees each side of the sim's facing)
+and with something for this player to do (`ISimInstance::HasInteractions`), plus the people within 1.5 tiles
+that pass it with no wall between. For a sim under direct control the menu only offers an object's
+entries whose activation area holds the sim (`ObjTestSim::AppendInteractionsForMenu`, PC
+`CollectInteractionsForObject`), so an object glows only when the sim stands where it could use it and
+faces it. In social mode the player's highlights are off. `SIMMY_HL_TRACE=1` prints what is listed and lit
+every 60 frames.
+
+The glow (`ISimsObjectModel::BlendHighlights` 8004F02C, from `DoLightingCalculation`): only in the view of
+the player whose highlight it is (DAT_80475E98, the player being drawn). When an object's highlight comes on,
+its lights are blended toward the player's colour (player 1 1, 1, 0.65; player 2 1.1, 0.65, 0.65): the
+ambient toward the colour, the other lights toward black, by `_hlstartamp` 0.6 x the lights' brightness
+(at least 1.3), fading out over `_hlstartlen` (0.35 of the highlight's time at 0.2 a second: 1.75 s). The
+pulse after it (`_hlpulseamp`) is 0 on the disc, so a highlighted object flashes once and then looks
+normal until its highlight goes off and on again. GC quirk kept: the highlight's time
+(`UpdateHighlightAnim`) is advanced during the objects' update, where DAT_80475E98 is still the last player
+drawn; in two-player games that is player 2, so player 1's highlight times stay at 0 and player 1's
+highlighted objects keep the full flash.
 
 ### Classic (cursor) control ([`siminteractor.cpp`](../src/game/siminteractor.cpp), [`siminteractor.hpp`](../include/simmy/classes/siminteractor.hpp))
 
