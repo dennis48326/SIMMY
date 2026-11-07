@@ -10,6 +10,7 @@
 // tile, with the tile's wallpaper. A wall model has five parts (kWallShaderOrder): the two faces,
 // the cut-down top, and the caps; the walls up / down state picks which are drawn.
 #pragma once
+#include <map>
 #include <vector>
 
 // 0: walls up, 1: fading, 2: walls down.
@@ -21,7 +22,7 @@ struct ERoom {
   ERoom();  // 8002D778
   ~ERoom();  // 8002D88C
   void InitRoomLookupTab();  // 8002DCF0
-  RET_UNKNOWN GetNumWalls(unsigned short);  // 8002DF7C
+  int GetNumWalls(unsigned short room);  // 8002DF7C
   RET_UNKNOWN GetWallPaperCost(unsigned int, unsigned short);  // 8002DFEC
   RET_UNKNOWN DrawWallpaperPreview(ERC *, unsigned short, EVec2 &);  // 8002E0C4
   RET_UNKNOWN IsRoomWallsOpaque(int, int);  // 8002E168
@@ -42,14 +43,16 @@ struct ERoom {
   EIWallPart* GetWallFromTileAndSegment(TileWallsSegment segment, CTilePt& tile);  // 8002FE18
   static RET_UNKNOWN DeleteERoomWallContainingSegment(TileWallsSegment, CTilePt &, CTilePt &);  // 8002FEAC
   static int DeleteWallAtTile(CTilePt& tile, TileWalls& walls, TileWallsSegment segment);  // 8002FF8C
-  void KillArchitecturalObject(CTilePt &, TileWallsSegment, int &, bool);  // 80030104
+  static int KillArchitecturalObject(CTilePt& tile, TileWallsSegment segment, int& guid, bool kill);  // 80030104
 
   int m_field00 = 0;                         // +0x00
   // +0x04, +0x10, +0x1C, +0x28: the runs of segments 8, 4, 2 and 1; +0x34 .. +0x58 the diagonals'
   // (GC: TNodeList<ERoomWall*>, 0x0C bytes each, with an array of pointers to them at +0x70).
   std::vector<ERoomWall*> m_walls[8];
   std::vector<ERoomWall*> m_fences;          // +0x64
-  // +0x94, +0xA0: ERedBlackTree (the room lookup tables, InitRoomLookupTab)
+  // +0x94 ERedBlackTree: per room id, its runs (InitRoomLookupTab; GetNumWalls). +0xA0: per room a 0x20-byte
+  // buffer (the wallpaper preview's: DrawWallpaperPreview, not ported; PC: not kept).
+  std::map<unsigned short, std::vector<ERoomWall*>> m_roomWalls;
   float m_field_AC = 300.0f;                 // +0xAC
   float m_field_B0 = 200.0f;                 // +0xB0
 
@@ -74,7 +77,7 @@ struct ERoomWall {
   RET_UNKNOWN getWallNormalOnSideOfCursor(EVec3 &, EVec3 &, EVec2 &, EVec2 &);  // 8002D308
   RET_UNKNOWN DrawWallpaperPreview(ERC *, EVec2 &);  // 8002D3C0
   static RET_UNKNOWN GetWallPaperCost(int, unsigned short);  // 8002DE70
-  RET_UNKNOWN CountWalls();  // 8002F81C
+  int CountWalls();  // 8002F81C
   RET_UNKNOWN HasSegment(TileWallsSegment, CTilePt &, CTilePt &);  // 8002F84C
   RET_UNKNOWN DeleteWallAtTile(CTilePt &);  // 8002FA34
   void RemoveWallsFromWorld();  // 8002FBEC

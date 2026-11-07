@@ -8,6 +8,7 @@
 #include <cstring>
 
 cSimulatorImpl* Globs_pSimulator = nullptr;  // Globs::pSimulator
+void PlacementTestTick(int ticks);            // placemanipulator.cpp
 
 namespace {
 int s_bSkipATimeAdvance = 0;  // bSkipATimeAdvance: the next tick's two seconds are skipped
@@ -15,9 +16,10 @@ int s_bStupidMode = 0;        // Globs::bStupidMode
 int s_freeWillDefault = 1;    // DAT_804BBBC0 (global 0xF at Init)
 
 // GlobalDispatch (game/thesims.cpp): the simulator's broadcasts (0xBD speed or pause changed, 0xD7 a game
-// minute passed, 0xD8 a day, 0xD9 the time of day). PC: their listeners (the HUD, objects' room effects,
-// the neighbourhood) are not ported; SIMMY_SIM_TRACE=1 prints them.
-void GlobalDispatch(int message, int) {
+// minute passed, 0xD8 a day, 0xD9 the time of day). PC: of their listeners only the house is ported
+// (HouseImpl::DoCommand: 0xD8 the lot data, 0xD9 the rooms' lighting); SIMMY_SIM_TRACE=1 prints them.
+void GlobalDispatch(int message, int param) {
+  HouseDispatch(static_cast<short>(message), param);
   static const bool trace = std::getenv("SIMMY_SIM_TRACE") != nullptr;
   if (trace && message != 0xd7 && Globs_pSimulator)
     std::printf("[sim] dispatch 0x%x at day %d %02d:%02d:%02d tick %d\n", message,
@@ -302,6 +304,7 @@ int cSimulatorImpl::SimulateOneTick() {
       std::printf("[sim] fire test at tick %d: %s\n", m_ticks, StartFireAtObjectLoc(o, fire) ? "started" : "refused");
     }
   }
+  PlacementTestTick(m_ticks);  // PC development aid: SIMMY_PLACE_TEST (placemanipulator.cpp)
   if (message) GlobalDispatch(message, 0);
   if (hourChanged) {
     const int before = GetTimeOfDay();

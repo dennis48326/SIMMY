@@ -497,6 +497,21 @@ int cFixedWorldImpl::Load(iResFile* file, int) {
 // 8014CDD4
 // The tile's walls (none off the lot or when the wall array does not match the lot). The diagonal
 // flags say which neighbours (x-1, y-1, y+1, x+1) have diagonals; segments 8 and 4 take the style and
+// 80152018
+// The tile has any wall segment (its walls' byte 0). GC: no bounds check.
+bool cFixedWorldImpl::HasWalls(CTilePt& tile) {
+  if (!m_walls || tile.GetX() < 0 || tile.GetY() < 0 || tile.GetX() >= m_xSize || tile.GetY() >= m_ySize) return false;  // PC guard
+  return m_walls->At(tile.GetX(), tile.GetY())[0] != 0;
+}
+
+// 80151FB0
+// The tile has all of `segments`.
+bool cFixedWorldImpl::HasWalls(CTilePt& tile, TileWallsSegment segments) {
+  if (!m_walls || tile.GetX() < 0 || tile.GetY() < 0 || tile.GetX() >= m_xSize || tile.GetY() >= m_ySize) return false;  // PC guard
+  const unsigned int s = static_cast<unsigned int>(segments.value);
+  return (m_walls->At(tile.GetX(), tile.GetY())[0] & s) == s;
+}
+
 // placement of the next tile's segment 2 (along y) and 1 (along x), which those tiles keep.
 TileWalls cFixedWorldImpl::GetWall(CTilePt& tile) {
   const int x = tile.GetX(), y = tile.GetY();
@@ -979,8 +994,11 @@ void cFixedWorldImpl::ComputeRooms(int level) {
   }
   // GC: GlobalDispatch(0xEC, level): HouseImpl::DoCommand tells the object module (vtable 0x7C) and
   // recomputes the rooms' statistics.
-  if (Globs_pObjectModule) Globs_pObjectModule->UpdateRooms(level);
-  manager->ComputeRooms();
+  HouseDispatch(0xec, level);
+  if (!Globs_pHouse) {  // PC: no house yet (the house object is made with the first lot)
+    if (Globs_pObjectModule) Globs_pObjectModule->UpdateRooms(level);
+    manager->ComputeRooms();
+  }
   m_maxY = -1;
   m_minX = m_xSize;
   m_minY = m_ySize;

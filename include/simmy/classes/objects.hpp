@@ -582,9 +582,9 @@ struct cXObjectImpl : public cXObject {
   void GetSim();  // 800EB450
   RET_UNKNOWN GetBuildModeType();  // 800EB488
   bool IsSupport();  // 800EB4B4
-  RET_UNKNOWN CanContributeLight();  // 800EB4F8
-  RET_UNKNOWN GetLightingContribution();  // 800EB528
-  RET_UNKNOWN GetObjectLightSource();  // 800EB554
+  int CanContributeLight();  // 800EB4F8
+  int GetLightingContribution();  // 800EB528
+  int GetObjectLightSource();  // 800EB554
   bool IsBroken();  // 800EB580
   bool IsDirty();  // 800EB5BC
   RET_UNKNOWN IsBurning();  // 800EB5F8

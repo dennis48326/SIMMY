@@ -54,6 +54,13 @@ CTilePt cXObjectImpl::GetCTilePt() const { return CTilePt(m_location[1] >> 4, m_
 
 // 800EB0C4
 int cXObjectImpl::GetData(int index) { return m_data[index]; }
+// 800EB4F8
+// It lights its room: data 0x28 bit 0x400.
+int cXObjectImpl::CanContributeLight() { return static_cast<unsigned short>(m_data[0x28]) >> 10 & 1; }
+// 800EB528
+int cXObjectImpl::GetLightingContribution() { return m_data[0x33]; }
+// 800EB554
+int cXObjectImpl::GetObjectLightSource() { return m_data[0x10]; }
 // 800EB2CC
 const ObjDefinition* cXObjectImpl::GetDef() { return m_def; }
 // 800EB2D4

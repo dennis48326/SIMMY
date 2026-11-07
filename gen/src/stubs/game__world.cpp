@@ -10,8 +10,6 @@ RET_UNKNOWN cFixedWorldImpl::OutOfRoutableExtent(FTilePt &) const { SIMMY_STUB("
 RET_UNKNOWN cFixedWorldImpl::OutOfBounds(FTilePt &) const { SIMMY_STUB("cFixedWorldImpl::OutOfBounds(FTilePt &) const", 0x80151B58); return {}; }
 RET_UNKNOWN cFixedWorldImpl::OutOfGrid(FTilePt &) const { SIMMY_STUB("cFixedWorldImpl::OutOfGrid(FTilePt &) const", 0x80151BC4); return {}; }
 RET_UNKNOWN cFixedWorldImpl::IsGrassAt(CTilePt &) { SIMMY_STUB("cFixedWorldImpl::IsGrassAt(CTilePt &)", 0x80151C98); return {}; }
-bool cFixedWorldImpl::HasWalls(CTilePt &, TileWallsSegment) { SIMMY_STUB("cFixedWorldImpl::HasWalls(CTilePt &, TileWallsSegment)", 0x80151FB0); return {}; }
-bool cFixedWorldImpl::HasWalls(CTilePt &) { SIMMY_STUB("cFixedWorldImpl::HasWalls(CTilePt &)", 0x80152018); return {}; }
 RET_UNKNOWN cFixedWorldImpl::GetWallStorage(CTilePt &) { SIMMY_STUB("cFixedWorldImpl::GetWallStorage(CTilePt &)", 0x80152080); return {}; }
 void DestroyTheWorld() { SIMMY_STUB("DestroyTheWorld(void)", 0x801522C0); }
 void ValidateTheWorld() { SIMMY_STUB("ValidateTheWorld(void)", 0x8015230C); }

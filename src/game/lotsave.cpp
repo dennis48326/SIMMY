@@ -115,20 +115,31 @@ void ComputeObjectStats(int* evictValue, int* buildValue, bool* any1, bool* any9
   }
 }
 
-// PC stand-in for HouseImpl::ComputeAndStoreLotData (800BBAE8; HouseImpl is not ported): the objects'
-// value and the architecture's (walls, wallpaper, floors) plus the build items into the simulator; global
-// 0x16 set. GC: also the flags to the house's lot record (+0x14, vtables 0x104 / 0x114).
-void ComputeAndStoreLotData() {
+// HouseImpl::ComputeAndStoreLotData (800BBAE8, below): the objects' value (ComputeStats; PC: the
+// stand-in above) and the architecture's (walls, wallpaper, floors) plus the build items into the
+// simulator, the family's phone (an object with data 0x3B 1) and baby (9) flags (vtables 0x104 / 0x114);
+// global 0x16 set (GC: the low half of the word ComputeArchValue was given, set to 1 after the call).
+void ComputeAndStoreLotData(FamilyImpl* family) {
   int objects = 0, build = 0;
   bool any1 = false, any9 = false, outside = false;
   ComputeObjectStats(&objects, &build, &any1, &any9, &outside);
   bool built = false;
   const int arch = Globs_pFixedWorld ? static_cast<int>(Globs_pFixedWorld->ComputeArchValue(&built)) : 0;
+  if (family) {
+    family->SetHasPhone(any1);
+    family->SetHasBaby(any9);
+  }
   if (!Globs_pSimulator) return;
   Globs_pSimulator->SetObjectsValue(objects);
   Globs_pSimulator->SetArchValue(arch + build);
   Globs_pSimulator->SetGlobal(0x16, 1);
-  std::printf("[save] lot value: objects %d, architecture %d + build items %d\n", objects, arch, build);
+  // PC: printed when the values change (the rooms' updates call this often).
+  static int last[2] = {-1, -1};
+  if (last[0] != objects || last[1] != arch + build) {
+    last[0] = objects;
+    last[1] = arch + build;
+    std::printf("[save] lot value: objects %d, architecture %d + build items %d\n", objects, arch, build);
+  }
 }
 
 // PC stand-in for NeighborhoodImpl::DeleteCharacter (800CF5C4; the neighbourhood is the world side's):
@@ -161,7 +172,8 @@ int DeleteUnusedCharacter(NeighborhoodImpl* hood, Neighbor* n) {
 // ('HOUS'), the world ('Arry') and the objects ('objt', 'ObjM', 'DUMP') into `file`. 0: saved.
 int HouseSaveFile(NghResFile* file) {
   const int version = Globs_iSaveFileVersion;
-  ComputeAndStoreLotData();  // HouseImpl vtable 0x8C
+  if (Globs_pHouse) Globs_pHouse->ComputeAndStoreLotData();  // HouseImpl vtable 0x8C
+  else ComputeAndStoreLotData(nullptr);
   if (Globs_pSimulator) ReconSaveObject(Globs_pSimulator, file, kSimulatorResType, kSimulatorResourceID, version);
   ReconSaveObject(&s_house, file, kHouseResType, kHouseResourceID, version);
   if (Globs_pFixedWorld) Globs_pFixedWorld->Save(file, version);
@@ -230,5 +242,5 @@ RET_UNKNOWN NeighborhoodImpl::SaveHouse(NghResFile* file) {
 }
 
 // 800BBAE8
-// The lot data (the stand-in above: HouseImpl's own lot record is not kept on PC).
-void HouseImpl::ComputeAndStoreLotData() { ::ComputeAndStoreLotData(); }
+// The lot data into the simulator and the house's family (see the helper above).
+void HouseImpl::ComputeAndStoreLotData() { ::ComputeAndStoreLotData(m_family); }

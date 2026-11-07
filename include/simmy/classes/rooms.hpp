@@ -34,7 +34,7 @@ struct Room {
   void AbsorbNewRoomList(std::vector<CTilePt>& tiles);  // 8013836C
   int IsTileInRoom(CTilePt& tile);  // 801383B4
   int IsOutside();  // 80138420
-  void SetOverheadLights(bool);  // 80138534
+  void SetOverheadLights(bool on);  // 80138534
   RET_UNKNOWN GetPeopleCount();  // 801385B4
   double GetAmbientLight() const;  // 80138684
   RET_UNKNOWN IsPool();  // 801386D4
@@ -44,7 +44,8 @@ struct Room {
   unsigned short m_id = 0;              // +0x00
   unsigned short m_lightingGroup = 0;   // +0x02 rooms sharing lights (ChangeLightingGroup)
   std::vector<CTilePt> m_tiles;         // +0x04
-  // +0x14 TArray (0x0C each): not ported.
+  // +0x14 TArray (0x0C each): the world positions (5 up) of its type 1 light sources (CollectObjectStats).
+  // PC: not kept (no reader in the port).
   std::vector<PenaltyRect> m_partition; // +0x24 GetPartition
   int m_inUse = 0;                      // +0x34 holds a computed room
   float m_field38 = 1.0f;               // +0x38 the room's light colour scale (SetRoomIntensityScale)
@@ -52,13 +53,28 @@ struct Room {
   float m_field40 = 1.0f;               // +0x40
   int m_field44 = 0;                    // +0x44 the scale changed (for EHouse::UpdateRoomLights)
   float m_field48 = 0;                  // +0x48 the overhead lights (EHouse::UpdateRoomLights: 0 by day)
-  int m_tileStats = 0;                  // +0x4C twice the area (CollectTileStats)
+  int m_tileStats = 0;                  // +0x4C twice the area (CollectTileStats: 2 a whole tile, 1 a half)
+  int m_floorStats = 0;                 // +0x50 of those, the floored ones (same units)
   int m_objectCount = 0;                // +0x54 the objects on its tiles (CollectObjectStats)
-  float m_field7C = 0.0f;               // +0x7C the outdoor score of its objects
+  int m_portalLight = 0;                // +0x58 the light of its doors and windows (data 0x33, type 8)
+  int m_objectLight = 0;                // +0x5C the light of its other objects (data 0x33)
+  int m_data27Sum = 0;                  // +0x60 its objects' data 0x27
+  int m_impactSum = 0;                  // +0x64 its objects' room impact (data 7)
+  int m_impactCount = 0;                // +0x68 objects with a room impact of 0 or more
+  int m_count3B4 = 0;                   // +0x6C objects with data 0x3B 4
+  int m_count3B5to7 = 0;                // +0x70 objects with data 0x3B 5..7
+  int m_wallSides = 0;                  // +0x74 its wall sides of a scored style (IsScoredStyle)
+  int m_paperedSides = 0;               // +0x78 of those, the papered ones
+  float m_field7C = 0.0f;               // +0x7C its score (ComputeRoom; scope 0x17 data 4)
+  float m_ambientLight = 0.0f;          // +0x80 0..1 (ComputeRoom)
   int m_statsDirty = 1;                 // +0x84 its statistics are to be recollected
   int m_outsideKnown = 0;               // +0x88 IsOutside's answer is cached
   int m_outside = 0;                    // +0x8C
+  int m_overheadLights = 0;             // +0x90 its overhead lights are on (SetOverheadLights)
+  int m_pool = 0;                       // +0x94 (IsPool)
   RoomManager* m_manager = nullptr;     // +0x98
+  int m_lightSources = 0;               // +0x9C its light-giving objects other than doors and windows
+  int m_people = 0;                     // +0xA0 the people on its tiles
 };
 
 // Both halves of a tile split by a diagonal wall: the room and side of each (0xFFFF: no room yet).

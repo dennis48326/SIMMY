@@ -363,6 +363,16 @@ bool TileWalls::HasDiagonalFence() const {
   return false;
 }
 
+// 8014706C
+// sRotateDiagonalLookup[quarters][side] (GenerateRotationLookups 80145EF0 fills it): a diagonal's side
+// 1..4 steps round by the quarter turns (back from 4 to 1); 0 stays 0.
+int TileWalls::RotateDiagonal(DiagonalSideSelector side, int quarters) {
+  const int s = static_cast<int>(side.value);
+  if (s < 1 || s > 4 || quarters < 0 || quarters > 3) return 0;  // GC: the table's zeroes (side 0)
+  const int r = s + quarters;
+  return r > 4 ? r - 4 : r;
+}
+
 // 80147050
 // sRotateSegmentLookup[quarters][segments] (GenerateRotationLookups 80145EF0 fills it): each edge
 // segment steps round (1 -> 2 -> 4 -> 8 -> 1) a quarter turn at a time; the diagonals swap on odd turns.

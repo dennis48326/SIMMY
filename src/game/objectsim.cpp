@@ -416,7 +416,11 @@ int cXObjectImpl::TryUpdate(StackElem* frame, const unsigned char* params) {
   }
   switch (what) {
     case 1: SIMMY_STUB("primitive 0x07 TryUpdate: GlobalDispatch 0xEE (the object's room lighting, 0xED)", 0x801058E0); break;
-    case 2: SIMMY_STUB("primitive 0x07 TryUpdate: RoomManager::RoomScoreChanged", 0x801058E0); break;
+    case 2:
+      // The object's room's score (not the 0xFFFB "no room").
+      if (o->GetRoom() != 0xfffb)
+        if (RoomManager* rooms = RoomManager::GetRoomManager()) rooms->RoomScoreChanged(o->GetRoom());
+      break;
     case 3: SIMMY_STUB("primitive 0x07 TryUpdate: the 3D instance's refresh (+0x320 vtable 0x14)", 0x801058E0); break;
     case 4: SIMMY_STUB("primitive 0x07 TryUpdate: the house's light update (EHouse vtable 0x8C)", 0x801058E0); break;
     default: break;
@@ -1577,15 +1581,22 @@ int cXObjectImpl::TrySnap(StackElem* frame, const unsigned char* params) {
     }
   }
   const int was[2] = {m_location[0], m_location[1]};
+  HierUnlink(this);  // Place: TestAndPlace out of the world
   m_location[0] = pos[0];
   m_location[1] = pos[1];
   m_data.WriteVar(1, static_cast<short>(dir));
   // cXPersonImpl::Place (vtable 0x13C): the container's id and slot (data 2, 3; GC: PlacementSpec).
   m_data.WriteVar(2, static_cast<short>(container ? container->m_id : 0));
-  m_data.WriteVar(3, static_cast<short>(container ? containerSlot : 0));
+  m_data.WriteVar(3, static_cast<short>(container ? containerSlot : -1));
+  {
+    PlaceSpec spec(pos, m_level, container, containerSlot);  // TestAndPlace: the new site
+    HierLink(this, spec);
+  }
   m_data.WriteVar(0x34, 0);
   UpdateObjectRoomID(this);  // Place -> SetLocation: ResolveRoomID, data 0x1D
   PassiveInfluenceLocationChanged(this, was[0], was[1]);
+  if (GetType() == 2)
+    if (auto* person = dynamic_cast<cXPersonImpl*>(this)) person->UpdateCurrentRoom();  // cXPersonImpl::Place
   // A person's animator takes the new place (TrySnap(FTilePt&, ...) 8010E084: SnapToGrid and the
   // person's direction), unless the container's object slot has flag 2.
   const int slotFlags = container ? ObjectSlotFlags(container, containerSlot) : 0;
@@ -1686,20 +1697,23 @@ void StepToward(int pos[2], int dir) {
   pos[1] += step[dir & 7][1];
 }
 
-// cXObjectImpl::Place (vtable 0x13C), PC: `object` at `pos` on `level`, in `container`'s slot 0 (data
-// 2 / 3) or on its tile (it leaves the tile it was the object of); then cXObjectImpl::SimObjectPlaced
+// cXObjectImpl::Place (vtable 0x13C), PC: `object` at `pos` on `level`, in `container`'s slot `slot`
+// (data 2 / 3) or on its tile: it leaves its site and takes the new one in the slot hierarchy
+// (TestAndPlace's two halves: the tile chain or the container's slot); then cXObjectImpl::SimObjectPlaced
 // (800EA6B0): it and what it holds are no longer carried (cursor flags 0x40 / 0x80) and take their
-// place. GC: the slot's position and height, the tile's object chain, the room's impact and lighting.
-void PlaceObject(cXObjectImpl* object, const int pos[2], int level, cXObjectImpl* container) {
-  ObjectModuleImpl* module = Globs_pObjectModule;
-  if (module) module->SeverTile(object);
+// place. GC: the slot's position and height, the room's impact and lighting.
+void PlaceObject(cXObjectImpl* object, const int pos[2], int level, cXObjectImpl* container, int slot = 0) {
+  HierUnlink(object);
   const int was[2] = {object->m_location[0], object->m_location[1]};
   object->m_location[0] = pos[0];
   object->m_location[1] = pos[1];
   object->m_level = level;
   object->m_data.WriteVar(2, static_cast<short>(container ? container->m_id : 0));
-  object->m_data.WriteVar(3, 0);
-  if (!container && module && pos[0] >= 0 && pos[1] >= 0) module->SetSiteTile(object);
+  object->m_data.WriteVar(3, static_cast<short>(container ? slot : -1));
+  if (container || (pos[0] >= 0 && pos[1] >= 0)) {
+    PlaceSpec spec(pos, level, container, slot);
+    HierLink(object, spec);
+  }
   UpdateObjectRoomID(object);  // GC Place -> SetLocation: ResolveRoomID, data 0x1D
   PassiveInfluenceLocationChanged(object, was[0], was[1]);
   if (object->GetType() == 2) {
@@ -2079,8 +2093,7 @@ int cXObjectImpl::TryDropOnto(StackElem* frame, const unsigned char* params) {
   cXObjectImpl* held = GetContainedObject(mySlot);
   if (!held) return 0;
   const int pos[2] = {target->m_location[0], target->m_location[1]};
-  PlaceObject(held, pos, target->m_level, target);  // GC: CanPlace then Place (vtable 0x134 / 0x13C)
-  held->m_data.WriteVar(3, theirSlot);
+  PlaceObject(held, pos, target->m_level, target, theirSlot);  // GC: CanPlace then Place (vtable 0x134 / 0x13C)
   return 1;
 }
 

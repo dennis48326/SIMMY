@@ -107,6 +107,20 @@ void BGExec_LoadHouse() {
       // objects' room ids), before NeighborhoodImpl::LoadHouse runs the objects' PostLoad: load trees
       // ask about rooms (the room scope).
       if (Globs_pRoomManager) Globs_pFixedWorld->ComputeRooms(0);
+      // NeighborhoodImpl::LoadHouse, after HouseImpl::LoadFile and before the objects' PostLoad: the house
+      // number (+0x70), the house's family and simulator globals 9 / 10.
+      if (Globs_pNeighborhood) Globs_pNeighborhood->GetImpl()->SetHouseNum(static_cast<int>(house));  // GC: +0x70 after LoadFile
+      // NeighborhoodImpl::LoadHouse: the house's family is the one living in it (vtable 0x12C), else
+      // family 0 (vtable 0x124); simulator global 9 its number.
+      if (Globs_pNeighborhood) {
+        FamilyImpl* family = Globs_pNeighborhood->GetFamilyInHouse(static_cast<int>(house));
+        if (!family || house == 0) family = Globs_pNeighborhood->GetFamily(0);
+        Globs_pHouse->m_family = family;
+        if (Globs_pSimulator) {
+          if (family) Globs_pSimulator->SetGlobal(9, static_cast<short>(family->GetNumber()));
+          Globs_pSimulator->SetGlobal(10, static_cast<short>(house));
+        }
+      }
       // HouseImpl::LoadFile: the objects' PostLoad (their load trees: the scenario makes and places the
       // people of the family in the house).
       if (Globs_pObjectModule) Globs_pObjectModule->PostLoad(Globs_pNghResFile, -1, false);
@@ -118,7 +132,6 @@ void BGExec_LoadHouse() {
       }
       // NeighborhoodImpl::LoadHouse: the time-of-day shaders take the clock's state.
       if (Globs_pSimulator) ERShader::InitDayNightShaders(Globs_pSimulator->GetGlobal(0), Globs_pSimulator->GetGlobal(5));
-      if (Globs_pNeighborhood) Globs_pNeighborhood->GetImpl()->SetHouseNum(static_cast<int>(house));  // GC: +0x70 after LoadFile
       // NeighborhoodImpl::LoadHouse (PC stand-in): the family's people onto the lot (the players' sims
       // taken from the people the load trees made).
       MoveFamilyOntoLot(_globals.m_house);
@@ -1172,12 +1185,14 @@ void ELiveMode::Update() {
     _globals.SetCameraDirector(_globals.CameraDirectorOf(0));
     _globals.SetCam(players[0].m_cam);
   }
-  SIMMY_STUB("ELiveMode::Update: CameraManager, RoomManager, free will", 0x8008E4C0);
+  SIMMY_STUB("ELiveMode::Update: CameraManager, free will", 0x8008E4C0);
   ESpriteRenderMan::Instance()->Update();  // GC: after the rooms (DAT_80475ED8)
   if (Globs_pSimulator) Globs_pSimulator->Simulate();
   for (int i = 0; i < 2; ++i)
     if (CameraDirector* d = _globals.CameraDirectorOf(i)) d->Update();
   if (m_introCamera) UpdateIntroCamera();
+  // GC: after the cameras, the rooms' statistics when something changed them.
+  if (Globs_pRoomManager) Globs_pRoomManager->UpdateRooms();
   if (_globals.m_house && !m_paused) {
     // InteractorManager::Update (PC: the direct-control interactors), then CameraManager::Update
     // moves each player's camera (ESimsCam::Update).

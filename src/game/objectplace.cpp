@@ -3,13 +3,11 @@
 // Turn), game/mtobject.cpp (cXMTObjectImpl's: a multi-tile object places, turns and picks up all its
 // parts) and game/walls.cpp (CheckWallFlags, SectWall). See placement.hpp.
 //
-// PC: on the port's world model (placement.hpp). Not ported here (logged once): the slot hierarchy
-// (objects in other objects' slots, HierarchySite), the objects' trees run on placement events
-// (RunTree 5 "allow intersection", 6 wall adjacency changed, 9 placed, 0xA picked up, 0xB/0xC user placed /
-// picked up: cXObjectImpl::RunTree runs a tree to its end on the object's stack (TreeSim vtable 0xA4),
-// which the port's TreeSim does not offer), the zero-extent override's 0x437 objects. Chair facing
-// (UpdateChairFacing), the tiles' support flags (SetSupportFlag) and wall adjacency
-// (UpdateWallAdjacency) are ported.
+// PC: on the port's world model (placement.hpp). Ported: the slot hierarchy (sites, the tile chain:
+// HierSetSite / HierSever / ...), the placement events' trees (6 wall adjacency changed, 9 placed, 0xA
+// picked up, 0xB / 0xC user placed / picked up), chair facing (UpdateChairFacing), the tiles' support flags
+// (SetSupportFlag), wall adjacency (UpdateWallAdjacency), TestIntersection's "allow intersection" trees
+// (entry 5). Not ported: the zero-extent override's 0x437 objects.
 #include "simmy/types_gen.hpp"
 #include "simmy/unported_globals.hpp"
 #include "simmy/classes/placement.hpp"
@@ -17,6 +15,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 
 int gPlacementError = 0;                // 804FDC90
 cXObject* gPlacementConflict = nullptr; // 804FDC94
@@ -129,31 +128,207 @@ bool IsPartOfMe(cXObjectImpl* self, cXObjectImpl* other) {
   return false;
 }
 
-// 800C6EBC ObjectsAtTile / the tile's object chain (ObjectModule vtable 0x254, GetNextObjectSibling):
-// the objects whose site is the tile. PC: the module's objects at that tile and level that no other
-// object holds (data 2).
+}  // namespace
+
+// ---------------------------------------------------------------------------------------------------
+// The slot hierarchy (game/object.cpp): an object's site is a tile (the module's tile map names the
+// last object placed there; the one it displaced is chained under it, its slot vector entry 0) or an
+// entry of another object's slot vector (entry 0: the tile chain, k + 1: object slot k). Data 0x1A
+// names the object above (0: none), data 0xE the entry there (-1: a tile's own object).
+// PC: the slot vector is cXObjectImpl::m_slotContents (grown as needed); the tile map entry an object
+// holds is remembered (m_siteTile), as the PC walker moves a person's location between places.
+
+namespace {
+cXObjectImpl* ObjectByID(int id) {
+  cXObject* x = Globs_pObjectModule && id ? Globs_pObjectModule->GetObjectFromID(id) : nullptr;
+  return x ? x->GetObjectImplementation() : nullptr;
+}
+}  // namespace
+
+// 800DD15C cXObjectImpl::HierGetSite
+// The object's site: its container (the object data 0x1A names), the entry (data 0xE), its location
+// and level; valid when the location is on the lot (cFixedWorld vtable 0x5C OutOfBounds). PC: a tile's
+// own object's location is the tile it holds.
+void HierGetSite(cXObjectImpl* o, HierSite& site) {
+  site.container = ObjectByID(o->GetData(0x1a));
+  CTilePt tile = o->GetCTilePt();
+  site.valid = World() && !World()->OutOfBounds(tile) ? 1 : 0;
+  site.slot = o->GetData(0xe);
+  site.pos[0] = o->m_location[0];
+  site.pos[1] = o->m_location[1];
+  site.level = o->m_level;
+  if (!site.container && o->m_siteTile >= 0) {
+    site.pos[0] = (o->m_siteTile >> 6) * 16 + 8;
+    site.pos[1] = (o->m_siteTile & 0x3f) * 16 + 8;
+    site.valid = 1;
+  }
+}
+
+// 800DD114 cXObjectImpl::HierGetChild: the object in entry `i` of its slot vector.
+cXObjectImpl* HierGetChild(cXObjectImpl* o, int i) {
+  if (i < 0 || i >= static_cast<int>(o->m_slotContents.size())) return nullptr;  // PC guard
+  return ObjectByID(o->m_slotContents[static_cast<size_t>(i)]);
+}
+
+// 800DCF2C cXObjectImpl::HierGetParent: the object data 0x1A names.
+cXObjectImpl* HierGetParent(cXObjectImpl* o) { return ObjectByID(o->GetData(0x1a)); }
+
+// 800DCD4C cXObjectImpl::GetNextObjectSibling: the object chained under it at its tile.
+cXObjectImpl* GetNextObjectSibling(cXObjectImpl* o) { return HierGetChild(o, 0); }
+
+// 800DCD70 cXObjectImpl::GetPrevObjectSibling: the object it is chained under (entry 0), if any.
+cXObjectImpl* GetPrevObjectSibling(cXObjectImpl* o) { return o->GetData(0xe) == 0 ? HierGetParent(o) : nullptr; }
+
+// 800DD268 cXObjectImpl::HierSever
+// The object leaves its site: its container's entry, or the tile map (0); data 0x1A 0, 0xE -1.
+// PC: the tile map entry it holds (m_siteTile), and only while the map still names it.
+void HierSever(cXObjectImpl* o) {
+  HierSite site;
+  HierGetSite(o, site);
+  if (!site.container) {
+    if (site.valid && o->m_siteTile >= 0 && Globs_pObjectModule) {
+      short& entry = Globs_pObjectModule->m_tileMap[o->m_siteTile];
+      if (entry == o->m_id) entry = 0;
+    }
+    o->m_siteTile = -1;
+  } else if (site.slot >= 0 && site.slot < static_cast<int>(site.container->m_slotContents.size())) {
+    site.container->m_slotContents[static_cast<size_t>(site.slot)] = 0;
+  }
+  o->m_data.WriteVar(0x1a, 0);
+  o->m_data.WriteVar(0xe, -1);
+}
+
+// 800DCFB8 cXObjectImpl::HierSetSite
+// The object takes `site` (an invalid one: it only leaves its own): a tile (the tile map names it,
+// data 0xE -1, 0x1A 0) or a container's entry (data 0xE the entry, 0x1A the container); its level is the
+// site's (vtable 0x1DC SetLevel).
+void HierSetSite(cXObjectImpl* o, HierSite& site) {
+  if (!site.valid) HierSever(o);
+  CTilePt tile(site.pos[1] >> 4, site.pos[0] >> 4, site.level);
+  if (!site.container) {
+    if (site.valid) {
+      if (Globs_pObjectModule) Globs_pObjectModule->SetTileObjectID(tile, static_cast<short>(o->m_id));
+      const auto x = static_cast<unsigned int>(tile.GetX()), y = static_cast<unsigned int>(tile.GetY());
+      o->m_siteTile = x < 0x40 && y < 0x40 ? static_cast<int>(x + y * 0x40) : -1;
+      o->m_data.WriteVar(0xe, -1);
+      o->m_data.WriteVar(0x1a, 0);
+      o->SetLevel(site.level);
+    }
+    return;
+  }
+  const int entry = site.slot;
+  if (entry < 0) return;  // PC guard (GC writes before the vector)
+  std::vector<short>& slots = site.container->m_slotContents;
+  if (static_cast<int>(slots.size()) <= entry) slots.resize(static_cast<size_t>(entry) + 1, 0);  // PC: grown as needed
+  slots[static_cast<size_t>(entry)] = static_cast<short>(o->m_id);
+  o->m_siteTile = -1;
+  o->m_data.WriteVar(0xe, static_cast<short>(entry));
+  o->m_data.WriteVar(0x1a, static_cast<short>(site.container->m_id));
+  o->SetLevel(site.level);
+}
+
+// 800DD338 cXObjectImpl::HierGetObject
+// The object at `site`: the tile map's (levels 1..3) or the container's entry.
+cXObjectImpl* HierGetObject(cXObjectImpl*, HierSite& site) {
+  if (!site.valid) return nullptr;
+  if (!site.container) {
+    if (static_cast<unsigned int>(site.level - 1) >= 3 || !Globs_pObjectModule) return nullptr;
+    CTilePt tile(site.pos[1] >> 4, site.pos[0] >> 4, site.level);
+    return ObjectByID(Globs_pObjectModule->GetTileObjectID(tile));
+  }
+  return HierGetChild(site.container, site.slot);
+}
+
+// 800DCE44 HierarchySite::HierarchySite(PlacementSpec*): the spec's site (a container's slot k is entry
+// k + 1).
+HierSite::HierSite(const PlaceSpec& spec) {
+  valid = spec.inWorld;
+  slot = spec.slot != -1 ? spec.slot + 1 : -1;
+  pos[0] = spec.pos[0];
+  pos[1] = spec.pos[1];
+  level = spec.level;
+  container = spec.container;
+}
+
+// 800DCEC8 HierarchySite::HierarchySite(cXObjectImpl*, FTilePt&, int): entry `slot` of `c`, on its level.
+HierSite::HierSite(cXObjectImpl* c, const int p[2], int s) {
+  slot = s;
+  container = c;
+  pos[0] = p[0];
+  pos[1] = p[1];
+  valid = 1;
+  level = c->m_level;
+}
+
+// 800DD6E8 cXObjectImpl::TestAndPlace(spec out of the world, true): the object leaves its site, and
+// the object chained under it (entry 0) takes that site.
+void HierUnlink(cXObjectImpl* o) {
+  HierSite was;
+  HierGetSite(o, was);
+  HierSever(o);
+  cXObjectImpl* child = HierGetChild(o, 0);
+  if (!child) return;
+  HierSever(child);
+  HierSetSite(child, was);
+}
+
+// 800DD6E8 cXObjectImpl::TestAndPlace(spec, true): the object takes the spec's site; the object that
+// was there (not the object itself) is chained under it (its entry 0).
+void HierLink(cXObjectImpl* o, PlaceSpec& spec) {
+  HierSite site(spec);
+  cXObjectImpl* there = HierGetObject(o, site);
+  if (there == o) return;
+  if (there) HierSever(there);
+  HierSetSite(o, site);
+  if (!there) return;
+  HierSite under(o, site.pos, 0);
+  HierSetSite(there, under);
+}
+
+// PC: the person the walker moved (its location written between Places, see sanimator2.cpp) takes its
+// new tile when it left the one it holds (the unlink and link of GC's per-frame Place).
+void HierResite(cXObjectImpl* o) {
+  if (o->GetData(0x1a) != 0 && o->GetData(0xe) != 0) return;  // in a slot
+  if (o->m_location[0] < 0 || o->m_location[1] < 0) return;
+  const CTilePt t = o->GetCTilePt();
+  const int at = t.GetX() >= 0 && t.GetY() >= 0 && t.GetX() < 0x40 && t.GetY() < 0x40 ? t.GetX() + t.GetY() * 0x40 : -1;
+  if (o->GetData(0x1a) == 0 && o->m_siteTile >= 0 && o->m_siteTile == at) return;
+  if (o->GetData(0x1a) != 0) {
+    // Chained under another object: still on that object's tile?
+    cXObjectImpl* top = o;
+    for (int i = 0; i < 64; ++i) {
+      cXObjectImpl* up = GetPrevObjectSibling(top);
+      if (!up) break;
+      top = up;
+    }
+    if (top->GetData(0x1a) == 0 && top->m_siteTile == at) return;
+  }
+  HierUnlink(o);
+  PlaceSpec spec(o->m_location, o->m_level, nullptr, -1);
+  HierLink(o, spec);
+}
+
+namespace {
+// The tile's object chain (as TestIntersection and UpdateChairFacing walk it: the tile map's object,
+// ObjectModule vtable 0x254, then GetNextObjectSibling): the objects whose site is the tile, the last
+// placed first. GC: the map has no level; the chain's objects are on the level they were placed on.
 std::vector<cXObjectImpl*> ObjectsAtTile(CTilePt& tile) {
   std::vector<cXObjectImpl*> out;
   ObjectModuleImpl* module = Globs_pObjectModule;
   if (!module) return out;
-  for (cXObjectImpl* o = module->m_first; o; o = o->m_nextObject) {
-    if (o->m_location[0] < 0 || o->m_location[1] < 0 || o->m_data[2] != 0) continue;
-    const CTilePt t = o->GetCTilePt();
-    if (t.GetX() == tile.GetX() && t.GetY() == tile.GetY() && t.GetLevel() == tile.GetLevel()) out.push_back(o);
-  }
+  cXObject* first = module->GetObjectFromID(module->GetTileObjectID(tile));
+  for (cXObjectImpl* o = first ? first->GetObjectImplementation() : nullptr; o && out.size() < 64; o = HierGetChild(o, 0))
+    if (o->GetLevel() == tile.GetLevel()) out.push_back(o);
   return out;
 }
 
-// 800DF784 cXObjectImpl::SetLocation, PC: the object's FTilePt and level, its tile in the module's
-// tile map (the tile's first object), its model moved (ISimInstance::SetObjOrient).
+// 800DF784 cXObjectImpl::SetLocation, PC: the object's FTilePt and level (its site in the slot
+// hierarchy is TestAndPlace's), its room, its model moved (ISimInstance::SetObjOrient).
 void SetLocation(cXObjectImpl* o, const int pos[2], int level) {
-  ObjectModuleImpl* module = Globs_pObjectModule;
-  if (module) module->SeverTile(o);
   const int was[2] = {o->m_location[0], o->m_location[1]};
   o->m_location[0] = pos[0];
   o->m_location[1] = pos[1];
   o->m_level = level;
-  if (module && pos[0] >= 0 && pos[1] >= 0 && o->m_data[2] == 0) module->SetSiteTile(o);
   UpdateObjectRoomID(o);  // 800DF784: ResolveRoomID, data 0x1D
   PassiveInfluenceLocationChanged(o, was[0], was[1]);
 }
@@ -407,9 +582,11 @@ void ObjComputeRect(cXObjectImpl* o, const int pos[2], int rect[4]) {
 // overlaps its own (people only when they do not route through it and it cannot stand in people); on
 // its own tile, zero-extent objects clash only when they use the same layer (data 0x3F bit 0; bit 1
 // unless both are zero-extent) or, both zero-extent, need the same wall; and no wall crosses it unless
-// data 0x2A has 0x400. A person (not a ghost: it fits anywhere) clashes with any footprint but those of
-// objects people may stand in, the object it routes through (IgnoringObject) and those whose "allow
-// intersection" tree (RunTree 5) or its own says so. PC: for other objects those trees are not run.
+// data 0x2A has 0x400; ghosts and (if it may stand in people) people are no obstacle; an object whose
+// "allow intersection" tree (RunTree 5, with the other as the stack object) or the other's says so
+// neither. A person (not a ghost: it fits anywhere) clashes with any footprint but those of objects
+// people may stand in, the object it routes through (IgnoringObject) and those whose "allow
+// intersection" tree or its own says so.
 int ObjTestIntersection(cXObjectImpl* o, const int pos[2], int level) {
   if (o->GetType() == 2) {
     auto* me = dynamic_cast<cXPersonImpl*>(o);
@@ -454,7 +631,8 @@ int ObjTestIntersection(cXObjectImpl* o, const int pos[2], int level) {
     for (cXObjectImpl* other : ObjectsAtTile(tile)) {
       if (IsPartOfMe(o, other)) continue;
       if (other->GetType() == 2) {
-        if (CanIntersectPeople(o)) continue;
+        auto* person = dynamic_cast<cXPersonImpl*>(other);
+        if ((person && person->IsGhost()) || CanIntersectPeople(o)) continue;
       } else {
         const bool otherZero = HasZeroExtent(other);
         if (zero || otherZero) {
@@ -480,6 +658,8 @@ int ObjTestIntersection(cXObjectImpl* o, const int pos[2], int level) {
           continue;
         }
       }
+      // The "allow intersection" trees (entry 5) of both, each with the other as the stack object.
+      if (o->RunTree(5, other->m_id, nullptr) != 0 || other->RunTree(5, o->m_id, nullptr) != 0) continue;
       int otherRect[4];
       ObjComputeRect(other, other->m_location, otherRect);
       if (otherRect[2] < rect[0] && rect[2] < otherRect[0] && otherRect[3] < rect[1] && rect[3] < otherRect[1]) {
@@ -517,10 +697,11 @@ PlaceSpec::PlaceSpec(const int p[2], int lvl, cXObjectImpl* c, int s) {
 int ObjTestAndPlace(cXObjectImpl* o, PlaceSpec& spec, bool place) {
   cFixedWorldImpl* w = World();
   if (place) {
-    // GC: HierSever / HierSetSite on the tile's object chain or the container's slot. PC: the tile map
-    // entry follows the location (SetLocation).
-    // (PC: the container's slot is data 2 / 3, which the caller writes; ObjectIterator and
-    // GetContainedObject read them back.)
+    // The site changes: out of the world, the object leaves its site and the object chained under it
+    // (its entry 0) takes that site; into the world, an object already at the new site (the tile's
+    // object or the slot's) is chained under it.
+    if (!spec.inWorld) HierUnlink(o);
+    else HierLink(o, spec);
     return 1;
   }
   if (!spec.inWorld) return 1;
@@ -667,15 +848,15 @@ int ObjTestAndPlace(cXObjectImpl* o, PlaceSpec& spec, bool place) {
 }
 
 namespace {
-// 800E2F14 cXObjectImpl::RunTree(entry, ...): the object's tree for the entry, run to its end. PC: not
-// run (see the file's header); logged once per entry when the object has such a tree.
+// cXObject vtable 0x104 RunTree(entry, 0, 0) (800E2F14): the object's tree for a placement event
+// (6 wall adjacency changed, 9 placed, 0xA picked up, 0xB / 0xC placed / picked up by the player), run at
+// once to its end. PC development aid: SIMMY_PLACE_TRACE=1 prints each one run.
 void RunTreeEvent(cXObjectImpl* o, int entry) {
-  if (!o || !o->GetTreeID(entry)) return;
-  static bool logged[0x20] = {};
-  if (entry >= 0 && entry < 0x20 && !logged[entry]) {
-    logged[entry] = true;
-    std::printf("[stub] cXObjectImpl::RunTree: placement event %d of %s not run (TreeSim::RunTree)\n", entry, o->DebugName());
-  }
+  if (!o) return;
+  static const bool trace = std::getenv("SIMMY_PLACE_TRACE") != nullptr;
+  if (trace && o->GetTreeID(entry))
+    std::printf("[place] %s: event %d tree %04x\n", o->DebugName(), entry, static_cast<unsigned short>(o->GetTreeID(entry)));
+  o->RunTree(entry, 0, nullptr);
 }
 
 // The first object at a tile (the module's tile map) and its tile chain (GetNextObjectSibling, PC: the
@@ -916,10 +1097,26 @@ int ObjUserCanPlace(cXObjectImpl* o, const int pos[2], int level, cXObjectImpl* 
   return 1;
 }
 
+namespace {
+// The "user placed" (0xB) / "user picked up" (0xC) tree of an object and of what its object slots hold.
+void RunUserEvent(cXObjectImpl* o, int entry) {
+  RunTreeEvent(o, entry);
+  const int count = ObjectSlotCount(o);  // vtable 0x2B4 CountObjectSlots
+  for (int i = 0; i < count; ++i)
+    if (cXObjectImpl* held = o->GetContainedObject(i)) RunTreeEvent(held, entry);  // vtable 0x2C4
+}
+}  // namespace
+
 // 800E1FF4 cXObjectImpl::UserPlace / 800C66AC cXMTObjectImpl::UserPlace: placed, then the "user
-// placed" tree (RunTree 0xB) of it, its parts and what they hold (PC: not run).
+// placed" tree (RunTree 0xB) of it (a multi-tile object: of each part) and of what they hold. GC: a
+// multi-tile object's dynamic group is merged then (vtable 0x44 / 0x4C).
 void ObjUserPlace(cXObjectImpl* o, const int pos[2], int level, cXObjectImpl* container, int slot) {
   ObjPlace(o, pos, level, container, slot);
+  if (PlacementGroup* g = PlacementGroupOf(o)) {
+    for (auto& p : g->parts) RunUserEvent(p.object, 0xb);
+    return;
+  }
+  if (!o->IsMultiTile()) RunUserEvent(o, 0xb);
 }
 
 // 800E1AF4 cXObjectImpl::UserCanPickup / 800C6824 cXMTObjectImpl::UserCanPickup
@@ -957,9 +1154,16 @@ int ObjUserCanPickup(cXObjectImpl* o) {
   return 1;
 }
 
-// 800E2128 cXObjectImpl::UserPickup / 800C68B8: the "user picked up" tree (RunTree 0xC, not run on
-// PC), then picked up.
-void ObjUserPickup(cXObjectImpl* o) { ObjPickup(o); }
+// 800E2128 cXObjectImpl::UserPickup / 800C68B8 cXMTObjectImpl::UserPickup: the "user picked up" tree
+// (RunTree 0xC) of it (a multi-tile object: of each part) and of what they hold, then picked up.
+void ObjUserPickup(cXObjectImpl* o) {
+  if (PlacementGroup* g = PlacementGroupOf(o)) {
+    for (auto& p : g->parts) RunUserEvent(p.object, 0xc);
+  } else if (!o->IsMultiTile()) {
+    RunUserEvent(o, 0xc);
+  }
+  ObjPickup(o);
+}
 
 // 800DFA9C cXObjectImpl::Turn / 800C5CE4 cXMTObjectImpl::Turn
 // `steps` times the object's rotation step (data 0x17; 0: it does not turn). A multi-tile object turns

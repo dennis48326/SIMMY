@@ -63,9 +63,15 @@ int ObjectModuleImpl::Load(iResFile* file) {
   const int r = ReconLoadObject(this, file, kObjectModuleResType, 1, &version);
   s_loadedVersion = version;
   // The tile map: each object (not one held in another's slot, data 0x1A) at its tile.
+  // PC: an object chained (entry 0) under one the save does not have (the port saves no people) is
+  // its tile's object again.
   for (short& id : m_tileMap) id = 0;
   for (cXObjectImpl* o = m_first; o; o = o->m_nextObject) {
     o->m_siteTile = -1;
+    if (o->GetData(0x1a) != 0 && o->GetData(0xe) == 0 && !GetObjectFromID(o->GetData(0x1a))) {
+      o->m_data.WriteVar(0x1a, 0);
+      o->m_data.WriteVar(0xe, -1);
+    }
     CTilePt tile = o->GetCTilePt();
     if (static_cast<unsigned int>(tile.GetX()) < 0x40 && static_cast<unsigned int>(tile.GetY()) < 0x40 &&
         o->GetData(0x1a) == 0) {
@@ -373,25 +379,12 @@ void ObjectModuleImpl::SetTileObjectID(CTilePt& tile, short id) {
   if (x < 0x40 && y < 0x40) m_tileMap[x + y * 0x40] = id;
 }
 
-// PC (HierSever's tile branch): the entry is cleared where the object was placed, not at its current
-// location: the PC animator moves a walking person's location between places (GC: only Place does, at
-// the tile it then leaves), so a stale entry would name a person standing elsewhere.
-void ObjectModuleImpl::SeverTile(cXObjectImpl* object) {
-  const int site = object->m_siteTile;
-  object->m_siteTile = -1;
-  if (site >= 0 && site < 0x40 * 0x40 && m_tileMap[site] == object->m_id) m_tileMap[site] = 0;
-}
+// PC: the object leaves its site in the slot hierarchy (TestAndPlace's pickup half, HierUnlink: the
+// object chained under it takes the site; objectplace.cpp).
+void ObjectModuleImpl::SeverTile(cXObjectImpl* object) { HierUnlink(object); }
 
-// PC (HierSetSite's tile branch): the object becomes its tile's object, unless the tile has one.
-void ObjectModuleImpl::SetSiteTile(cXObjectImpl* object) {
-  SeverTile(object);
-  if (object->m_location[0] < 0 || object->m_location[1] < 0) return;
-  CTilePt tile = object->GetCTilePt();
-  const int x = tile.GetX(), y = tile.GetY();
-  if (x < 0 || y < 0 || x >= 0x40 || y >= 0x40 || m_tileMap[x + y * 0x40]) return;
-  m_tileMap[x + y * 0x40] = object->m_id;
-  object->m_siteTile = x + y * 0x40;
-}
+// PC: a person the walker moved takes the tile it stands on (HierResite; GC: its per-frame Place).
+void ObjectModuleImpl::SetSiteTile(cXObjectImpl* object) { HierResite(object); }
 
 // ---------------------------------------------------------------------------------------------------
 // ObjectIterator (game/objectiterator.cpp)
@@ -419,51 +412,30 @@ bool ObjectIterator::operator==(const ObjectIterator& other) const {
 }
 
 // 800F2AC0
-// The next object down the slot hierarchy (GC: the object's slot vector +0x90, HierGetChild): entry 0
-// is the tile's object chain (the next object stacked on the same tile, e.g. a window part under a
-// wall lamp, as the house was saved: ReconSlots, data 0x1A / 0xE), entries 1.. the object slots
-// (GetObjectSlot(i) is entry i + 1; PC: slot i's contents by data 2 / 3, GetContainedObject); else up
-// to its site (HierarchySite: the object holding it, its entry there) and on from the next entry; the
-// end at the root. (A person's hand is its slot 0.)
-namespace {
-// Slot vector entry 0 of `cur`: the object stacked on it at its tile (PC: while it still is there).
-cXObjectImpl* TileChainChild(cXObjectImpl* cur, cXObjectImpl* root) {
-  if (cur->m_slotContents.empty() || !Globs_pObjectModule) return nullptr;
-  cXObject* x = Globs_pObjectModule->GetObjectFromID(cur->m_slotContents[0]);
-  cXObjectImpl* o = x ? x->GetObjectImplementation() : nullptr;
-  if (!o || o == cur || o == root || o->GetData(2) != 0 || o->GetData(0x1a) != cur->m_id) return nullptr;
-  const CTilePt a = o->GetCTilePt(), b = cur->GetCTilePt();
-  return a.GetX() == b.GetX() && a.GetY() == b.GetY() && a.GetLevel() == b.GetLevel() ? o : nullptr;
-}
-}  // namespace
-
+// The next object down the slot hierarchy, depth first: the current object's slot vector entries
+// (HierGetChild: entry 0 the object chained under it at its tile, k + 1 object slot k's), else up to its
+// site (HierarchySite: the object holding it) and on from the entry after its own; the end at the root.
 ObjectIterator& ObjectIterator::operator++() {
   if (!m_current) return *this;
   cXObjectImpl* cur = m_current->GetObjectImplementation();
-  cXObjectImpl* root = m_root ? m_root->GetObjectImplementation() : nullptr;
   int next = 0;
-  m_current = nullptr;
-  while (cur) {
-    int count = ObjectSlotCount(cur);
-    if (cur->GetType() == 2 && count < 1) count = 1;
-    while (next <= count) {
-      const int entry = next++;
-      if (cXObjectImpl* child = entry == 0 ? TileChainChild(cur, root) : cur->GetContainedObject(entry - 1)) {
+  for (int guard = 0; cur && guard < 256; ++guard) {  // PC guard against a looped hierarchy
+    const int count = static_cast<int>(cur->m_slotContents.size());
+    while (next < count) {
+      cXObjectImpl* child = HierGetChild(cur, next++);
+      if (child) {
         m_current = child;
         return *this;
       }
     }
-    if (cur == root) return *this;
-    if (cXObject* up = cur->GetContainer()) {
-      next = cur->GetData(3) + 2;
-      cur = up->GetObjectImplementation();
-    } else {
-      cXObject* x = Globs_pObjectModule ? Globs_pObjectModule->GetObjectFromID(cur->GetData(0x1a)) : nullptr;
-      cXObjectImpl* parent = x ? x->GetObjectImplementation() : nullptr;
-      next = 1;
-      cur = parent && TileChainChild(parent, root) == cur ? parent : nullptr;
-    }
+    m_current = nullptr;
+    if (cur == (m_root ? m_root->GetObjectImplementation() : nullptr)) return *this;
+    HierSite site;
+    HierGetSite(cur, site);
+    next = site.slot + 1;
+    cur = site.container;
   }
+  m_current = nullptr;
   return *this;
 }
 
@@ -536,7 +508,7 @@ int ObjectModuleImpl::MakeNewOutOfWorldObject(ObjSelector* selector, short* id) 
   if (impl->m_treeSim && impl->m_treeSim->HasMainTreeSim()) impl->RunTree(0, 0, nullptr);
   if (id) *id = impl->m_id;
   // GlobalDispatch 0xDE: HouseImpl::DoCommand redoes the people's visitor types for a new person.
-  if (impl->GetType() == 2 && Globs_pNeighborhood) Globs_pNeighborhood->UpdateInstanceVisitorTypes();
+  HouseDispatch(0xde, impl->m_id);
   return impl->m_id;
 }
 
@@ -590,6 +562,10 @@ void ObjectModuleImpl::KillObject(short id) {
     cXObjectImpl* oi = o ? o->GetObjectImplementation() : nullptr;
     if (!oi || oi == impl) continue;
     if (oi->m_data[2] == id) oi->m_data.WriteVar(2, 0);
+    if (oi->m_data[0x1a] == id) {  // PC: its slots' objects lose their site (the slot vector goes)
+      oi->m_data.WriteVar(0x1a, 0);
+      oi->m_data.WriteVar(0xe, -1);
+    }
     if (auto* person = oi->GetType() == 2 ? dynamic_cast<cXPersonImpl*>(oi) : nullptr)
       for (auto& g : person->m_gosubObjects)
         if (g.m_object == impl) g.m_object = nullptr;

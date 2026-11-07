@@ -2,15 +2,16 @@
 // 4; see buildtools.hpp). A anchors the cursor's corner, a second A papers the face of the walls along
 // the line that the camera sees (the catalogue's sell tool strips it: pattern 0); the old patterns are
 // counted as sold (the catalogue refunds them), the stock limits the faces papered. With the trigger held
-// the room under the cursor is the selection (PC: not ported, see below).
+// the room under the cursor is the selection (CountWallsInRoomSelection, FinalizePaperForRoom over the
+// room's tiles and ERoom::GetNumWalls).
 //
-// PC: InteractorVisualizer (the cursor model, its rotation, the line's preview) is not ported; the room
-// selection (CountWallsInRoomSelection, FinalizePaperForRoom: ERoom::GetNumWalls and the room's wall
-// sides) is SIMMY_STUB; the lot data (HouseImpl vtable 0x8C) is the world side's.
+// PC: InteractorVisualizer (the cursor model, its rotation, the line's and the room's preview) is not
+// ported.
 #include "simmy/types_gen.hpp"
 #include "simmy/unported_globals.hpp"
 #include "simmy/classes/buildtools.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 
@@ -348,16 +349,191 @@ void InteractorModule__WallPainter::PreDraw(InteractorModule__InteractorVisualiz
 // 802256D0
 void InteractorModule__WallPainter::Draw(InteractorModule__InteractorVisualizer&) {}
 
+// 802131F4 InteractorModule::GetRoomIdFromPoint
+// The tile's room (cFixedWorld vtable 0xEC GetRoom); a tile split by a diagonal: its first half's room.
+// No room manager: 0.
+unsigned short InteractorGetRoomIdFromPoint(CTilePt& tile) {
+  cFixedWorldImpl* w = World();
+  unsigned short room = w->GetRoom(tile);
+  if (!Globs_pRoomManager) return 0;
+  if (room == 0xfffb) {
+    Room* first = nullptr;
+    Room* second = nullptr;
+    Room__Sides s1{0}, s2{0};
+    Globs_pRoomManager->ResolveDiagonal(tile, &first, &second, &s1, &s2);
+    room = first ? first->m_id : 0;  // PC guard (GC reads through the pointer)
+  }
+  return room;
+}
+
+namespace {
+// The anchor's tile (GC: CTilePt(EVec3{+0x64, +0x60, +0x68}): x from the anchor's y, y from its x).
+CTilePt AnchorTile(const EVec3& anchor) {
+  return CTilePt(static_cast<int>(anchor.y), static_cast<int>(anchor.x), 1);
+}
+// Room__Sides of a half -> the diagonal side to paper (3 -> 1, 1 -> 3, 4 -> 2, 2 -> 4); 0: none.
+int HalfToSide(int s) { return s == 3 ? 1 : s == 1 ? 3 : s == 4 ? 2 : s == 2 ? 4 : 0; }
+}  // namespace
+
 // 802256FC
+// The room under the anchor: its wall sides (ERoom::GetNumWalls) less those already of the paper; each
+// other side's pattern counted as sold (stripping: only on walls, not fences). The room's tiles are
+// walked: an edge wall's side 0 (the room's face), a diagonal (once per tile) the side(s) in the room
+// (both when the tile is not split). GC quirk kept: a diagonal's sides are written after the previous
+// segment's in a three-entry array whose last entry holds the room id, so after a tile with an edge wall
+// and a diagonal the room id compared for later split tiles is that side.
 void InteractorModule__WallPainter::CountWallsInRoomSelection() {
-  SIMMY_STUB("WallPainter::CountWallsInRoomSelection: the room's wall sides (ERoom::GetNumWalls, the room's tiles)", 0x802256FC);
+  CTilePt anchor = AnchorTile(m_anchor);
+  int sides[4] = {0, 0, static_cast<int>(InteractorGetRoomIdFromPoint(anchor)), 0};  // [2]: the room id
+  RoomManager* rooms = Globs_pRoomManager;
+  cFixedWorldImpl* w = World();
   m_count = 0;
+  Room* room = rooms ? rooms->GetRoom(static_cast<unsigned short>(sides[2])) : nullptr;
+  if (!room) return;
+  const int paper = PaperIndex(m_paper);
+  ERoom* eroom = _globals.m_house ? _globals.m_house->m_room : nullptr;
+  m_count = eroom ? eroom->GetNumWalls(static_cast<unsigned short>(sides[2])) : 0;
+  if (m_count == 0) return;
+  std::vector<CTilePt> seen;
+  seen.reserve(room->m_tiles.size());
+  for (CTilePt& t : room->m_tiles) {
+    if (!w->HasWalls(t)) continue;
+    TileWalls walls = w->GetWall(t);
+    int n = 0;
+    sides[0] = sides[1] = 0;
+    for (int seg = walls.First(); seg != 0; seg = walls.Next(seg)) {
+      const bool d10 = seg == 0x10;
+      if (d10 || seg == 0x20) {
+        if (std::find(seen.begin(), seen.end(), t) != seen.end()) continue;
+        seen.push_back(t);
+        Room* first = nullptr;
+        Room* second = nullptr;
+        Room__Sides s1{0}, s2{0};
+        auto put = [&](int i, int v) {
+          if (i < 3) sides[i] = v;  // PC guard: GC's next stack word (never reached on the disc's lots)
+        };
+        if (rooms->ResolveDiagonal(t, &first, &second, &s1, &s2) == 0) {
+          put(n, d10 ? 2 : 3);
+          put(n + 1, d10 ? 4 : 1);
+          n += 2;
+        } else {
+          if (first && first->m_id == sides[2]) {
+            int m = n;
+            const int side = HalfToSide(static_cast<int>(s1));
+            if (side) {
+              put(n, side);
+            } else {
+              put(n, d10 ? 2 : 3);
+              m = n + 1;
+              put(m, d10 ? 4 : 1);
+            }
+            n = m + 1;
+          }
+          if (second && second != first && second->m_id == sides[2]) {
+            const int side = HalfToSide(static_cast<int>(s2));
+            if (side) put(n++, side);
+          }
+        }
+      } else {
+        n = 1;
+        sides[1] = 0;
+        sides[0] = 0;
+      }
+      for (int k = 0; k < n && k < 3; ++k) {
+        if (sides[k] != 0) sides[k] = TileWalls::RotateDiagonal(sides[k], 0);
+        const int pattern = walls.GetPattern(seg, sides[k]);
+        if (pattern == paper) --m_count;
+        else if (!(m_flags & 8)) ibuild::IncrementSellCountForPattern(pattern, m_patternSells);
+        else if (walls.HasWallNotFence(seg)) ibuild::IncrementSellCountForPattern(pattern, m_patternSells);
+      }
+    }
+  }
 }
 
 // 80225D70
+// The room under the anchor papered (or, selling, stripped: pattern 0): unless free (the cheat, the
+// build-house mode, an unlimited stock), within the stock (selling: always), which the selection's count
+// leaves (selling: 0). Each wall side of the room's tiles (as CountWallsInRoomSelection finds them, from
+// the world's walls as they are now) of another pattern takes the paper, the old one counted as sold on
+// walls; then the rooms, the house and the lot data. GC quirk kept: the sides array's last entry is the
+// room id (see above).
 int InteractorModule__WallPainter::FinalizePaperForRoom() {
-  SIMMY_STUB("WallPainter::FinalizePaperForRoom: papering the room's wall sides", 0x80225D70);
-  return 0;
+  CTilePt anchor = AnchorTile(m_anchor);
+  int sides[5] = {0, 0, 0, static_cast<int>(InteractorGetRoomIdFromPoint(anchor)), 0};  // [0] half 2's side, [3] the room
+  RoomManager* rooms = Globs_pRoomManager;
+  cFixedWorldImpl* w = World();
+  Room* room = rooms ? rooms->GetRoom(static_cast<unsigned short>(sides[3])) : nullptr;
+  if (!room) return 0;
+  const int paper = PaperIndex(m_paper);
+  const bool free = g_freeBuildBuyCheat || EGlobal::IsBuildHouseMode() || m_stock == -1;
+  if (!free) {
+    if (m_stock < m_count && !(m_flags & 8)) return 0;
+    if (!(m_flags & 8)) m_stock -= m_count;
+    else m_stock = 0;
+  }
+  for (CTilePt& t : room->m_tiles) {
+    if (!w->HasWalls(t)) continue;
+    TileWalls walls = w->GetWall(t);
+    int n = 0;
+    for (int seg = walls.First(); seg != 0; seg = walls.Next(seg)) {
+      const bool d10 = seg == 0x10;
+      const int at = n;  // GC: the previous segment's count
+      auto put = [&](int i, int v) {
+        if (i < 4) sides[i] = v;  // PC guard: GC's next stack word (never reached on the disc's lots)
+      };
+      if (d10 || seg == 0x20) {
+        Room* first = nullptr;
+        Room* second = nullptr;
+        Room__Sides s1{0}, s2{0};
+        const int split = rooms->ResolveDiagonal(t, &first, &second, &s1, &s2);
+        sides[0] = static_cast<int>(s2);
+        if (split == 0) {
+          put(at + 1, d10 ? 2 : 3);
+          put(at + 2, d10 ? 4 : 1);
+          n = at + 2;
+        } else {
+          n = at;
+          if (first && first->m_id == sides[3]) {
+            const int side = HalfToSide(static_cast<int>(s1));
+            if (side) {
+              put(at + 1, side);
+              n = at + 1;
+            } else {
+              put(at + 1, d10 ? 2 : 3);
+              put(at + 2, d10 ? 4 : 1);
+              n = at + 2;
+            }
+          }
+          if (second && second != first && second->m_id == sides[3]) {
+            const int side = HalfToSide(sides[0]);
+            if (side) {
+              put(n + 1, side);
+              ++n;
+            }
+          }
+        }
+      } else {
+        sides[2] = 0;
+        n = 1;
+        sides[1] = 0;
+      }
+      for (int k = 1; k <= n && k < 4; ++k) {
+        if (sides[k] != 0) sides[k] = TileWalls::RotateDiagonal(sides[k], 0);
+        TileWalls now = w->GetWall(t);
+        const int old = now.GetPattern(seg, sides[k]);
+        if (old == paper) continue;
+        now.SetPattern(static_cast<unsigned short>(paper), seg, sides[k]);
+        w->SetWall(t, now);
+        if (old != 0 && now.HasWallNotFence(seg)) ibuild::IncrementSellCountForPattern(old, m_patternSells);
+      }
+    }
+  }
+  w->ComputeRooms(0);  // vtable 0x114
+  _globals.RecalcHouse();
+  if (Globs_pHouse) Globs_pHouse->ComputeAndStoreLotData();  // vtable 0x8C
+  std::printf("[build] player %d papered room %d (%d wall side%s) with pattern %d (stock %d)\n", m_player + 1,
+              sides[3], m_count, m_count == 1 ? "" : "s", paper, m_stock);
+  return 1;
 }
 
 // 802262B8
@@ -476,3 +652,19 @@ EVec3& InteractorModule__WallPainter::GetHoldPos() { return m_hold; }
 double InteractorModule__WallPainter::GetPaperToolHeight() { return kPaperToolHeight; }
 // 80226A18
 double InteractorModule__WallPainter::GetWallHeight() { return kWallHeight; }
+
+// PC development aid (SIMMY_PLACE_TEST's "paperroom@x,y,index[,sell]", placemanipulator.cpp): the wall
+// painter's room selection at the tile with wallpaper `index` of the WallSet (buy; ",sell": strip), counted
+// (CountWallsInRoomSelection) and, when valid, papered (FinalizePaperForRoom) with an unlimited stock.
+void WallPainterRoomTest(int x, int y, int index, bool sell) {
+  InteractorModule__WallPainter painter;
+  painter.m_anchor = EVec3{static_cast<float>(y) + 0.5f, static_cast<float>(x) + 0.5f, 0.0f};
+  painter.m_paper = sell ? nullptr : ibuild::SetRow(_globals.m_wallSet, index);
+  painter.m_flags = 0x10 | (sell ? 8u : 4u);
+  painter.m_stock = -1;
+  painter.CountWallsInRoomSelection();
+  std::printf("[build] room test at %d,%d: %d wall side%s to %s, %d pattern kind%s sold\n", x, y, painter.m_count,
+              painter.m_count == 1 ? "" : "s", sell ? "strip" : "paper", static_cast<int>(painter.m_patternSells.size()),
+              painter.m_patternSells.size() == 1 ? "" : "s");
+  if (painter.m_count != 0) painter.FinalizePaperForRoom();
+}

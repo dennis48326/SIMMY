@@ -21,20 +21,22 @@ unreachable in this build (PDA, EyeToy, Urbz leftovers, Xbox/PS2 code) or replac
   and the rest of the awareness manager (memory awareness, head turning, auto-carry in the rain).
 - `TryUserEvent` formats its string (`ParseUIString`) without showing it, as GC does; `TryPreloadObject`
   never waits (object data is read on demand).
-- Placement events (object trees on place/pick-up), slots in buy mode, the grid object (GUID 0x437).
+- Placement: a multi-tile container's side with room is not chosen for a surface object; the grid object
+  (GUID 0x437: the port draws its model, the object is not made).
 - `SAnimator2`: awareness, mood animations, skill idle animations, low-motive runs, rumble notes.
 - Routing: the walk animation is the PC walker (GC follow modes, side steps, awareness auto-run not
   ported); portals are type-8 multi-tile parts without `cXPortalImpl` (scores in `m_portalValues`);
   `TrySnap` still uses the PC `PersonCanStandAt`. The GC leaves a "move out of the way" object in the
   world when it cannot be used (kept).
-- `cXPersonImpl`: `Reset` (8011EB78), the current room's overhead lights (`UpdateCurrentRoom`: its
-  listener, GlobalDispatch 0xED, is not ported either), motive curves from a string set file (no
-  definition on the disc names one). The room motive (0xD) stays 0 (the room score is not computed), so
-  the mood (`CalcHappy`, ported) is lower than on GC.
-- `HouseImpl::IsResident` is a PC helper on the neighbourhood (`IsResidentOfHouse`); GlobalDispatch is a
-  no-op, so its listeners are called directly where the port needs them (new people -> visitor types).
-- `HouseImpl` is a stand-in (house.cpp + lotsave.cpp); objects placed on an occupied tile are not linked
-  into the tile chain (a window bought onto a lamp's tile misses its wall cut).
+- `cXPersonImpl`: `Reset` (8011EB78), motive curves from a string set file (no definition on the disc
+  names one).
+- GlobalDispatch has no listener list: the house's messages go to `HouseImpl::DoCommand` through
+  `HouseDispatch` where the port broadcasts them (0xEC, 0xED, 0xEF, 0xDE, and the simulator's 0xD8 / 0xD9).
+  Other Commanders (the world, the object module, families) are not listeners.
+- `HouseImpl` loading and saving (`Initialize`, `LoadFile`, `SaveFile`: the score curves, the name) are
+  the world side's stand-ins (livemode.cpp `BGExec_LoadHouse`, lotsave.cpp); `ObjectModuleImpl::ComputeStats`
+  is a stand-in (lotsave.cpp). The port saves no people, so an object chained under a person is its tile's
+  object again at load.
 - `MoveFamilyOntoLot`, `MenuObjectsNear`, the interactor manager, input manager and `SocialModeInteractor`
   are PC stand-ins (the interactors are tied to the PC keyboard/mouse and co-op layers).
 
@@ -62,8 +64,9 @@ unreachable in this build (PDA, EyeToy, Urbz leftovers, Xbox/PS2 code) or replac
   written but never read) ([camera.md](camera.md)). CAS morph/portrait paths depend on
   aurora readback (headless: blank).
 - ESim: the model cache / family info in `initModel`, costume skin-change flushing, the green ghost light.
-- Walls: `ERoom::InitRoomLookupTab` (wallpaper preview/cost; the camera's opaque-room flag has no reader), deleting a wall
-  does not kill its door/window (`KillArchitecturalObject`). Bound-tree level files (versions 0/1).
+- Walls: the wallpaper preview drawing (`ERoom::DrawWallpaperPreview`; the build tools draw nothing) and
+  its per-room buffers; `ERoom::GetWallPaperCost` (no caller in the release build). Bound-tree level files
+  (versions 0/1; not reached by any level loaded in the logged runs).
 - A minimised window may accumulate GX work written outside `CanDraw` (untested on Windows).
 
 ## Audio

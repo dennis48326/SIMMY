@@ -6,9 +6,8 @@
 // went through cXObjectImpl::SetLocation (vtable 0x334), which resolved it; the port moves objects and
 // people in several places (objectplace.cpp, the animator), which call UpdateObjectRoomID.
 //
-// Still stubbed: GlobalDispatch 0xEF (a light-giving object changed rooms: the rooms' lighting), the
-// objects' entry point 7 tree after a room recompute (cXObjectImpl::RunTree is not offered by the
-// port's TreeSim), cXPersonImpl::UpdateCurrentRoom (the rooms' overhead lights).
+// GlobalDispatch 0xEF (an object with a room impact changed rooms) goes to the house (HouseDispatch:
+// both rooms' scores); UpdateRooms runs the people's UpdateCurrentRoom and the objects' entry 7 tree.
 #include "simmy/types_gen.hpp"
 #include "simmy/unported_globals.hpp"
 #include "simmy/roomresolve.hpp"
@@ -63,9 +62,11 @@ void WriteRoomID(cXObjectImpl* o, const int pt[2], int level) {
   const short room = ResolveRoomID(pt, level);
   const short old = o->m_data[0x1d];
   o->m_data.WriteVar(0x1d, room);
-  if (old != room && o->m_data[7] != 0)
-    SIMMY_STUB("cXObjectImpl::SetLocation: GlobalDispatch(0xEF, old room / new room) (the rooms' lights)",
-               0x800DF784);
+  if (old != room && o->m_data[7] != 0) {
+    // GlobalDispatch(0xEF): the house has both rooms' scores recomputed (HouseImpl::DoCommand).
+    HouseDispatch(0xef, old);
+    HouseDispatch(0xef, room);
+  }
 }
 }  // namespace
 
@@ -106,11 +107,11 @@ void ObjectModuleImpl::UpdateRooms(int level) {
     const int pt[2] = {o->m_location[0], o->m_location[1]};
     o->m_data.WriteVar(0x1d, ResolveRoomID(pt, o->GetLevel()));
     if (o->GetType() == 2)
-      SIMMY_STUB("ObjectModuleImpl::UpdateRooms: cXPersonImpl::UpdateCurrentRoom (TreeSim vtable 0x1AC)", 0x800F5B10);
+      if (auto* p = dynamic_cast<cXPersonImpl*>(o)) p->UpdateCurrentRoom();  // vtable 0x1AC
   }
+  // Then each one's "room changed" tree (entry 7), run at once.
   for (cXObject* x : m_byId) {
     cXObjectImpl* o = x ? x->GetObjectImplementation() : nullptr;
-    if (o && (level == 0 || o->GetLevel() == level) && o->GetTreeID(7))
-      SIMMY_STUB("ObjectModuleImpl::UpdateRooms: RunTree(7) (TreeSim::RunTree)", 0x800F5B10);
+    if (o && (level == 0 || o->GetLevel() == level)) o->RunTree(7, 0, nullptr);
   }
 }

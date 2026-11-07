@@ -2,7 +2,7 @@
 // happy curves, service NPC records, the action queue, its primitives: animate, routing, motive deltas,
 // idle for input, ...), the family put on the lot, and PC stand-ins for the action menu. Autonomy is in
 // autonomy.cpp, social mode in socialmode.cpp, wants and fears in wantfear.cpp; see person.hpp. Still
-// stubbed here: Reset (8011EB78), the current room's overhead lights (UpdateCurrentRoom), reaching.
+// stubbed here: Reset (8011EB78), reaching.
 #include "simmy/types_gen.hpp"
 #include "simmy/classes/placement.hpp"
 #include "simmy/unported_globals.hpp"
@@ -393,13 +393,14 @@ void cXPersonImpl::SimMotives() {
       m_neighbor->Notify(n, true);
     }
   if (m_data[0x22] != 0) return;
-  SIMMY_STUB("cXPersonImpl::SimMotives: UpdateCurrentRoom (vtable 0x1AC)", 0x801253E4);
-  m_motives.Sim();
+  if (!ObjIsInWorld(this)) return;  // cXObject vtable 0x1AC IsInWorld
+  m_motives.Sim();  // GC: a frozen sim (+0x42) has its motives cleaned up instead (vtable 0x84)
 }
 
 // 80124D20
-// GC: also the current room's lighting (+0xDC), the selected sims' motives floored at 0 in the
-// tutorial, the money balloon.
+// The object's tick, its motives every 60 ticks, the room motive, the tick count (person data 0x1B),
+// the motive deltas by the aspiration's multipliers. GC: also the selected sims' motives floored at 0
+// in the tutorial, the money balloon.
 int cXPersonImpl::Simulate(int ticks) {
   const int r = cXObjectImpl::Simulate(ticks);
   if (!r) return 0;
@@ -464,6 +465,12 @@ int cXPersonImpl::Simulate(int ticks) {
   if (m_lastMotiveTick + 60 <= ticks) {
     m_lastMotiveTick = ticks;
     SimMotives();
+  }
+  // The room motive (0xD) is the score of the room it is in (outside: the rooms' outdoor score).
+  if (m_currentRoom != 0xfffb) {
+    RoomManager* rooms = RoomManager::GetRoomManager();
+    Room* room = rooms ? rooms->GetRoom(m_currentRoom) : nullptr;
+    m_motives.m_values[0xd] = !room ? 0.0f : room->IsOutside() ? rooms->m_outdoorScore : room->m_field7C;
   }
   // Person data 0x1B counts ticks (to 0x7FFF, then 0): the main loop's "divide tick counts" paces its
   // autonomy checks with it.
@@ -1591,6 +1598,23 @@ int cXPersonImpl::TryGotoRoutingSlot(StackElem* frame, RoutingSlot* slot) {
   }
 }
 
+// 801281B4
+// When its room changed: it is in the new one (+0x41C); the old room, now empty of people, has its
+// overhead lights off, the new one on.
+void cXPersonImpl::UpdateCurrentRoom() {
+  const unsigned int room = static_cast<unsigned int>(GetRoom());
+  if (room == m_currentRoom) return;
+  RoomManager* rooms = RoomManager::GetRoomManager();
+  Room* old = m_currentRoom < 0xfffb && rooms ? rooms->GetRoom(m_currentRoom) : nullptr;
+  Room* now = room < 0xfffb && rooms ? rooms->GetRoom(static_cast<unsigned short>(room)) : nullptr;
+  m_currentRoom = static_cast<unsigned short>(room);
+  if (old && old->GetPeopleCount() == 0) old->SetOverheadLights(false);
+  if (now) now->SetOverheadLights(true);
+}
+
+// 8012C7F4
+int cXPersonImpl::GetCurrentRoom() const { return m_currentRoom; }
+
 // cXPersonImpl::Place (80128294): cXObjectImpl::Place, then the person's room (UpdateCurrentRoom).
 void cXPersonImpl::PlacePerson(const int pos[2]) {
   ObjPlace(this, pos, m_level, nullptr, 0);
@@ -2399,9 +2423,10 @@ void MoveFamilyOntoLot(EHouse* house) {
     std::printf("[sim] player %d's sim: object %d (%s), main tree %04x\n", player + 1, person->m_id, person->DebugName(),
                 static_cast<unsigned short>(person->GetTreeID(1)));
     _globals.SetSelectedPerson(player, person);
+    // GC: the move-in's new person (GlobalDispatch 0xDE -> HouseImpl::DoCommand) redoes the visitor types.
+    HouseDispatch(0xde, person->m_id);
   }
-  // GC: the move-in's new people (GlobalDispatch 0xDE -> HouseImpl::DoCommand) redo the visitor types.
-  if (Globs_pNeighborhood) Globs_pNeighborhood->UpdateInstanceVisitorTypes();
+
 }
 
 // GC: ObjectModuleImpl::MakeNewOutOfWorldObject (ConstructObject: a cXPersonImpl for the type-2
@@ -2429,7 +2454,7 @@ cXPersonImpl* MakeNeighborPerson(Neighbor* n, ObjSelector* selector) {
   }
   // GC: MakeNewOutOfWorldObject's GlobalDispatch(0xDE) -> HouseImpl::DoCommand: a new person redoes the
   // people's visitor types.
-  Globs_pNeighborhood->UpdateInstanceVisitorTypes();
+  HouseDispatch(0xde, person->m_id);
   return person;
 }
 
@@ -2485,8 +2510,8 @@ void TracePerson(cXPersonImpl* person, bool named) {
                 person->GetData(0x1d), Globs_pObjectModule ? Globs_pObjectModule->GetSimFlag(person->m_id, ObjectModule__SimFlag{1}) : -1);
   const Motives& m = person->m_motives;
   std::printf("%s motives: energy %.1f comfort %.1f hunger %.1f hygiene %.1f bladder %.1f social %.1f fun %.1f "
-              "mood %.1f; deltas %d; stack", named ? "" : "[sim]  ", m.m_values[5], m.m_values[6], m.m_values[7], m.m_values[8], m.m_values[9],
-              m.m_values[0xe], m.m_values[0xf], m.m_values[3], static_cast<int>(person->m_motiveDeltas.size()));
+              "mood %.1f room %.1f; deltas %d; stack", named ? "" : "[sim]  ", m.m_values[5], m.m_values[6], m.m_values[7], m.m_values[8], m.m_values[9],
+              m.m_values[0xe], m.m_values[0xf], m.m_values[3], m.m_values[0xd], static_cast<int>(person->m_motiveDeltas.size()));
   for (int i = 0; i < person->m_treeSim->GetStackSize(); ++i) {
     StackElem* e = person->m_treeSim->GetNthElem(static_cast<short>(i));
     std::printf(" %04x:%d", static_cast<unsigned short>(e->GetTreeID()), e->m_node);

@@ -109,8 +109,10 @@ simulator's seed inside a tick, an outer seed for check trees run from menus.
   social, 0xF fun. `Motives::Sim` every 60 ticks applies decay. The mood is `CalcHappy` (80125550): the
   mean of hunger, comfort, hygiene, bladder, fun, room and social, each weighted by its happy curve at its
   value (a low motive weighs more; `InitializeStaticMemory` 8011A824's seven point lists). Energy is not
-  in it. The room motive (0xD) stays 0 in the port's runs (on GC it follows the room's score, which
-  rooms.cpp does not compute yet), so the mood sits lower than the needs alone would give.
+  in it. The room motive (0xD) is set every tick by `cXPersonImpl::Simulate` (80124D20) to the score of
+  the person's current room (`UpdateCurrentRoom` 801281B4, +0x41C, kept by `Place`/`TrySnap` and the
+  rooms' recomputation; outside: the room manager's outdoor score). Room scores: see
+  [build-buy-and-world.md](build-buy-and-world.md#rooms).
 - **Service NPCs**: an NPC object file's selector has its CAS "Sim::NPC" record (`ObjSelector::m_npc`, set
   by `ObjectFolderImpl::AddSelector` with the NPC's name as the user name; +0 gender, +4 kind: 0 adult, 1
   child, 2 dog, 3 cat, 4 monkey). `GetServiceNPC`, `IsMale`, `IsChild`, `IsPet`/`IsDog`/`IsCat`/`IsMonkey`
@@ -119,9 +121,10 @@ simulator's seed inside a tick, an outer seed for check trees run from menus.
 - **Visitor type** (person data 0x20: 0 a resident, else a visitor; autonomy's thresholds and attenuations
   use it): `NeighborhoodImpl::UpdateInstanceVisitorTypes` (800D12E0) on every new person (GC:
   GlobalDispatch 0xDE) and family change; a resident is in the house's family or, outside free play, the
-  player family (`IsResidentOfHouse`, PC for `HouseImpl::IsResident` 800BC00C). PC: a player's selected
-  sim always counts as a resident (on GC it is always a family member; the port's player-2 fallback sim
-  belongs to no family and would otherwise be sent home as a visitor).
+  player family (`HouseImpl::IsResident` 800BC00C, via `FamilyImpl::TestMember(cXPerson*)`: the person's
+  selector's GUID). PC: a player's selected sim always counts as a resident (on GC it is always a family
+  member; the port's player-2 fallback sim belongs to no family and would otherwise be sent home as a
+  visitor).
 - **Killing a person** (`ObjectModuleImpl::KillObject`, GC `KillOutOfWorldObject` 800F50FC): a player's
   selected person hands the selection on (`AdvanceSelectedPerson`; none left: no selection) before the
   other people clean up after it (`CleanupPeople`).

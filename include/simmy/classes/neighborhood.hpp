@@ -189,7 +189,7 @@ struct FamilyImpl : public Family {
   ~FamilyImpl() override;  // 800B6068
   virtual void CreateFamilyInLot();  // 800B6104
   virtual void RemoveFamilyFromLot();  // 800B61CC
-  virtual void TestMember(cXPerson *) const;  // 800B62D0
+  virtual bool TestMember(cXPerson* person) const;  // 800B62D0
   virtual int* GetMemberByGUID(int guid);  // 800B6334
   virtual bool TestMember(int guid) const;  // 800B6368
   virtual int* GetIndexedMember(int index);  // 800B63A4
@@ -310,8 +310,6 @@ struct NeighborhoodImpl : public Neighborhood {
   virtual void DoStream(ReconBuffer* buffer, int version);  // 800CDC2C
   virtual int GetHouseNumberForLevel(int);  // 800CDD38
   virtual Neighbor* FindNeighborByID(int id);  // 800CDD40
-  // PC: HouseImpl::IsResident (800BC00C) for the port's house stand-in.
-  bool IsResidentOfHouse(cXPersonImpl* p);
   virtual Neighbor* FindNeighborByGUID(int guid);  // 800CDD78
   virtual bool FindFamilyAndIndexByGUID(int guid, int& family, int& index);  // 800CDE00
   Neighbor* FindNeighborByType(ObjSelector* selector);  // 800CDEE0

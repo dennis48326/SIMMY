@@ -19,22 +19,12 @@ void cXObjectImpl::UpdateAge() { SIMMY_STUB("cXObjectImpl::UpdateAge(void)", 0x8
 RET_UNKNOWN cXObjectImpl::GetRootObject(FTilePt &, int) { SIMMY_STUB("cXObjectImpl::GetRootObject(FTilePt &, int)", 0x800DCA2C); return {}; }
 RET_UNKNOWN cXObjectImpl::GetPlacementInfo(FTilePt *, int *, cXObject **, short *, bool *) { SIMMY_STUB("cXObjectImpl::GetPlacementInfo(FTilePt *, int *, cXObject **, short *, bool *)", 0x800DCACC); return {}; }
 void cXObjectImpl::GetPlacementSpec(PlacementSpec *) { SIMMY_STUB("cXObjectImpl::GetPlacementSpec(PlacementSpec *)", 0x800DCB78); }
-void cXObjectImpl::GetNextObjectSibling() { SIMMY_STUB("cXObjectImpl::GetNextObjectSibling(void)", 0x800DCD4C); }
-RET_UNKNOWN cXObjectImpl::GetPrevObjectSibling() { SIMMY_STUB("cXObjectImpl::GetPrevObjectSibling(void)", 0x800DCD70); return {}; }
 PlacementSpec::PlacementSpec(cXObjectImpl *) { SIMMY_STUB("PlacementSpec::PlacementSpec(cXObjectImpl *)", 0x800DCDBC); }
 PlacementSpec::PlacementSpec(bool) { SIMMY_STUB("PlacementSpec::PlacementSpec(bool)", 0x800DCDF4); }
 PlacementSpec::PlacementSpec(FTilePt &, int, cXObjectImpl *, int) { SIMMY_STUB("PlacementSpec::PlacementSpec(FTilePt &, int, cXObjectImpl *, int)", 0x800DCE00); }
-HierarchySite::HierarchySite(PlacementSpec *) { SIMMY_STUB("HierarchySite::HierarchySite(PlacementSpec *)", 0x800DCE44); }
 HierarchySite::HierarchySite(cXObjectImpl *) { SIMMY_STUB("HierarchySite::HierarchySite(cXObjectImpl *)", 0x800DCE90); }
-HierarchySite::HierarchySite(cXObjectImpl *, FTilePt &, int) { SIMMY_STUB("HierarchySite::HierarchySite(cXObjectImpl *, FTilePt &, int)", 0x800DCEC8); }
 HierarchySite::HierarchySite(FTilePt &, int) { SIMMY_STUB("HierarchySite::HierarchySite(FTilePt &, int)", 0x800DCEF8); }
-void cXObjectImpl::HierGetParent() { SIMMY_STUB("cXObjectImpl::HierGetParent(void)", 0x800DCF2C); }
 RET_UNKNOWN cXObjectImpl::HierGetSlot(int) { SIMMY_STUB("cXObjectImpl::HierGetSlot(int)", 0x800DCF84); return {}; }
-void cXObjectImpl::HierSetSite(HierarchySite *) { SIMMY_STUB("cXObjectImpl::HierSetSite(HierarchySite *)", 0x800DCFB8); }
-void cXObjectImpl::HierGetChild(int) { SIMMY_STUB("cXObjectImpl::HierGetChild(int)", 0x800DD114); }
-void cXObjectImpl::HierGetSite(HierarchySite *) { SIMMY_STUB("cXObjectImpl::HierGetSite(HierarchySite *)", 0x800DD15C); }
-void cXObjectImpl::HierSever() { SIMMY_STUB("cXObjectImpl::HierSever(void)", 0x800DD268); }
-RET_UNKNOWN cXObjectImpl::HierGetObject(HierarchySite *) { SIMMY_STUB("cXObjectImpl::HierGetObject(HierarchySite *)", 0x800DD338); return {}; }
 bool cXObjectImpl::IsContained() { SIMMY_STUB("cXObjectImpl::IsContained(void)", 0x800DD408); return {}; }
 RET_UNKNOWN cXObjectImpl::GetContainerID() { SIMMY_STUB("cXObjectImpl::GetContainerID(void)", 0x800DD444); return {}; }
 RET_UNKNOWN cXObjectImpl::GetContainedSlotNum() { SIMMY_STUB("cXObjectImpl::GetContainedSlotNum(void)", 0x800DD49C); return {}; }
@@ -131,9 +121,6 @@ RET_UNKNOWN cXObjectImpl::GetSize() { SIMMY_STUB("cXObjectImpl::GetSize(void)", 
 void cXObjectImpl::GetSim() { SIMMY_STUB("cXObjectImpl::GetSim(void)", 0x800EB450); }
 RET_UNKNOWN cXObjectImpl::GetBuildModeType() { SIMMY_STUB("cXObjectImpl::GetBuildModeType(void)", 0x800EB488); return {}; }
 bool cXObjectImpl::IsSupport() { SIMMY_STUB("cXObjectImpl::IsSupport(void)", 0x800EB4B4); return {}; }
-RET_UNKNOWN cXObjectImpl::CanContributeLight() { SIMMY_STUB("cXObjectImpl::CanContributeLight(void)", 0x800EB4F8); return {}; }
-RET_UNKNOWN cXObjectImpl::GetLightingContribution() { SIMMY_STUB("cXObjectImpl::GetLightingContribution(void)", 0x800EB528); return {}; }
-RET_UNKNOWN cXObjectImpl::GetObjectLightSource() { SIMMY_STUB("cXObjectImpl::GetObjectLightSource(void)", 0x800EB554); return {}; }
 bool cXObjectImpl::IsBroken() { SIMMY_STUB("cXObjectImpl::IsBroken(void)", 0x800EB580); return {}; }
 bool cXObjectImpl::IsDirty() { SIMMY_STUB("cXObjectImpl::IsDirty(void)", 0x800EB5BC); return {}; }
 RET_UNKNOWN cXObjectImpl::IsBurning() { SIMMY_STUB("cXObjectImpl::IsBurning(void)", 0x800EB5F8); return {}; }

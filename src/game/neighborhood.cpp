@@ -801,32 +801,12 @@ RET_UNKNOWN NeighborhoodImpl::UpdateInstanceVisitorTypes() {
     if (!p) continue;
     short type = static_cast<short>(p->GetPersonData(0x20));
     if (type == 0) type = 1;
-    if (IsResidentOfHouse(p)) type = 0;
+    if (Globs_pHouse && Globs_pHouse->IsResident(p)) type = 0;  // Globs::pHouse vtable 0x4C
     p->SetPersonData(0x20, type);
   }
   return 0;
 }
 
-// HouseImpl::IsResident (800BC00C; house.cpp is a PC stand-in): a member of the house's family, or
-// outside free play (DAT_80475C6C) of family 1 (the player family).
-bool NeighborhoodImpl::IsResidentOfHouse(cXPersonImpl* p) {
-  // PC: a player's selected sim lives here. On GC it is always a family member (player 2's sim is the
-  // roommate PreGameState::InsertPlayer2Roommate moved in); the port's fallback for a game started
-  // without one (MoveFamilyOntoLot: a new neighbour in no family) would otherwise be a visitor whose
-  // trees send it home.
-  for (int player = 0; p && player < 2; ++player)
-    if (cXPerson* s = _globals.GetSelectedPerson(player))
-      if (s->AsObject() == p) return true;
-  Neighbor* n = p ? FindNeighborByID(p->GetPersonData(0x1f)) : nullptr;
-  if (!n) return false;
-  FamilyImpl* house = GetFamilyInHouse(GetHouseNumber());
-  if (house && house->TestMember(n->GetGUID())) return true;
-  if (_gd.m_fieldE8 == 0) {
-    FamilyImpl* player = GetFamily(1);
-    if (player && player->TestMember(n->GetGUID())) return true;
-  }
-  return false;
-}
 
 // 800D13D4
 // Every neighbour but `except`; the strongest answer.

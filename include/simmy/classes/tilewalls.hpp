@@ -81,7 +81,7 @@ struct TileWalls {
   unsigned short SetFloorValue(unsigned short pattern, DiagonalSideSelector);  // 80146FF8
   void ConvertToWorldCoords();  // 80147020
   static int RotateSegment(TileWallsSegment, int);  // 80147050
-  static RET_UNKNOWN RotateDiagonal(DiagonalSideSelector, int);  // 8014706C
+  static int RotateDiagonal(DiagonalSideSelector side, int quarters);  // 8014706C
 
   unsigned int m_segments = 0;          // +0x00 TileWallsSegment bits
   unsigned int m_placements = 0;        // +0x04 two bits per edge segment

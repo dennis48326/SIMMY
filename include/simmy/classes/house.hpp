@@ -1,8 +1,9 @@
 // @class House
 // @class HouseImpl after House
 // The house being played (game/house.cpp; Globs::pHouse): its family, its name and the lot score curves.
-// PC: only the parts the UI flows need are ported (the instance, the family, SetFamilyToNull); loading,
-// saving and the lot data are the world side's stand-ins (livemode.cpp BGExec_LoadHouse, lotsave.cpp).
+// Ported: the instance, the family, its messages (DoCommand), IsNative / IsResident, RefreshHouse,
+// EnterLiveMode, the lot data; loading and saving are the world side's stand-ins (livemode.cpp
+// BGExec_LoadHouse, lotsave.cpp).
 #pragma once
 
 struct House {
@@ -43,3 +44,7 @@ struct HouseImpl : House {
 };
 
 extern HouseImpl* Globs_pHouse;  // Globs::pHouse (GC: a House*)
+
+// PC: GlobalDispatch (800B42BC) to the house, the one Commander the port has for these messages
+// (HouseImpl::DoCommand: 0xEC, 0xED, 0xEF, 0xD8, 0xD9, 0xDE, 0xFE, 0x100).
+void HouseDispatch(short message, int param);

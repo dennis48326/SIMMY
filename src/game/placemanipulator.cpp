@@ -26,6 +26,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <string>
 
 // ---------------------------------------------------------------------------------------------------
@@ -438,6 +439,9 @@ int PlacementObject::GrabExistingObjectInstanceFromId(short id) {
   m_origPos[1] = lead->m_location[1];
   m_origDir = static_cast<short>(lead->GetData(1));
   CreateGridObject();
+  // GC CreateGridObject(pos, object): the grabbed object is picked up by the player (UserPickup(false),
+  // vtable 0x164: its "user picked up" trees), its grid tiles placed where it was.
+  ObjUserPickup(lead);
   UpdateAllObjectsInWorldAfterFirstPickupOrFinalPlace(lead);
   return 1;
 }
@@ -1004,4 +1008,68 @@ bool UpdatePlaceManipulator(int player, float dt) {
     return true;
   }
   return false;
+}
+
+// PC development aid: SIMMY_PLACE_TEST="<tick>:<action>;..." runs buy/build actions when the simulator
+// reaches each tick (from SimulateOneTick), as the place / grab manipulators and the wall tool do:
+//   <guid hex>@x,y[,dir]  a new object of that GUID put at the tile's middle (facing dir, eighths) through
+//                         the placement path (Place where legal, then FinalUserPlaceObject: UserPlace)
+//   grab#<id>             the object picked up by the player (UserPickup) and put back (ResetLocation)
+//   wall@x,y,seg          the wall segment deleted (ERoom::DeleteWallAtTile), the rooms and house redone
+//   chain@x,y             the tile's object chain printed (the tile map's object and its siblings)
+//   paperroom@x,y,i[,sell] the room at the tile papered with WallSet entry i (or stripped), wallpainter.cpp
+void WallPainterRoomTest(int x, int y, int index, bool sell);  // wallpainter.cpp
+void PlacementTestTick(int ticks) {
+  static const char* spec = std::getenv("SIMMY_PLACE_TEST");
+  if (!spec || !Globs_pObjectModule || !Globs_pFixedWorld) return;
+  for (const char* p = spec; p && *p; p = std::strchr(p, ';') ? std::strchr(p, ';') + 1 : nullptr) {
+    if (std::atoi(p) != ticks) continue;
+    const char* a = std::strchr(p, ':');
+    if (!a) continue;
+    ++a;
+    int x = 0, y = 0, z = 0;
+    if (std::strncmp(a, "paperroom@", 10) == 0 && std::sscanf(a + 10, "%d,%d,%d", &x, &y, &z) == 3) {
+      WallPainterRoomTest(x, y, z, std::strstr(a, ",sell") != nullptr && std::strstr(a, ",sell") < (std::strchr(a, ';') ? std::strchr(a, ';') : a + std::strlen(a)));
+    } else if (std::strncmp(a, "chain@", 6) == 0 && std::sscanf(a + 6, "%d,%d", &x, &y) == 2) {
+      CTilePt t(x, y, 1);
+      std::printf("[place] tick %d chain at %d,%d:", ticks, x, y);
+      for (cXObjectImpl* o : TileObjects(t)) std::printf(" %s (0x1a %d 0xe %d)", o->DebugName(), o->GetData(0x1a), o->GetData(0xe));
+      std::printf("\n");
+    } else if (std::strncmp(a, "wall@", 5) == 0 && std::sscanf(a + 5, "%d,%d,%d", &x, &y, &z) == 3) {
+      CTilePt t(x, y, 1);
+      TileWalls walls = Globs_pFixedWorld->GetWall(t);
+      const int guid = ERoom::DeleteWallAtTile(t, walls, z);
+      Globs_pFixedWorld->ComputeRooms(0);
+      _globals.RecalcHouse();
+      std::printf("[place] tick %d wall %d,%d seg %d: %s (guid 0x%x)\n", ticks, x, y, z,
+                  Globs_pFixedWorld->GetWall(t).HasWall(z) ? "kept" : "deleted", static_cast<unsigned int>(guid));
+    } else if (std::strncmp(a, "grab#", 5) == 0) {
+      PlacementObject po;
+      const int ok = po.GrabExistingObjectInstanceFromId(static_cast<short>(std::atoi(a + 5)));
+      std::printf("[place] tick %d grab #%d: %d\n", ticks, std::atoi(a + 5), ok);
+      if (ok) {
+        po.ResetLocation();
+        po.DestroyGridObject();
+      }
+    } else {
+      const unsigned int guid = static_cast<unsigned int>(std::strtoul(a, nullptr, 16));
+      const char* at = std::strchr(a, '@');
+      int dir = 0;
+      if (!at || std::sscanf(at + 1, "%d,%d,%d", &x, &y, &dir) < 2) continue;
+      PlacementObject po;
+      if (!po.CreateNewPlacementObjectFromGuid(guid, 0)) {
+        std::printf("[place] tick %d: no object 0x%08x\n", ticks, guid);
+        continue;
+      }
+      SetObjectDirection(dir, po.m_object);
+      int pos[2] = {y * 16 + 8, x * 16 + 8};
+      PlacementData data;
+      const int legal = po.IsLegalToPlaceAtLocation(pos, data);
+      if (legal) po.Place(pos, data);
+      const int dropped = legal ? po.Drop() : 0;
+      std::printf("[place] tick %d 0x%08x at %d,%d dir %d: legal %d (error 0x%x) dropped %d\n", ticks, guid, x, y, dir,
+                  legal, gPlacementError, dropped);
+      if (!dropped && po.m_object) po.Destroy();
+    }
+  }
 }

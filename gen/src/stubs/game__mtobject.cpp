@@ -14,6 +14,7 @@ void cXMTObjectImpl::UserPickup(bool) { SIMMY_STUB("cXMTObjectImpl::UserPickup(b
 RET_UNKNOWN cXMTObjectImpl::UserCanDelete() { SIMMY_STUB("cXMTObjectImpl::UserCanDelete(void)", 0x800C6A3C); return {}; }
 void cXMTObjectImpl::Reset(bool) { SIMMY_STUB("cXMTObjectImpl::Reset(bool)", 0x800C6B10); }
 void cXMTObjectImpl::SetMultiObjectData(int, int) { SIMMY_STUB("cXMTObjectImpl::SetMultiObjectData(int, int)", 0x800C6E44); }
+RET_UNKNOWN ObjectsAtTile(FTilePt &, int) { SIMMY_STUB("ObjectsAtTile(FTilePt &, int)", 0x800C6EBC); return {}; }
 void cXMTObjectImpl::MergeDynamic(cXMTObject *) { SIMMY_STUB("cXMTObjectImpl::MergeDynamic(cXMTObject *)", 0x800C6F2C); }
 void cXMTObjectImpl::RemoveFromDynamic() { SIMMY_STUB("cXMTObjectImpl::RemoveFromDynamic(void)", 0x800C7240); }
 void cXMTObjectImpl::UpdateAllAdjacecy() { SIMMY_STUB("cXMTObjectImpl::UpdateAllAdjacecy(void)", 0x800C7364); }

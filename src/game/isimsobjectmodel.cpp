@@ -164,11 +164,28 @@ void ISimsObjectModel::UpdateParticle(ObjAnimDef* def) {
   else delete obj;
 }
 
+// 8004C9D0
+// Its lights leave the house's level: the two it owns (a window's portal lights, +0x3BC / +0x3C0), the
+// ones it animates and its bulb; the bulb and animated lights are deleted (the owned two by
+// ~ISimInstance). GC: also its separate sub-instance (+0x44C) and the particles; the preloaded
+// animation released (PC: in the destructor).
+void ISimsObjectModel::CleanupStuff(ERLevel* level) {
+  if (!level) return;
+  if (m_light1) level->RemoveLight(m_light1);
+  if (m_light2) level->RemoveLight(m_light2);
+  for (EILight* light : m_animLights) level->RemoveLight(light);
+  if (m_bulb) {
+    level->RemoveLight(m_bulb);
+    delete m_bulb;
+    m_bulb = nullptr;
+  }
+}
+
 // 8004C644
-// GC: also deletes the lights it animates.
+// Its lights out of the house's level (CleanupStuff), then its references released.
 ISimsObjectModel::~ISimsObjectModel() {
-  if (m_house) SIMMY_STUB("ISimsObjectModel::~ISimsObjectModel: CleanupStuff(house level)", 0x8004C644);
-  if (!m_animLights.empty()) SIMMY_STUB("ISimsObjectModel::~ISimsObjectModel: animated lights", 0x8004C644);
+  if (m_house) CleanupStuff(m_house->m_level);
+  for (EILight* light : m_animLights) delete light;  // GC: TArray<EILight*>::~TArray (owning)
   m_animLights.clear();
   if (m_stateShader) {  // PC: released (GC kept the reference)
     m_stateShader->DelRef();

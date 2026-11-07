@@ -185,6 +185,9 @@ Development only: the launcher removes all of them except `SIMMY_INI` from the g
 | `SIMMY_RECON_TRACE=1` | Report streams not read to their end; person data as read |
 | `SIMMY_DUMP_WORLD=1` | Dump tiles, rooms, walls and objects at house load |
 | `SIMMY_BUILD_TRACE=1\|2` | Build tools / house rebuild; 2 also wall segments |
+| `SIMMY_ROOM_TRACE=1` | The room score constants and every room recomputed (area, floor, walls, objects, impact, light, score) |
+| `SIMMY_PLACE_TRACE=1` | Placement event trees run (placed, picked up, user placed / picked up, wall adjacency) |
+| `SIMMY_PLACE_TEST="<tick>:<action>;..."` | At sim ticks: `<guid hex>@x,y[,dir]` buy-place a new object, `grab#<id>` grab and put back, `wall@x,y,seg` delete a wall segment, `chain@x,y` print a tile's object chain, `paperroom@x,y,i[,sell]` paper (strip) the room with WallSet entry i ([`placemanipulator.cpp`](../src/game/placemanipulator.cpp)) |
 | `SIMMY_CTL_TRACE=1`, `SIMMY_COOP_TRACE=1`, `SIMMY_SWITCH_TRACE=1`, `SIMMY_CAM_TRACE=1` | Classic cursor; both players; sim switching; the lot intro camera's steps |
 | `SIMMY_KBM_TRACE=1`, `SIMMY_KBM_NOPICK=1` | Keyboard/mouse input made; floor-only mouse picking |
 | `SIMMY_LEAVE_LOT_TEST=<frames>[,<mode>[,<house>]]` | Leave the lot (mode 5 to a house, 4 the story end) |

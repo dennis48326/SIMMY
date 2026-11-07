@@ -17,7 +17,6 @@ RET_UNKNOWN cXPersonImpl::HasQueuedActionOfPri(int) const { SIMMY_STUB("cXPerson
 RET_UNKNOWN cXPersonImpl::GetCurrentInteractionIconObject() { SIMMY_STUB("cXPersonImpl::GetCurrentInteractionIconObject(void)", 0x80126468); return {}; }
 void cXPersonImpl::DebugDumpHappyScape() { SIMMY_STUB("cXPersonImpl::DebugDumpHappyScape(void)", 0x801264C4); }
 void cXPersonImpl::Skipping3D() { SIMMY_STUB("cXPersonImpl::Skipping3D(void)", 0x80128134); }
-void cXPersonImpl::UpdateCurrentRoom() { SIMMY_STUB("cXPersonImpl::UpdateCurrentRoom(void)", 0x801281B4); }
 void cXPersonImpl::Place(FTilePt &, int, cXObject *, int) { SIMMY_STUB("cXPersonImpl::Place(FTilePt &, int, cXObject *, int)", 0x80128294); }
 void cXPersonImpl::SetHilite(int) { SIMMY_STUB("cXPersonImpl::SetHilite(int)", 0x801294C8); }
 RET_UNKNOWN cXPersonImpl::IsSelected() { SIMMY_STUB("cXPersonImpl::IsSelected(void)", 0x8012953C); return {}; }
@@ -50,7 +49,6 @@ RET_UNKNOWN cXPersonImpl::GetCurrentInteractionNC() { SIMMY_STUB("cXPersonImpl::
 RET_UNKNOWN cXPersonImpl::GetPersonDataArray() { SIMMY_STUB("cXPersonImpl::GetPersonDataArray(void)", 0x8012C778); return {}; }
 void cXPersonImpl::SetIdleLoopCount(short) { SIMMY_STUB("cXPersonImpl::SetIdleLoopCount(short)", 0x8012C7DC); }
 RET_UNKNOWN cXPersonImpl::GetDestList() { SIMMY_STUB("cXPersonImpl::GetDestList(void)", 0x8012C7E4); return {}; }
-RET_UNKNOWN cXPersonImpl::GetCurrentRoom() const { SIMMY_STUB("cXPersonImpl::GetCurrentRoom(void) const", 0x8012C7F4); return {}; }
 void cXPersonImpl::GetNeighborID() const { SIMMY_STUB("cXPersonImpl::GetNeighborID(void) const", 0x8012C7FC); }
 RET_UNKNOWN cXPersonImpl::IsVisitor() { SIMMY_STUB("cXPersonImpl::IsVisitor(void)", 0x8012C8A8); return {}; }
 RET_UNKNOWN cXPersonImpl::IsAlien() { SIMMY_STUB("cXPersonImpl::IsAlien(void)", 0x8012C904); return {}; }

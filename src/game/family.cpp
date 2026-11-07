@@ -45,6 +45,14 @@ int* FamilyImpl::GetMemberByGUID(int guid) {
   return nullptr;
 }
 
+// 800B62D0
+// The person's selector's GUID is a member's.
+bool FamilyImpl::TestMember(cXPerson* person) const {
+  cXObject* o = person ? person->AsObject() : nullptr;
+  ObjSelector* selector = o ? o->GetSelector() : nullptr;  // cXObject vtable 0x374 (GetSelector const)
+  return TestMember(static_cast<int>(selector ? selector->GetGUID() : 0));
+}
+
 // 800B6368
 bool FamilyImpl::TestMember(int guid) const {
   for (int m : m_members)

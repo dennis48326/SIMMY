@@ -206,7 +206,7 @@ struct cXPersonImpl : public cXObjectImpl, public cXPerson {
   bool IsCarrying();  // 8012C788
   void SetIdleLoopCount(short);  // 8012C7DC
   RET_UNKNOWN GetDestList();  // 8012C7E4
-  RET_UNKNOWN GetCurrentRoom() const;  // 8012C7F4
+  int GetCurrentRoom() const;  // 8012C7F4
   void GetNeighborID() const;  // 8012C7FC
   void SetNeighborID(short);  // 8012C838
   bool IsRouting();  // 8012C878
@@ -260,6 +260,7 @@ struct cXPersonImpl : public cXObjectImpl, public cXPerson {
   };
   Motives m_motives;                          // +0xA8
   int m_lastMotiveTick = 0;                   // +0x12C (cXPersonImpl +0x4B words)
+  unsigned short m_currentRoom = 0xfffb;      // +0x41C the room it is in (UpdateCurrentRoom; 0xFFFB none yet)
   std::vector<MotiveInc> m_motiveDeltas;      // +0x3E4
   Neighbor* m_neighbor = nullptr;             // PC: the neighbour it is (GC: by its neighbour id)
   // The object trees running on its stack (GC +0x420, 0x0C each): the object, the stack size with the

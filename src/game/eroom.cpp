@@ -398,24 +398,51 @@ bool ERoom::PreviewWallBuild(bool fences) {
   return count < 100;
 }
 
+// 80030104
+// The door or window (an object of type 8 at the tile, walking its object chain) whose wall placement
+// flags (data 0xD, turned by its direction) put it in the tile's wall `segment`: its GUID into `guid`,
+// killed (ObjectModule vtable 0x5C) when `kill`. 1: there is one.
+int ERoom::KillArchitecturalObject(CTilePt& tile, TileWallsSegment segment, int& guid, bool kill) {
+  guid = 0;
+  ObjectIterator it;
+  it.init(tile, ObjectIterator__IterateType{0});
+  cXObjectImpl* found = nullptr;
+  while (it.m_current) {
+    cXObjectImpl* o = it.m_current->GetObjectImplementation();
+    if (o->GetType() == 8) {  // GC: also not a person (type 2)
+      const unsigned int flags = static_cast<unsigned short>(o->GetData(0xd));
+      const int seg = TileWalls::RotateSegment(segment, static_cast<int>((8u - static_cast<unsigned int>(o->GetData(1))) >> 1 & 3));
+      if ((seg == 1 && (flags & 8)) || (seg == 8 && (flags & 4)) || (seg == 2 && (flags & 1)) || (seg == 4 && (flags & 2))) {
+        found = o;
+        break;
+      }
+    }
+    ++it;
+  }
+  if (!found) return 0;
+  guid = static_cast<int>(objdef::GUID(found->GetDef()));
+  if (kill && Globs_pObjectModule) Globs_pObjectModule->KillObject(static_cast<short>(found->GetID()));
+  return 1;
+}
+
 // 8002FF8C
-// The wall off the tile (unless it is a door or window's: styles 3, 5, 6, 0xF, 0x17, 0x16 kill that
-// object instead): a diagonal on a tile without a floor gives the tile its half's floor, then the world
-// gets the walls without it. Returns the killed object's refund (0).
+// The wall off the tile, unless it holds a door or window (styles 3, 5, 6, 0xF, 0x17, 0x16 and such an
+// object in it, KillArchitecturalObject without killing: the wall stays): a diagonal on a tile without
+// a floor gives the tile its half's floor, then the world gets the walls without it. Returns the door or
+// window's GUID (0: none, the wall went).
 int ERoom::DeleteWallAtTile(CTilePt& tile, TileWalls& walls, TileWallsSegment segment) {
   cFixedWorldImpl* world = Globs_pFixedWorld;
-  int refund = 0;
+  int guid = 0;
   const int style = walls.GetStyle(segment);
-  const bool portal = style == 3 || style == 5 || style == 6 || style == 0xf || style == 0x17 || style == 0x16;
-  if (portal) {
-    SIMMY_STUB("ERoom::DeleteWallAtTile: the door or window in the wall (KillArchitecturalObject)", 0x8002FF8C);
+  const bool portal = style == 3 || style == 5 || style == 6 || style == 0xf || style == 0x17;
+  if ((!portal && style != 0x16) || KillArchitecturalObject(tile, segment, guid, false) == 0) {
+    if (segment == 0x10 || segment == 0x20) {
+      if (world->GetFloor(tile) == 0xff) world->SetFloor(tile, walls.GetFloorValue(segment == 0x10 ? 4 : 3));
+    }
+    walls.RemoveWall(segment);
+    world->SetWall(tile, walls);
   }
-  if (segment == 0x10 || segment == 0x20) {
-    if (world->GetFloor(tile) == 0xff) world->SetFloor(tile, walls.GetFloorValue(segment == 0x10 ? 4 : 3));
-  }
-  walls.RemoveWall(segment);
-  world->SetWall(tile, walls);
-  return refund;
+  return guid;
 }
 
 // 8002FE18
@@ -465,16 +492,43 @@ double ERoomWall::GetWallMeterValue(int& rooms) {
   return value;
 }
 
+// 8002DCF0
+// The rooms' lookup table: each run of the eight lists (+0x70: the four edge segments' and the
+// diagonals') under its room id (ERoomWall +0x28), in list order. GC: also a 0x20-byte buffer per room
+// (+0xA0, the wallpaper preview's; not kept).
+void ERoom::InitRoomLookupTab() {
+  m_roomWalls.clear();
+  for (int i = 0; i < 8; ++i)
+    for (ERoomWall* wall : m_walls[i]) m_roomWalls[wall->m_room].push_back(wall);
+}
+
+// 8002DF7C
+// The wall tiles of the room's runs (ERoomWall::CountWalls).
+int ERoom::GetNumWalls(unsigned short room) {
+  auto it = m_roomWalls.find(room);
+  if (it == m_roomWalls.end()) return 0;
+  int n = 0;
+  for (ERoomWall* wall : it->second) n += wall->CountWalls();
+  return n;
+}
+
+// 8002F81C
+// Its tiles that have a wall part.
+int ERoomWall::CountWalls() {
+  int n = 0;
+  for (EIWallPart* part : m_parts)
+    if (part) ++n;
+  return n;
+}
+
 // 8002EBB8
-// The walls: along y, along x, then the diagonals.
+// The walls: along y, along x, then the diagonals; the rooms' lookup table.
 void ERoom::Init() {
   int walls = 0, tiles = 0;
   ProcStandardWalls(true, walls, tiles, true);
   ProcStandardWalls(false, walls, tiles, true);
   ProcDiagonalWalls(walls, tiles, true);
-  // GC: InitRoomLookupTab (8002DCF0): each room's runs, for the wallpaper preview and cost and the
-  // camera's opaque-room test (none of which is ported).
-  SIMMY_STUB("ERoom::Init: InitRoomLookupTab (the rooms' wall lists)", 0x8002EBB8);
+  InitRoomLookupTab();
   ERoomWall::m_wallCount = walls;
   ERoomWall::m_tileCount = tiles;
   SetWallState(_globals.m_house->m_wallMode);

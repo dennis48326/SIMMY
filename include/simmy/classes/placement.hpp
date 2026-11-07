@@ -2,9 +2,9 @@
 // game/walls.cpp's wall tests) and InteractorModule's legality helpers (game/interactorutils.cpp), used by
 // the place manipulator (placemanipulator.cpp).
 //
-// PC: these run on the port's world model. An object's site is its FTilePt and level (cXObjectImpl
-// +0x68/+0x80) and the ObjectModule's tile map; the slot hierarchy (HierarchySite, containers, routing
-// slots) is not read, so objects are placed on tiles only. GC's object classes have these as virtual
+// PC: these run on the port's world model. An object's site is a tile (the ObjectModule's tile map and
+// the tile chain) or an object's slot (the slot hierarchy, HierSite); data 2 / 3 name the container and
+// slot as GC Place writes them. GC's object classes have these as virtual
 // methods (cXObject vtable 0x124..0x15C, overridden by cXMTObjectImpl); here they are free functions that
 // dispatch on the object's multi-tile group (see PlacementGroup).
 #pragma once
@@ -28,6 +28,20 @@ struct PlaceSpec {
   // 800DCE00 PlaceSpec(FTilePt&, int, cXObjectImpl*, int): on a tile (or in a container's slot,
   // where the container's location counts).
   PlaceSpec(const int p[2], int lvl, cXObjectImpl* c, int s);
+};
+
+// GC HierarchySite (0x18; PC: HierSite, the generated class keeps the name): an object's site in the
+// slot hierarchy: on a tile (no container) or in entry `slot` of the container's slot vector (entry 0:
+// the tile chain, k + 1: object slot k).
+struct HierSite {
+  int valid = 0;                      // +0x00 in the world
+  int pos[2] = {-16, -16};            // +0x04 FTilePt
+  cXObjectImpl* container = nullptr;  // +0x0C
+  int slot = -1;                      // +0x10 the entry
+  int level = 0;                      // +0x14
+  HierSite() = default;
+  explicit HierSite(const PlaceSpec& spec);              // 800DCE44
+  HierSite(cXObjectImpl* c, const int p[2], int slot);   // 800DCEC8
 };
 
 // GC InteractorModule::PlacementData (0xC): the slot IsLegalToPlaceSingleTileAtLocation found.
@@ -92,6 +106,21 @@ int ObjGetCurrentValue(cXObjectImpl* o);                                       /
 int ObjGetWasPlacedFromInventory(cXObjectImpl* o);                             // 800E22C8
 void ObjSetWasPlacedFromInventory(cXObjectImpl* o, bool on);                   // 800E22F8
 void ObjUpdateChairFacing(cXObjectImpl* o);  // 800DE788 (PC: objectplace.cpp's UpdateChairFacingAt)
+
+// The slot hierarchy (cXObjectImpl's Hier* members, game/object.cpp)
+void HierGetSite(cXObjectImpl* o, HierSite& site);           // 800DD15C
+cXObjectImpl* HierGetChild(cXObjectImpl* o, int entry);      // 800DD114
+cXObjectImpl* HierGetParent(cXObjectImpl* o);                // 800DCF2C
+cXObjectImpl* GetNextObjectSibling(cXObjectImpl* o);         // 800DCD4C
+cXObjectImpl* GetPrevObjectSibling(cXObjectImpl* o);         // 800DCD70
+void HierSever(cXObjectImpl* o);                             // 800DD268
+void HierSetSite(cXObjectImpl* o, HierSite& site);           // 800DCFB8
+cXObjectImpl* HierGetObject(cXObjectImpl* o, HierSite& site);  // 800DD338
+// TestAndPlace(spec, true)'s two halves: leaving the site (the chained object takes it), taking one.
+void HierUnlink(cXObjectImpl* o);
+void HierLink(cXObjectImpl* o, PlaceSpec& spec);
+// PC: a person the walker moved takes the tile it now stands on.
+void HierResite(cXObjectImpl* o);
 
 // game/interactorutils.cpp (InteractorModule::)
 cXObjectImpl* CreateObjectFromGUID(unsigned int guid);                         // 802113D8
