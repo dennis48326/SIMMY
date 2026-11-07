@@ -26,6 +26,7 @@ history, not reference (many of their "not ported" lists are out of date).
 | [launcher.md](launcher.md) | SimmyLauncher internals: disc check, ini editing, starting the game, failure reporting |
 | [testing.md](testing.md) | How the port is tested: headless/offscreen runs, scripted input, the regression suite, every `SIMMY_*` variable |
 | [known-gaps.md](known-gaps.md) | Unported/stubbed areas that matter, GameCube behaviour kept on purpose, known limitations |
+| [porting-audit.md](porting-audit.md) | Ranked audit of every unported function and partial gap: what is missing in GC play, what is N/A (EyeToy, other consoles, dev tools, dead code) |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Keeping these pages current |
 
 ## Finding things

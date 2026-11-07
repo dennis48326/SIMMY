@@ -5,6 +5,8 @@ calls, `Unported(...)` primitives, `gen/functions.tsv`). For the full list of un
 `python tools/progress.py` and look at the `[stub #n]` lines of a run of the path you care about.
 About 58% of the game's functions are ported (8463 of 14600 in `gen/functions.tsv`); much of the rest is
 unreachable in this build (PDA, EyeToy, Urbz leftovers, Xbox/PS2 code) or replaced by PC code.
+**The ranked list of real gaps is [porting-audit.md](porting-audit.md)**; this page keeps the shorter
+summary and the deliberate GC behaviour.
 
 ## Possible bugs found while writing these docs (worth a look)
 
@@ -22,7 +24,8 @@ unreachable in this build (PDA, EyeToy, Urbz leftovers, Xbox/PS2 code) or replac
 - Placement: a multi-tile container's side with room is not chosen for a surface object; the grid object
   (GUID 0x437: the port draws its model, the object is not made).
 - `SAnimator2`: `TryIdleAnimate` syncing an object, `TryAnimate` stopping the idle track, event notes
-  of kind 9; animation events of phase-locked tracks (`EAnimController::AddEventRange`).
+  of kind 9. (Animation events, `EAnimController::AddEventRange`, are not a gap: the release build never
+  collects them.)
 - A dead player sim stays on the lot as a ghost (data 0x4A flag 4, now read): its autonomy offers only
   ghost entries (TTAB flag 0x10), in the tutorial lot that is "Shoo" with score 0, chosen again every
   few frames (seen in a 1P soak after the sim starved alone; no crash).
@@ -36,8 +39,7 @@ unreachable in this build (PDA, EyeToy, Urbz leftovers, Xbox/PS2 code) or replac
   Other Commanders (the world, the object module, families) are not listeners.
 - `HouseImpl` loading and saving (`Initialize`, `LoadFile`, `SaveFile`: the score curves, the name) are
   the world side's stand-ins (livemode.cpp `BGExec_LoadHouse`, lotsave.cpp); `ObjectModuleImpl::ComputeStats`
-  is a stand-in (lotsave.cpp). The port saves no people, so an object chained under a person is its tile's
-  object again at load.
+  is a stand-in (lotsave.cpp). People are added to the object module and saved with it.
 - `ISimsObjectModel::Update`: an object in the slot of an object that is itself carried (stub 8004CBDC
   "carried objects", logged for every held object but only acting for a nested carry, e.g. food on a carried
   plate) does not follow the outer holder's hand; objects held by a sim do (the hand position is ported).
@@ -93,7 +95,7 @@ pad motor through `EVibrate` and aurora's `PADControlMotor` (one on/off motor, a
   control while holding something makes the sim set it down (its idle tree).
 - The story family starts with §0 on lot 9; the plumb bob's particles never show (release build stops
   them); bloom has no notes in the shipped data; lightning is empty (`EHouse::TriggerLightningEffect`,
-  room effect 0x34 kind 2); GBA communication (0x36) is false without EyeToy hardware; the CAS room has no ambient score.
+  room effect 0x34 kind 2); GBA communication (0x36) is false without EyeToy hardware. (The CAS room's ambient score is a gap, not kept behaviour: GC `CasScene::Init` starts one.)
 - In two-player games audio is one stereo mix of both cameras' listeners; full-stage dialogs show for
   both players (in both windows with `split=windows`).
 - `ProcessFrameEffects` and EGraphics bloom/blur parameters are empty in the release build.

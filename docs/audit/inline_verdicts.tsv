@@ -1,0 +1,211 @@
+src/engine/e_rtexture.cpp:83	PC-replaced	ERTexture::Select: texture binding is done by the PC renderer backend (aurora GX); never logged
+src/engine/e_submodelshader.cpp:150	MISSING-L	float non-indexed strips not drawn; never logged (disc models use display lists or fixed-point)
+src/engine/e_resourceman.cpp:462	PC-replaced	base-class pure virtual; every used manager overrides it
+src/engine/e_ngcrenderer_geom.cpp:308	MISSING-L	HIT: fixed-point strips without GX display list (sphere-mapped reflective layers) not drawn; find which model logs it (render with SIMMY trace) - may be a missing reflective/chrome layer
+src/engine/psystem.cpp:847	MISSING-L	headerless (pre-version-14) particle files; never logged, disc particles have the header
+src/engine/e_engine.cpp:15	PC-replaced	not_ready() helper for singletons of unported files; logs only the subsystem name
+src/engine/e_rshader.cpp:325	MISSING-L	ERShader::Clone of multi-state shaders returns null; never logged
+src/engine/e_rshader.cpp:336	MISSING-L	Clone of multi-texture shaders drops the extra textures; never logged
+src/engine/e_animcontroller.cpp:251	MISSING-L	EAnimEvent records (AddEventRange) never dispatched; never logged in soaks (disc anims appear to carry none); known-gaps
+src/engine/e_animcontroller.cpp:285	MISSING-L	same as :251
+src/engine/e_animcontroller.cpp:302	MISSING-L	same, phase-locked (slave) tracks; known-gaps
+src/engine/interestfade.cpp:64	MISSING-L	3D trapezoid fades (tilted planes) not set up; only the 2D fade runs; never logged
+src/game/objectmodule.cpp:59	PC-replaced	HIT: ObjectFolder::FreeUnusedData is GC heap housekeeping (PC loads on demand)
+src/game/objectmodule.cpp:82	MISSING-L	UpdateSimObjects/CheckIntegrity after load: integrity fix-ups of bad saves not done
+src/game/objectmodule.cpp:101	MISSING-L	HIT daily: UpdateAge (data 0x12 age in years, 0x30 age in months from birth date 0x2D-0x2F) never written; only matters if a tree reads object age; S effort (14 lines of GC)
+src/game/objectmodule.cpp:152	MISSING-L	HIT: PostLoad does not redo SetLevel/SetLocation, nor auto-reset objects with definition flag 2 (+0x7C) when sAutoReset, nor reset placeholder objects (CleanupPeople, tree reset, init tree). sAutoReset has no setter call: check its initial value
+src/game/objectmodule.cpp:185	PC-replaced	writing is lotsave.cpp WriteObjectModuleStream
+src/game/objectmodule.cpp:189	NA-unreachable	saves before version 0x2F: no such save exists for this port
+src/game/objectmodule.cpp:222	MISSING-L	HIT: per object before its stream GC clears its tree stack (TreeSim vtable 0x24) and after it sets misc flag 0x80; the port reads the stack over whatever is there and never sets 0x80 (no reader of 0x80 found)
+src/game/objectmodule.cpp:282	MISSING-L	after load GC kills placeholder objects (GUID 0x3C08965F: unknown types in the save) and reads the remembered object list / last typed name; port keeps placeholders in the world
+src/game/objectmodule.cpp:330	PC-replaced	HIT: portals made as cXMTObjectImpl with m_portalValues (portal.cpp); known-gaps
+src/game/objectmodule.cpp:352	PC-replaced	HIT: people/portal lists are derived by scanning (portal.cpp People()/Portals()); ids 0x4000+ special list not used
+src/game/objectmodule.cpp:527	MISSING-L	HIT: JustBorn not writing birth date 0x2D/0x2E/0x2F and data 0x18 (hour)/0x15 (minute) of creation; only matters if a tree reads them (e.g. food age). S effort
+src/game/cascostumes.cpp:95	NA-unreachable	version-1 costume lists; disc list is version 2
+src/game/objectfolder.cpp:108	PC-replaced	HIT: FileList of object files: PC reads objects from the archives
+src/game/objectfolder.cpp:112	MISSING-L	GlobalDispatch(0xDC) after folder init: no listener in the port (GlobalDispatch is HouseDispatch only)
+src/game/objectfolder.cpp:122	PC-replaced	HIT: tree-set AddRef/DelRef is resource caching
+src/game/objectfolder.cpp:134	PC-replaced	object files are QuickResFile on GC, archives on PC
+src/game/objectfolder.cpp:192	PC-replaced	HIT: XObjLang / SmartDataFactory: the port reads definition data directly (objdef::)
+src/game/objectfolder.cpp:406	MISSING-L	HIT: saved tree versions are recorded (s_savedTreeVersions) but GetInitTreeVersion compare not done: an object whose tree changed is not reset on load; disc trees never change, so only cross-version saves
+src/game/objectfolder.cpp:611	PC-replaced	HIT: new user GUIDs from a counter instead of StubObject::MakeNewGUID (random); unique either way
+src/game/memcardscreens.cpp:1527	NA-unreachable	importing a save from slot B (known-gaps: slot-B import unreachable)
+src/game/house.cpp:103	NA-unreachable	RoomManager::PrintStats debug message
+src/game/simulator.cpp:162	MISSING-L	HIT: tutorial global 0x19 is kept over a load; GC also writes DAT_804761C8 (tutorial flag) - check that the tutorial state survives save/load in story lot 9
+src/game/simulator.cpp:287	PC-replaced	HIT: PostSim = KillQueueFlush (done in SimulateOneTick), NeighborhoodImpl::PostSim (empty), and AdvanceSelectedPerson when a player has none (objectmodule.cpp:556 does it)
+src/game/mustates.cpp:54	NA-unreachable	MUWrapper dialogs: known-gaps (unreachable); PC memory-unit screens are memcardscreens.cpp
+src/game/mustates.cpp:424	PC-replaced	MUStatesLoadHouse: PC loads the house through BGExec_LoadHouse stand-in
+src/game/treesim.cpp:263	NA-unreachable	writing a pre-0x19 tree stack: never written
+src/game/treesim.cpp:708	MISSING-M	HIT: IncrementSimSocialInterest (8012BB8C) not called: the long-term "social interest" (relationship variable 1) never drifts toward the daily relationship; also TrySocialMode never seeds motive 4 from it (GetSimSocialInterestAsMotiveValue) or stores it back (SetSimSocialIntrestFromMotiveValue). Social-mode outcomes may differ; run a social with SIMMY_VM_TRACE and watch motive 4
+src/game/urbzmode.cpp:110	NA-unreachable	author mode only
+src/game/person.cpp:1090	MISSING-L	primitive 0x2F TryReach returns true without reaching; never logged; known-gaps
+src/game/person.cpp:2017	PC-replaced	bad facing in TryGotoRelative is a tree error path; port returns 0 instead of Error(vtable 0x50C); never logged
+src/game/autonomy.cpp:240	NA-unreachable	motive curves from a string-set file: no disc definition names one (known-gaps)
+src/game/wantfear.cpp:157	NA-unreachable	want data versions 1/2: disc has version 3
+src/game/edithdialogprim.cpp:326	MISSING-M	object dialogs with icon kind 2 (neighbour portrait big thumbnail), 3 (object big thumbnail), 4 (DialogIconTable shader) show no picture; M effort (thumbnail rendering exists in thumbnail.cpp?)
+src/game/thesims.cpp:416	PC-replaced	HIT: stage timing/front-end flags: PC state machine handles them
+src/game/thesims.cpp:427	PC-replaced	HIT: resource loader flush: PC loads synchronously
+src/game/thesims.cpp:467	NA-unreachable	HIT: EGraphics::DisplayTiming is a debug display
+src/game/thesims.cpp:512	NA-platform	HIT: HDDThread priority (no HDD thread)
+src/game/thesims.cpp:529	PC-replaced	HIT: front-end flags / NghResFile reset handled by the PC flow
+src/game/thesims.cpp:572	UNSURE	GamePlayShutdown = NeighborhoodImpl vtable 0x194 + NeighborhoodImpl::Unload when the main menu returns 2; check that quit -> main menu -> load another slot leaves no stale neighbourhood
+src/game/eroom.cpp:580	MISSING-L	HIT: CalAllRoomOpaque / CalRoofOpaque / CalShortDistToCam: camera room opacity and roof fade; known-gaps says written but never read
+src/game/placemanipulator.cpp:187	MISSING-L	HIT: placing a surface object on a multi-tile container (counter/table) does not choose the side with room; known-gaps
+src/game/placemanipulator.cpp:525	PC-replaced	grid tile: port draws GUID 0x437 model directly (known-gaps)
+src/game/sanimator2.cpp:1536	MISSING-L	TryIdleAnimate syncing an object (vtable 0xC4); known-gaps; never logged
+src/game/sanimator2.cpp:1630	MISSING-L	TryAnimate kind 1 anim 0: idle track not stopped; never logged
+src/game/sanimator2.cpp:1951	MISSING-L	animation note kind 9 (the interaction object, vtable 0x9C); never logged
+src/game/directinteractor.cpp:138	PC-replaced	HIT: input session = PC input stand-in; the plumb bob part is done 7 lines later (stale message)
+src/game/simimagemaker.cpp:484	NA-platform	EyeToy representation images
+src/game/wallmanipulator.cpp:172	MISSING-L	undoing a wall delete that broke a room: ERoom::DeleteERoomWallContainingSegment not done (3D wall pieces may stay until rebuild); never logged
+src/game/wallmanipulator.cpp:687	MISSING-L	HIT: LegalWallTile does not check objects held in slots of objects on the tile; those objects sit on the same tile, so mostly covered
+src/game/pregame.cpp:83	PC-replaced	HIT: stage timing
+src/game/pregame.cpp:122	NA-unreachable	author mode cheats
+src/game/pregame.cpp:286	NA-platform	HIT: HDDThread
+src/game/pregame.cpp:296	PC-replaced	HIT: custom character face textures freed (memory only)
+src/game/pregame.cpp:347	PC-replaced	HIT: NghResFile::FlushAllHouseContents: PC cache/memory housekeeping
+src/game/pregame.cpp:350	PC-replaced	HIT: same
+src/game/pregame.cpp:373	MISSING-L	DAT_80485900 not cleared when CAS backs out to the menu (port keeps it in _gd.m_field2C elsewhere)
+src/game/pregame.cpp:410	MISSING-L	options block +0x0C cleared when free-play CAS is accepted; meaning of that option byte unknown; check which option it is
+src/game/pregame.cpp:459	PC-replaced	HIT: M2MTarget and front-end flash teardown handled by PC flow
+src/game/object.cpp:33	PC-replaced	HIT: TreeSim, default data and slots are set up by other port code (StartBehavior, LoadObjectSpriteSlots, objdef)
+src/game/object.cpp:141	NA-unreachable	version-0 saves
+src/game/object.cpp:170	NA-unreachable	saves before 0x53 (port saves are current version)
+src/game/castarget.cpp:293	NA-platform	HIT: representation shaders = EyeToy
+src/game/castarget.cpp:409	MISSING-L	edit-family CAS without CAS_lotnumber returns lot 1 instead of the file current lot; wardrobe sets CAS_lotnumber, so only other entry paths
+src/game/castarget.cpp:438	MISSING-L	CAS_loadingscreen: gbDrawUI and stencil state not set; loading screen still starts
+src/game/livemode.cpp:66	PC-replaced	HIT: NeighborhoodImpl::LoadHouse is the PC stand-in below (see report: stand-in drops)
+src/game/livemode.cpp:69	MISSING-L	HIT: HouseImpl::Initialize house score curves not loaded (see report)
+src/game/livemode.cpp:210	PC-replaced	HIT: LoadLevelGlobalData preloads; PC loads on demand
+src/game/livemode.cpp:255	NA-unreachable	HIT: EMemoryMeterWin debug window
+src/game/livemode.cpp:419	NA-unreachable	ECheats (cheats/author)
+src/game/livemode.cpp:727	PC-replaced	graphics refresh after wall mode change; PC redraws each frame; SetNextWallMode has no caller in release
+src/game/livemode.cpp:844	MISSING-L	HIT: EHouse::Update weather and the controller refresh button (weather: known-gaps lightning empty; rain via SetIsRaining)
+src/game/livemode.cpp:868	PC-replaced	HIT: interactor module init is the PC interactor stand-in
+src/game/livemode.cpp:886	PC-replaced	HIT: teardown done by EHouse::Cleanup / changehouse.cpp
+src/game/livemode.cpp:914	PC-replaced	HIT: teardown order differs (interactors go with the house)
+src/game/livemode.cpp:1189	MISSING-H	HIT: ELiveMode::Update GC sets cXObject::SetFreeWill every frame from the options Free Will setting (OptionsRecon +0) unless global 0x27 overrides; port has const sFreeWill = 1 (autonomy.cpp:42): the pause-menu Free Will OFF option is ignored, selected sims still act on their own. S effort. CameraManager part is PC-replaced
+src/game/livemode.cpp:1255	MISSING-L	story-mode "press start" prompt; GC clears m_storyStart in the first IsReadyForUpdate, so it shows at most a frame
+src/game/livemode.cpp:1309	PC-replaced	HIT: EInstance::SetContext per view: PC renders each view itself; plumb bob visibility handled by interactors
+src/game/livemode.cpp:1439	PC-replaced	HIT: stage timing
+src/game/livemode.cpp:1483	PC-replaced	HIT: heap compaction / resets
+src/game/livemode.cpp:1487	PC-replaced	resource loader idle check
+src/game/livemode.cpp:1501	PC-replaced	SetCurrentHouse done in BGExec_LoadHouse stand-in
+src/game/livemode.cpp:1515	PC-replaced	memory unit request (PC saves differently)
+src/game/livemode.cpp:1553	PC-replaced	stage 13 = ObjectModule::SelectPlayerSims (MoveFamilyOntoLot selects), author-mode positioning, WantFearManager::CaptureLog (debug)
+src/game/livemode.cpp:1602	PC-replaced	BGCall_FlushResQueue
+src/game/livemode.cpp:1605	NA-platform	representation shaders (EyeToy)
+src/game/livemode.cpp:1617	MISSING-L	simulator paused + vibration stop at story start: GC resumes it next update (IsReadyForUpdate), so no visible effect
+src/game/livemode.cpp:1651	PC-replaced	plumb bobs/interactors made by the PC stand-ins; other houses flushed is memory
+src/game/iobjectman.cpp:25	NA-unreachable	HIT: bound rectangle display list for debug bounds drawing
+src/game/iobjectman.cpp:101	MISSING-L	HIT: ISimsCounterTopObject made as a plain model: counters do not join their neighbours (counter tops/edges); check visually in buy mode
+src/game/iobjectman.cpp:103	MISSING-L	IShrubObject (boxwood hedge) as a plain object: hedge joining/variation; not logged
+src/game/iobjectman.cpp:110	MISSING-L	HIT: multi-tile counter as plain multi-tile model; as :101
+src/game/sprites.cpp:771	MISSING-L	HIT: balloon alternation period is fixed 500 ms; GC uses object temp 0 (cXObject vtable 0x274 GetTemp(0)) when >= 1. S effort (one line)
+src/game/objectsim.cpp:29	MISSING-M	Unported(): primitives 0x0A TryTutorial, 0x15 TryShowString, 0x22 TryUIEffect, 0x39-0x3C HUD, 0x3D TryParticleEffect return true; known-gaps says no disc tree uses them except debug object; TryTutorial/TryShowString/TryUIEffect logged? none in hits_raw; verify with SIMMY_VM_TRACE in tutorial lot
+src/game/objectsim.cpp:88	MISSING-L	GetTreeID fallback BuildFromOldEntries (global init/main trees for old function tables); never logged
+src/game/objectsim.cpp:362	MISSING-L	HIT: TryAnimateObject preload variant does not wait for the sync object (vtable 0xDC/0xEC); PC loads synchronously so the wait is moot except for the sync link
+src/game/objectsim.cpp:418	MISSING-L	HIT: TryUpdate what=1: GlobalDispatch 0xEE (room lighting of the object, 0xED) not sent: a lamp switched by a tree may not relight its room until another update; check lamps on/off
+src/game/objectsim.cpp:424	MISSING-L	TryUpdate what=3: 3D instance refresh not done; not logged
+src/game/objectsim.cpp:425	MISSING-M	HIT: TryUpdate what=4: house light update (EHouse vtable 0x8C) not done: lights turned on/off by trees (lamps) may not change the lighting; verify with a lamp
+src/game/objectsim.cpp:572	MISSING-H	HIT (kinds 5 and 9): TrySetToNext kinds 3,5,7,9,10,11 return false. GC kind 5 = next neighbour id (Neighborhood vtable 0xE4): trees that walk the neighbour list (phone, invitations, visitor and want choices) find nobody; kind 9 = next object around a tile (8 neighbours of a local object). S-M effort
+src/game/objectsim.cpp:724	MISSING-L	TryCameraControl targets 1..8 (bone-box corners) use identity; not logged
+src/game/objectsim.cpp:732	MISSING-L	TryCameraControl named dummy targets (10..); not logged
+src/game/objectsim.cpp:1010	MISSING-M	HIT: TagGraphicsField not ported (declared, never defined; m_graphicsTagged never set): when a tree writes object data 0 (graphic) through Expression (scope 3 my / 4 stack object), GC restarts the model animation even if the value is unchanged; port keeps it running. Repeated same-state animations (flush, door, TV) do not replay. S effort
+src/game/objectsim.cpp:1687	MISSING-M	HIT: TryNotifyStackObject op 0x40 should set the target person m_idleAnimateCount (+0x540) = 0 to end its idle-animate; port does nothing, so a sim keeps idling until its own count runs out. S effort (one line)
+src/game/objectsim.cpp:2733	MISSING-M	HIT: TryCallNamedTree from a check tree returns true without running the called tree (PC workaround for primitives that wait); menu availability/scores that depend on that tree can differ from GC. Fix the waiting primitives instead
+src/game/objectsim.cpp:2746	MISSING-M	HIT: same workaround when the named check tree waits: error dropped, call counted as done
+src/game/objectsim.cpp:2957	MISSING-M	HIT: fashion unlocks (CasClothingUnlocks::UnlockGroup) not done; CAS shows every style unlocked (cassimstate.cpp:909 PC: all unlocked), so the clothing rewards of goals mean nothing and locked styles are available from the start
+src/game/objectsim.cpp:3021	PC-replaced	generic call 0x2D: interactor UI command; PC interactor stand-in has no such commands (see TryGenericSimCall row for the missing calls)
+src/game/inlevel.cpp:329	NA-unreachable	PDA flows (known-gaps)
+src/game/inlevel.cpp:344	UNSURE	other flow requests log "[inlevel] flow request N not ported"; grep play logs for that line to list reached ones
+src/game/globs.cpp:9	PC-replaced	HIT: lighting parameters loaded by level lighting code
+src/game/globs.cpp:13	PC-replaced	ingredients: food creation (ingtarget.cpp) loads its own
+src/game/globs.cpp:15	MISSING-L	House object / GlobalDispatch listener list / random seed: house made later by stand-in; random seed: check determinism doc (seeded elsewhere?)
+src/game/globs.cpp:27	PC-replaced	shutdown order
+src/game/global.cpp:89	PC-replaced	HIT: UIUserDrawCB / EdithDialogPrimitive made on demand
+src/game/global.cpp:138	NA-unreachable	PresetHouseGameStatus writes _houseGameStatus, which nothing in the GC binary reads
+src/game/global.cpp:152	PC-replaced	HIT: quickdata/shaders/font/white shader loaded on demand
+src/game/global.cpp:156	PC-replaced	HIT: WantFearManager created on first use (wantfear.cpp)
+src/game/global.cpp:164	MISSING-L	substitution strings set up elsewhere (EGlobal::SetupSubstitutionStrings is ported?); player cheats none (NA)
+src/game/global.cpp:215	PC-replaced	HIT: plumb bob follows the selected sim through the PC interactors (DirectInteractor/SimInteractor m_plumbBob)
+src/game/pcttarget.cpp:376	MISSING-L	leaving buy mode with a fire code > 0.95: H2DTarget +0x98 fire (warning?) not shown; fire code value itself is not ported (pcttarget.cpp:153)
+src/game/objtestsim.cpp:69	MISSING-L	check-tree advertisement modification entries (sCheckTreeModEntry) not copied: autonomy scores of entries whose check tree changes advertisements; not logged
+src/game/cassubtargets.cpp:314	NA-unreachable	HIT: saved grandparents (dev-tool data; known-gaps)
+src/game/cassubtargets.cpp:608	MISSING-L	HIT: CAS genetics generating sound not played (known-gaps)
+src/game/cassubtargets.cpp:803	MISSING-L	HIT: same
+src/game/isimsobjectmodel.cpp:291	MISSING-L	HIT: cXObject animation hand-off on a new track (vtable 0x4E4 path) not done
+src/game/isimsobjectmodel.cpp:420	UNSURE	HIT: some object reports IsVehicle (carpool / school bus?); GC copies the car body matrix and recomputes bounds from the pose. Check whether the car looks right when it arrives
+src/game/isimsobjectmodel.cpp:422	MISSING-L	HIT: logged for every held object; only nested carry (object on a carried plate) differs (known-gaps)
+src/game/isimsobjectmodel.cpp:470	MISSING-L	object in an object slot that is itself carried: container instance position; known-gaps
+src/game/isimsobjectmodel.cpp:597	MISSING-L	HIT: GC leaves objects that SAnimator2 animates to it; port updates their controller too (possible double update of synced objects)
+src/game/isimsobjectmodel.cpp:679	MISSING-H	HIT: BlendHighlights (8004F02C, 0x62C bytes) not ported: highlighted objects (classic cursor hover, cursor flags 1/8) get no pulsing glow; the pulse phases are computed (UpdateHighlightAnim) but never applied. Players see no object highlight. M effort
+src/game/isimsobjectmodel.cpp:1088	MISSING-M	HIT: ApplyMatrix: rooms either side of a portal (doors/windows lit from both rooms), the outside flag (RoomManager), simulator render-position override, sub-object bounds, lamp light: lighting of doors/windows and outdoor objects may differ
+src/game/isimsobjectmodel.cpp:1101	MISSING-L	height on a counter (data 4 bit 0x20, GetHeightOffset); not logged
+src/game/objectplace.cpp:713	MISSING-L	HIT: placing a person on a tile with flag 0x10 (cXPerson GetFrontFaceDirection check) not done
+src/game/objectplace.cpp:1020	MISSING-M	UserCanPlace into a container slot: GC refuses slot types 5..7; port allows them, so buy mode may let the player put objects into slots GC forbids
+src/game/family.cpp:115	MISSING-M	HIT: family/house localised names (EGlobal::GetNghFamilyName / GetNghHouseName) not applied after load: story families show their stored (possibly key) name, not the localised one; check family name in pause/neighbourhood screens
+src/game/family.cpp:252	NA-unreachable	inventory before save version 10
+src/game/family.cpp:267	NA-unreachable	GoalUnlock fix-up for saves before 0x11
+src/game/simmodel.cpp:229	MISSING-L	HIT: ReadOldDescription (magic != 0xFEED): an old-format sim description reads nothing; which description logged it? check NPC/default data
+src/game/simmodel.cpp:344	MISSING-M	HIT: CasSimDescriptionS2C::Verify (fixes styles a gender or outfit cannot have) does nothing: invalid part combos (e.g. after gender change in CAS) are kept and can show wrong/missing body parts
+src/game/simmodel.cpp:837	MISSING-M	HIT: body part welding (GetWeldableBodyPartConnections) not done: seams between head/torso/legs parts can show gaps on sims
+src/game/simmodel.cpp:841	MISSING-L	CompositeSkinPart after ChangeModelPart; not logged
+src/game/simmodel.cpp:1455	MISSING-M	HIT: belt hiding by mid/outer tops not checked: belt always shown (shows through jackets/dresses). S effort
+src/game/neighbor.cpp:546	MISSING-L	HIT: Neighbor::SaveToCharacter: no portrait (thumbnail) for the character (CAS family slots)
+src/game/world.cpp:388	PC-replaced	measuring pass of RLE writer; PC writer sizes itself
+src/game/world.cpp:418	MISSING-L	HIT: TileWalls rotation lookups (lot rotation); lots are never rotated in release
+src/game/world.cpp:451	MISSING-L	SetSize keep contents (build mode lot resize); no lot resize in release
+src/game/world.cpp:457	UNSURE	HIT: InfluenceMap (object lists by tile) not made; GC DirectInteractor::UpdateObjectHighlights and routing use it; port replaced users by scans; check no remaining reader
+src/game/world.cpp:488	UNSURE	HIT: same as :457
+src/game/gamedata.cpp:111	NA-unreachable	ECheats
+src/game/e_rlevel.cpp:259	NA-unreachable	bound-tree levels v0/v1 (known-gaps)
+src/game/ui2d.cpp:179	NA-platform	Xbox/PS2 button sets
+src/game/camera.cpp:444	NA-unreachable	camera animation modes on objects (known-gaps: unreached)
+src/game/camera.cpp:919	MISSING-L	camera anim note 101-103 sets DAT_80476230 = -1 (house-name-text index for HUD_lot_name); not logged
+src/game/camera.cpp:1082	NA-unreachable	ENCamera cuts (known-gaps)
+src/game/camera.cpp:1159	NA-unreachable	ENCamera interps (known-gaps)
+src/game/camera.cpp:1547	NA-unreachable	unsmoothed follow (known-gaps)
+src/game/flashpimenu.cpp:238	MISSING-M	HIT: classic "Go Here" puts the target at the tile centre instead of person FindGoodLocation: going to a blocked spot may fail instead of picking the nearest free spot
+src/game/siminteractor.cpp:508	MISSING-L	SAnimator2::SetPauseMultiplier(1) when the plumb bob returns; check whether the pause multiplier is ever set below 1 in the port
+src/game/passiveinfluencemap.cpp:561	PC-replaced	HIT (old logs): this free function is dead code now; awarenessmanager.cpp ports AwarenessCheck fully
+src/game/passiveinfluencemap.cpp:568	PC-replaced	dead code, as :561
+src/game/o2ttarget.cpp:183	PC-replaced	screen position wizard (PC scales the picture; known-gaps)
+src/game/o2ttarget.cpp:186	PC-replaced	same
+src/game/hudtarget.cpp:93	PC-replaced	HIT: ActionQueueHUD = ACTTarget via H2D (known-gaps)
+src/game/hudtarget.cpp:125	PC-replaced	HIT: HUD controller filters for commands nothing reads on PC (known-gaps)
+src/game/changehouse.cpp:155	PC-replaced	HIT: path data freed (routing caches are per-person on PC)
+src/game/changehouse.cpp:176	PC-replaced	HIT: teardown handled with the house
+src/game/mtobject.cpp:192	MISSING-L	HIT: dynamic multi-tile groups not re-merged after load (vtable 0x44/0x4C); check that dynamic groups (e.g. counters joined?) survive save/load
+src/game/cas.cpp:370	MISSING-M	HIT: CAS sim cannot be turned with the C stick (GC adds stick x * 90 deg/s to the rotation); S effort
+src/game/cas.cpp:434	MISSING-L	HIT: CasScene ambient score not started; known-gaps lists "CAS room has no ambient score" as kept GC behaviour, which conflicts with GC CasScene::Init starting AmbientScorePlayer: re-check
+src/game/aptviewer.cpp:148	PC-replaced	HD ortho projection: PC hud scaling
+src/game/cassimstate.cpp:1059	MISSING-L	CAS GetBonePos uses position + 1.6 instead of the bone: thought balloon/camera aim in CAS slightly off
+src/game/cassimstate.cpp:1188	NA-unreachable	NPC editor (dev tool)
+src/game/cassimstate.cpp:1222	NA-unreachable	NPC editor (dev tool)
+src/libaptz/aptbuiltins.cpp:916	MISSING-L	ActionScript setMask: no menu uses it yet (comment); verify no movie calls it (not logged)
+src/libaptz/apt.cpp:160	MISSING-L	Apt imports from other movies; not logged
+src/base/e_globalmanager.cpp:13	PC-replaced	overflow guard
+src/game/autonomy.cpp:42	MISSING-H	comment-only: "PC: free will is always on". sFreeWill const 1; GC sets it each frame from the options Free Will (ELiveMode::Update 8008E4C0) unless sim global 0x27 overrides; also simulator.cpp:194. Options toggle has no effect. S
+src/game/objectsim.cpp:2971	MISSING-H	TryGenericSimCall calls not ported (logged by printf, not SIMMY_STUB, so absent from hit logs): 0x13/0x14/0x15 set sim globals 0x25/0x26/0x27 (0x27 = free will override), 0x30 adds temp 0 to the player family total aspiration score (reward points) and updates unlocks, 0x05 Spend (expense 2) of a neighbour value, 0x1E SwapSelectedSims, 0x1F/0x20 select object temp 0 for player 1/2, 0x0D CleanupPeople(stack object), 0x21 ShowAllObjectDialogs, 0x24 ringtone sound, 0x2B count modeless dialogs, 0x2A camera state test, 0x03/0x04/0x06/0x0C/0x17 neighbourhood/object calls. Run a soak and grep "generic sim call 0x" to see which are reached. S each
+src/game/person.cpp:964	MISSING-M	comment-only: ActionSkipped does not run the object queue-skipped tree (GC: object RunTree(4, my id)); objects cannot release what they reserved when a queued action is cancelled. S
+src/game/objectsim.cpp:2029	MISSING-M	comment-only: TryCreateObject with operand +5 flag 4 runs the visitor "init visitor" tree one tick (RunOneTickTree); port skips it, visitors start without their init. S
+src/game/wallmanipulator.cpp:274	MISSING-M	comment-only: after a wall edit GC calls ObjectModule InvalidateAllRoutes (vtable 0x184); port only does it on entering live mode (house.cpp:49). Sims keep routes planned through old walls; check by walling a walking sim
+src/game/wallmanipulator.cpp:12	PC-replaced	header comment is stale: kEventAddARoom is sent (line 266)
+src/game/placemanipulator.cpp:244	MISSING-M	comment-only: RecomputeLightingGrid is empty (GC EHouse::ReCalcHouse for light sources): a lamp bought/moved does not relight the floor grid until the house is rebuilt
+src/game/houserecalc.cpp:38	MISSING-L	comment-only: UpdateInteractionInfluences after a house rebuild not called (passive influences of objects after build changes)
+src/game/objectsim.cpp:1851	MISSING-L	comment-only: TryPickup does not close the player object menu (HUDTarget::CloseMenu)
+src/game/objectsim.cpp:2791	MISSING-L	comment-only: TryDialog does not skip modal dialogs while a player interactor is busy (+0x160/+0x234) or EORGlobals hold one
+src/game/memcardscreens.cpp:394	MISSING-L	comment-only: save allowed while a player is in social mode / simulator busy (GC refuses)
+src/game/cassimstate.cpp:909	MISSING-M	comment-only: CAS GetIndexes gives every style flags 0 (all unlocked); GC takes lock/new flags from CasClothingUnlocks. Locked clothing is available from the start; goal clothing rewards are moot. M
+src/game/hudtarget.cpp:268	MISSING-M	comment-only: HUD_lot_name localizable is empty (GC: EHouse::GetHouseName / EGlobal::HouseNameText); the lot name the HUD shows is blank. Rep strings are Urbz leftovers (NA)
+src/game/hudtarget.cpp:274	NA-unreachable	reputation (RepTitleSupport): Urbz leftover
+src/game/person.cpp:911	MISSING-L	comment-only: Cleanup does not tell the interactor (social mode left, input reset), route slots, sprite slot, FindGoodLocation for a person off the world, gosub objects, follow records
+src/game/objectsim.cpp:205	MISSING-L	comment-only: a person Reset (8011EB78) does not clear its data (known-gaps)
+src/game/flashpimenu.cpp:397	MISSING-H	stand-in MenuObjectsNear: objects within 2 tiles in a circle, nearest 4, people too. GC (UpdateObjectHighlights 80205C4C + ShouldHighlightObject 80204C5C + GetObjectsInRect): objects from the influence map within 5 tiles and people within 1.5 whose bounds touch the arc in front of the sim (facing), filtered by the object having interactions for the player; and they are highlighted every frame. Port: objects behind the sim are offered, far objects in front are not, and nothing is highlighted in direct control. M
+src/game/socialmode.cpp:141	MISSING-M	stand-in SocialModeInteractor/TrySocialMode: drops the social camera, idle states (person vtable 0x74 4), plumb bob, the social-interest motive 4 seeding and write-back (GetSimSocialInterestAsMotiveValue / SetSimSocialIntrestFromMotiveValue), the input-session priority; see treesim.cpp:708 row
+src/game/person.cpp:2385	UNSURE	stand-in MoveFamilyOntoLot: only the players sims (1 or 2) are placed unless the house load trees made the others; family members beyond the players appear only if a tree makes them. Check a free-play CAS family of 3-4: do all members appear on the lot? Also LotEntryPoint is a heuristic (GC move-in behaviour walks them in)
+src/game/livemode.cpp:135	MISSING-L	stand-in NeighborhoodImpl::LoadHouse: drops removal of stray people (no family, data 0x43 != this house), the sorted other-houses list (+0x4C), GlobalDispatch(0xF2), UpdateInstanceVisitorTypes at load (done on 0xDE); clock/globals 9/10/funds are done
+src/game/lotsave.cpp:171	PC-replaced	stand-in HouseImpl::SaveFile: same resources; drops GlobalDispatch(0x92) listeners, the remembered object, object list and sLastUserTypedName (written empty)
+src/game/lotsave.cpp:87	PC-replaced	stand-in ComputeStats matches GC 800F8D44 (same flags and sums)
+include/simmy/classes/interactor.hpp:11	UNSURE	stand-in interactor/input managers: GC sessions with priorities, HUD filters, interactor types 2..7 (build/buy cursors, social 7). Port routes the pad per frame in UpdateDirectInteractors/UpdateSimInteractor. Behaviours to check: B-hold cancel timer (directinteractor.cpp:334 says not ported but StartCancelTimer is called), input dropped while menus/dialogs are up
