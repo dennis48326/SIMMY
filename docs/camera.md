@@ -76,7 +76,6 @@ once. Otherwise both directors and cameras are reset. `SIMMY_CAM_TRACE=1` prints
 | `SetCameraCut` / `SetCameraInterp` with an `ENCamera` | The game only passes none (`TryCameraControl`) |
 | `ERoom::IsRoomWallsOpaque/IsRoomRoofOpaque` and `InitRoomLookupTab` | `m_roomWallsOpaque` / `m_roomId` are written but read by nothing in the release build; the ERoom functions stay stubs (0) |
 | `CameraDirector::AnimEventHandler` event numbers 101-103 (`DAT_80476230 = -1`) | Logged |
-| `cXPersonImpl::IsSleeping` (used by `IsFamilyMemberAwakeAndVisible`) | Person field +0xD4 not identified: everyone counts as awake |
 | `DrawDebug`, `DrawCameraInfo`, `Quad::Draw` | Debug drawing |
 
 ## Gotchas

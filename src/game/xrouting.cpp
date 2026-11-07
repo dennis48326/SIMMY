@@ -3,6 +3,7 @@
 // object location's +0x68, [1] +0x6C; the tile is CTilePt([1] >> 4, [0] >> 4)); "tile axes" X = [1] / 16,
 // Y = [0] / 16. Directions are eighths of a turn: 0 toward -[0], 2 toward +[1], 4 +[0], 6 -[1].
 #include "simmy/types_gen.hpp"
+#include "simmy/classes/placement.hpp"
 #include "simmy/unported_globals.hpp"
 
 #include <algorithm>
@@ -10,7 +11,6 @@
 #include <cstdio>
 #include <cstdlib>
 #include <map>
-#include <queue>
 
 // ---------------------------------------------------------------------------------------------------
 // RoutingSlot
@@ -100,10 +100,50 @@ void LoadRoutingSlots(const unsigned char* file, int id, std::vector<RoutingSlot
 }
 }  // namespace
 
+namespace {
+// PC: the objects whose slot vector a route rewrote (GC: each object owns its slots, +0xA0), with the
+// id and definition they were made for (a later object at the same address is not them).
+struct SlotOverride {
+  short id = 0;
+  const ObjDefinition* def = nullptr;
+  std::vector<RoutingSlot> slots;
+};
+std::map<const cXObjectImpl*, SlotOverride>& SlotOverrides() {
+  static std::map<const cXObjectImpl*, SlotOverride> m;
+  return m;
+}
+}  // namespace
+
+void SetObjectRoutingSlot(cXObjectImpl* object, int index, const RoutingSlot& slot) {
+  if (!object || index < 0) return;
+  SlotOverride& o = SlotOverrides()[object];
+  if (o.id != object->m_id || o.def != object->m_def || o.slots.empty()) {
+    o.id = object->m_id;
+    o.def = object->m_def;
+    o.slots.clear();
+    SlotOverrides().erase(object);
+    std::vector<RoutingSlot> base = ObjectRoutingSlots(object);
+    SlotOverride& fresh = SlotOverrides()[object];
+    fresh.id = object->m_id;
+    fresh.def = object->m_def;
+    fresh.slots = base;
+    if (fresh.slots.size() <= static_cast<size_t>(index)) fresh.slots.resize(static_cast<size_t>(index) + 1);
+    fresh.slots[static_cast<size_t>(index)] = slot;
+    return;
+  }
+  if (o.slots.size() <= static_cast<size_t>(index)) o.slots.resize(static_cast<size_t>(index) + 1);
+  o.slots[static_cast<size_t>(index)] = slot;
+}
+
 const std::vector<RoutingSlot>& ObjectRoutingSlots(cXObjectImpl* object) {
   static std::map<const ObjDefinition*, std::vector<RoutingSlot>> cache;
   static const std::vector<RoutingSlot> none;
   if (!object || !object->m_def) return none;
+  auto ov = SlotOverrides().find(object);
+  if (ov != SlotOverrides().end()) {
+    if (ov->second.id == object->m_id && ov->second.def == object->m_def) return ov->second.slots;
+    SlotOverrides().erase(ov);
+  }
   auto it = cache.find(object->m_def);
   if (it != cache.end()) return it->second;
   std::vector<RoutingSlot>& slots = cache[object->m_def];
@@ -195,11 +235,11 @@ const std::vector<RoutingSlot>& GlobalRoutingSlots() {
 
 namespace {
 cXObjectImpl* Impl(cXObject* o) { return o ? o->GetObjectImplementation() : nullptr; }
+cXPersonImpl* PersonOf(cXObject* o) { return o ? dynamic_cast<cXPersonImpl*>(o->GetObjectImplementation()) : nullptr; }
 
-// The eighth of a turn from `from` toward `to` (FTilePt), -1 on the same tile.
-int DirectionBetween(const int from[2], const int to[2]) {
-  if ((from[0] >> 4) == (to[0] >> 4) && (from[1] >> 4) == (to[1] >> 4)) return -1;
-  int d0 = to[0] - from[0], d1 = to[1] - from[1];
+// The eighth of a turn of the move by (d0, d1) (FTilePt [0], [1] deltas): the GC's inline direction
+// code (XRoute::ConstructGoals, cXPersonImpl::InitRoute, MoveOutOfWay).
+int DirectionOfDelta(int d0, int d1) {
   const int a1 = std::abs(d1);
   const bool neg0 = d0 < 0;
   d0 = std::abs(d0);
@@ -215,6 +255,16 @@ int DirectionBetween(const int from[2], const int to[2]) {
   }
   return dir;
 }
+}  // namespace
+
+// The tile step of direction `dir` (FTilePt [0], [1] in 1/16 tiles): the GC's inline switch.
+void DirectionStep(int dir, int out[2]) {
+  static const int step[8][2] = {{-16, 0}, {-16, 16}, {0, 16}, {16, 16}, {16, 0}, {16, -16}, {0, -16}, {-16, -16}};
+  out[0] = step[dir & 7][0];
+  out[1] = step[dir & 7][1];
+}
+
+int DirectionBetween(const int from[2], const int to[2]) { return DirectionOfDelta(to[0] - from[0], to[1] - from[1]); }
 
 // 80152A78
 // (x, y) in the frame of something at `origin` facing `dir` (y forward is -y), to FTilePt. GC: odd
@@ -238,44 +288,47 @@ void TransformToWorldCoords(float x, float y, const int origin[2], int dir, int 
   out[0] = static_cast<int>(p2 + static_cast<float>(origin[0]));
 }
 
+// 800E2848 cXObjectImpl::GetWallBlockFlags
+// Data 0x35 (the sides it blocks like a wall), turned by its direction.
+unsigned int ObjWallBlockFlags(cXObjectImpl* o) {
+  unsigned int f = static_cast<unsigned int>(static_cast<unsigned short>(o->GetData(0x35)));
+  if (f != 0) {
+    const int d = o->GetData(1);
+    f = ((f << d) | (static_cast<unsigned int>(static_cast<int>(f << d) >> 8))) & 0xff;
+  }
+  return f;
+}
+
 // 800E28AC cXObject::GetWallBlockFlagsAtTile
-// The walls round `tile` as direction bits (segment 1: 0x40, 2: 1, 4: 4, 8: 0x10), turned so bit 0
-// is direction `dir`. GC: also the blocking flags of objects on the tile with data 0x35 set (vtable
-// 0x4A4); PC: walls only.
+// The walls round `tile` as direction bits (segment 1: 0x40, 2: 1, 4: 4, 8: 0x10) and the blocking
+// sides of the objects there with data 0x35, turned so bit 0 is direction `dir`. PC: the objects whose
+// site is the tile (ObjectsAtTile; GC: the tile's ObjectIterator, its chain and slots).
 unsigned int WallBlockFlagsAtTile(CTilePt& tile, int dir) {
   cFixedWorldImpl* w = Globs_pFixedWorld;
   if (!w || w->OutOfBounds(tile)) return 0;
   TileWalls walls = w->GetWall(tile);
   unsigned int f = 0;
-  if (walls.HasWall(TileWallsSegment(1))) f |= 0x40;
+  if (walls.HasWall(TileWallsSegment(1))) f = 0x40;
   if (walls.HasWall(TileWallsSegment(2))) f |= 1;
   if (walls.HasWall(TileWallsSegment(4))) f |= 4;
   if (walls.HasWall(TileWallsSegment(8))) f |= 0x10;
+  for (cXObjectImpl* o : TileObjects(tile))
+    if (o->GetData(0x35) != 0) f |= ObjWallBlockFlags(o);
   if (dir != 0) {
     f <<= (8 - dir);
-    f = (f | f >> 8) & 0xff;
+    f = (f | static_cast<unsigned int>(static_cast<int>(f) >> 8)) & 0xff;
   }
   return f;
 }
 
-// cXObjectImpl::ComputeRect (as collisionmap.cpp's): the footprint in tile axes (x0, y0, x1, y1).
-void Footprint(cXObjectImpl* o, float r[4]) {
-  const int y = o->m_location[0], x = o->m_location[1];
-  int rect[4] = {y + 8, x + 8, y - 8, x - 8};
-  const unsigned int insets = static_cast<unsigned short>(ERQuickdata::S16(o->m_def, 0x9a));
-  if (insets) {
-    const int side[4] = {static_cast<int>(insets & 0xf), static_cast<int>(insets >> 4 & 0xf),
-                         static_cast<int>(insets >> 8 & 0xf), static_cast<int>(insets >> 12 & 0xf)};
-    const int q = (8 - o->GetData(1) % 8) / 2;
-    auto at = [&](int i) { return side[((i % 4) + 4) % 4]; };
-    rect[2] += at(q);
-    rect[1] -= at(q + 1);
-    rect[0] -= at(q + 2);
-    rect[3] += at(q + 3);
-  }
-  r[0] = rect[3] / 16.0f, r[1] = rect[2] / 16.0f, r[2] = rect[1] / 16.0f, r[3] = rect[0] / 16.0f;
-}
+// cXObjectImpl::GetRect (800EB0BC: +0x70, kept by Place): the footprint (ComputeRect) at its location.
+// [0] the largest FTilePt[0], [1] the largest [1], [2] the smallest [0], [3] the smallest [1].
+void ObjRect(cXObjectImpl* o, int r[4]) { ObjComputeRect(o, o->m_location, r); }
 
+// PC stand-in for cXObjectImpl::CanPlace (vtable 0x134) of a person at `pos` (FTilePt), used by
+// TrySnap: on the lot, no wall within reach, no object's footprint but `near`'s group and `person`
+// itself, no other person. (The router uses the GC CanPlace: EvalTileForGoal.)
+namespace {
 float SegmentDistance(float px, float py, float ax, float ay, float bx, float by) {
   const float dx = bx - ax, dy = by - ay;
   const float len = dx * dx + dy * dy;
@@ -284,136 +337,70 @@ float SegmentDistance(float px, float py, float ax, float ay, float bx, float by
   const float cx = ax + dx * t - px, cy = ay + dy * t - py;
   return std::sqrt(cx * cx + cy * cy);
 }
-
-// PC (GC: cXObjectImpl::CanPlace for a person, and the room partition's walls and penalty rects): a
-// person of radius `r` cannot stand at (X, Y) (tile axes): off the lot, a blocked tile, a wall (not a
-// door or window) within r, or an object's footprint (not people, doors, pass-through objects or
-// `ignore`'s group), or another person (AddPeople).
-struct Blocker {
-  const std::vector<cXObjectImpl*>* m_ignore = nullptr;
-  float m_r = 0.24f;
-  std::vector<EVec2> m_people;  // tile axes
-  // The room partition's people (FindPath: every object of the room as a penalty rect, people grown by
-  // gPersonWidth 6/16; XRoute::ShouldIgnore: not the router, not seated (a container), not the route's
-  // object, not farther than 3 tiles from the router).
-  void AddPeople(cXObject* router, cXObject* target) {
-    cXObjectImpl* self = Impl(router);
-    cXObjectImpl* goal = Impl(target);
-    if (!self || !Globs_pObjectModule) return;
-    // PC: the people are cXPersonImpls (the lot file's saved type-2 objects do not run).
-    ObjectModuleImpl* module = Globs_pObjectModule;
-    for (int id = 1; id <= module->GetNumObjects(); ++id) {
-      cXObject* x = module->GetObjectFromID(id);
-      auto* o = x ? dynamic_cast<cXPersonImpl*>(x->GetObjectImplementation()) : nullptr;
-      if (!o) continue;
-      if (o == self || o == goal || o->GetType() != 2 || o->m_level != self->m_level) continue;
-      if (o->GetContainer() || (o->m_location[1] >> 4) <= 0 || (o->m_location[0] >> 4) <= 0) continue;
-      if (self->CalcShortDistance(o) > 3.0) continue;
-      m_people.push_back(EVec2{o->m_location[1] / 16.0f, o->m_location[0] / 16.0f});
-    }
-  }
-  // A person within reach of (X, Y).
-  bool Person(float X, float Y) const {
-    const float d = m_r + 6.0f / 16.0f;
-    for (const EVec2& p : m_people)
-      if ((p.x - X) * (p.x - X) + (p.y - Y) * (p.y - Y) < d * d) return true;
-    return false;
-  }
-  bool operator()(float X, float Y) const {
-    if (!m_people.empty() && Person(X, Y)) return true;
-    cFixedWorldImpl* w = Globs_pFixedWorld;
-    CTilePt here(static_cast<int>(std::floor(X)), static_cast<int>(std::floor(Y)), 0);
-    if (!w || X < 0.0f || Y < 0.0f || w->OutOfBounds(here) || (w->GetFlags(here) & 0x10)) return true;
-    for (int tx = here.GetX() - 1; tx <= here.GetX() + 1; ++tx) {
-      for (int ty = here.GetY() - 1; ty <= here.GetY() + 1; ++ty) {
-        CTilePt t(tx, ty, 0);
-        if (w->OutOfBounds(t)) continue;
-        TileWalls walls = w->GetWall(t);
-        if (!walls.HasWall()) continue;
-        const float x0 = static_cast<float>(tx), y0 = static_cast<float>(ty), x1 = x0 + 1.0f, y1 = y0 + 1.0f;
-        auto edge = [&](int seg, float ax, float ay, float bx, float by) {
-          if (!walls.HasWall(TileWallsSegment(seg))) return false;
-          const int style = walls.GetStyle(TileWallsSegment(seg));
-          if (style == 3 || style == 5 || style == 6 || style == 0xf || style == 0x17) return false;
-          return SegmentDistance(X, Y, ax, ay, bx, by) < m_r;
-        };
-        if (edge(1, x0, y0, x0, y1) || edge(4, x1, y0, x1, y1) || edge(2, x0, y0, x1, y0) || edge(8, x0, y1, x1, y1))
-          return true;
-        if (walls.HasWall(TileWallsSegment(TileWallsSegment::kDiagonal1)) && SegmentDistance(X, Y, x1, y0, x0, y1) < m_r)
-          return true;
-        if (walls.HasWall(TileWallsSegment(TileWallsSegment::kDiagonal2)) && SegmentDistance(X, Y, x0, y0, x1, y1) < m_r)
-          return true;
-      }
-    }
-    ObjectModuleImpl* module = Globs_pObjectModule;
-    if (!module) return false;
-    for (int tx = here.GetX() - 1; tx <= here.GetX() + 1; ++tx) {
-      for (int ty = here.GetY() - 1; ty <= here.GetY() + 1; ++ty) {
-        CTilePt t(tx, ty, 0);
-        cXObjectImpl* o = Impl(module->GetObjectFromID(module->GetTileObjectID(t)));
-        if (!o || !o->m_def) continue;
-        if (m_ignore && std::find(m_ignore->begin(), m_ignore->end(), o) != m_ignore->end()) continue;
-        const int type = objdef::Type(o->m_def);
-        if (((o->GetData(8) >> 4) & 1) || type == 2 || type == 8) continue;
-        float f[4];
-        Footprint(o, f);
-        const float cx = std::max(f[0], std::min(X, f[2])), cy = std::max(f[1], std::min(Y, f[3]));
-        if ((cx - X) * (cx - X) + (cy - Y) * (cy - Y) < m_r * m_r) return true;
-      }
-    }
-    return false;
-  }
-  // The straight walk from a to b stays clear (sampled every 1/16 tile).
-  bool Clear(float ax, float ay, float bx, float by) const {
-    const float len = std::sqrt((bx - ax) * (bx - ax) + (by - ay) * (by - ay));
-    const int steps = std::max(1, static_cast<int>(len * 16.0f));
-    for (int i = 1; i <= steps; ++i) {
-      const float t = static_cast<float>(i) / static_cast<float>(steps);
-      if ((*this)(ax + (bx - ax) * t, ay + (by - ay) * t)) return false;
-    }
-    return true;
-  }
-};
-
-// The objects a route to `object` may touch: it and its multi-tile group's parts (same file and master
-// id, facing the same way, next to it).
+void Footprint(cXObjectImpl* o, float r[4]) {
+  int rect[4];
+  ObjRect(o, rect);
+  r[0] = rect[3] / 16.0f, r[1] = rect[2] / 16.0f, r[2] = rect[1] / 16.0f, r[3] = rect[0] / 16.0f;
+}
 std::vector<cXObjectImpl*> RouteIgnores(cXObject* object) {
   std::vector<cXObjectImpl*> out;
   cXObjectImpl* impl = Impl(object);
   if (!impl) return out;
   out.push_back(impl);
-  const short master = impl->m_def ? objdef::MasterID(impl->m_def) : 0;
-  if (master == 0) return out;
-  for (cXObjectImpl* o = Globs_pObjectModule ? Globs_pObjectModule->m_first : nullptr; o; o = o->m_nextObject) {
-    if (o == impl || !o->m_selector || !impl->m_selector || o->m_selector->m_resFile != impl->m_selector->m_resFile ||
-        objdef::MasterID(o->m_def) != master)
-      continue;
-    if (std::abs(o->m_location[0] - impl->m_location[0]) <= 0x40 && std::abs(o->m_location[1] - impl->m_location[1]) <= 0x40)
-      out.push_back(o);
-  }
+  if (PlacementGroup* g = PlacementGroupOf(impl))
+    for (auto& part : g->parts)
+      if (part.object != impl) out.push_back(part.object);
   return out;
-}
-
-// SetDirectionForGoalSearch (GC 80157FB8): how the person faces at a goal in direction `dir` from an
-// object facing `objDir`: no slot directions, toward the object's front (objDir + 4); else by the
-// slot's facing (away: dir, toward: dir + 4, anywhere: -1, else objDir + facing).
-int GoalFacing(const RoutingSlot& slot, int objDir, int dir) {
-  int face;
-  if ((slot.m_flags & 0xff) == 0) face = objDir + 4;
-  else if (slot.m_facing == RoutingSlot::kFaceAway) face = dir;
-  else if (slot.m_facing == RoutingSlot::kFaceTowards) face = dir + 4;
-  else if (slot.m_facing == RoutingSlot::kFaceAnywhere) return -1;
-  else face = objDir + slot.m_facing;
-  return ((face % 8) + 8) % 8;
 }
 }  // namespace
 
 bool PersonCanStandAt(cXObject* person, cXObject* near, const int pos[2]) {
   std::vector<cXObjectImpl*> ignore = RouteIgnores(near);
-  if (cXObjectImpl* p = Impl(person)) ignore.push_back(p);
-  Blocker blocked{&ignore};
-  blocked.AddPeople(person, near);
-  return !blocked(pos[1] / 16.0f, pos[0] / 16.0f);
+  cXObjectImpl* self = Impl(person);
+  if (self) ignore.push_back(self);
+  const float X = pos[1] / 16.0f, Y = pos[0] / 16.0f, radius = 0.24f;
+  cFixedWorldImpl* w = Globs_pFixedWorld;
+  ObjectModuleImpl* module = Globs_pObjectModule;
+  CTilePt here(static_cast<int>(std::floor(X)), static_cast<int>(std::floor(Y)), 0);
+  if (!w || !module || X < 0.0f || Y < 0.0f || w->OutOfBounds(here) || (w->GetFlags(here) & 0x10)) return false;
+  for (cXObjectImpl* o = module->m_first; o; o = o->m_nextObject) {
+    if (o == self || o->GetType() != 2 || !self || o->m_level != self->m_level || o->GetContainer()) continue;
+    const float px = o->m_location[1] / 16.0f, py = o->m_location[0] / 16.0f, d = radius + 6.0f / 16.0f;
+    if (self->CalcShortDistance(o) <= 3.0 && (px - X) * (px - X) + (py - Y) * (py - Y) < d * d) return false;
+  }
+  for (int tx = here.GetX() - 1; tx <= here.GetX() + 1; ++tx) {
+    for (int ty = here.GetY() - 1; ty <= here.GetY() + 1; ++ty) {
+      CTilePt t(tx, ty, 0);
+      if (w->OutOfBounds(t)) continue;
+      TileWalls walls = w->GetWall(t);
+      if (walls.HasWall()) {
+        const float x0 = static_cast<float>(tx), y0 = static_cast<float>(ty), x1 = x0 + 1.0f, y1 = y0 + 1.0f;
+        auto edge = [&](int seg, float ax, float ay, float bx, float by) {
+          if (!walls.HasWall(TileWallsSegment(seg))) return false;
+          const int style = walls.GetStyle(TileWallsSegment(seg));
+          if (style == 3 || style == 5 || style == 6 || style == 0xf || style == 0x17) return false;
+          return SegmentDistance(X, Y, ax, ay, bx, by) < radius;
+        };
+        if (edge(1, x0, y0, x0, y1) || edge(4, x1, y0, x1, y1) || edge(2, x0, y0, x1, y0) || edge(8, x0, y1, x1, y1))
+          return false;
+        if (walls.HasWall(TileWallsSegment(TileWallsSegment::kDiagonal1)) && SegmentDistance(X, Y, x1, y0, x0, y1) < radius)
+          return false;
+        if (walls.HasWall(TileWallsSegment(TileWallsSegment::kDiagonal2)) && SegmentDistance(X, Y, x0, y0, x1, y1) < radius)
+          return false;
+      }
+      CTilePt tl(tx, ty, 1);
+      for (cXObjectImpl* o : TileObjects(tl)) {
+        if (!o->m_def || std::find(ignore.begin(), ignore.end(), o) != ignore.end()) continue;
+        const int type = objdef::Type(o->m_def);
+        if (((o->GetData(8) >> 4) & 1) || type == 2 || type == 8) continue;
+        float f[4];
+        Footprint(o, f);
+        const float cx = std::max(f[0], std::min(X, f[2])), cy = std::max(f[1], std::min(Y, f[3]));
+        if ((cx - X) * (cx - X) + (cy - Y) * (cy - Y) < radius * radius) return false;
+      }
+    }
+  }
+  return true;
 }
 
 void RoutingSlotPosition(cXObjectImpl* object, const RoutingSlot& slot, int out[2]) {
@@ -422,32 +409,328 @@ void RoutingSlotPosition(cXObjectImpl* object, const RoutingSlot& slot, int out[
 }
 
 // ---------------------------------------------------------------------------------------------------
+// The room partition
+
+namespace {
+// BuildRoomPartition's inline test: the tile (level 1) belongs to `room` for routing: not a flag-0x10
+// tile, and in the room (or the room id 0xFFFB), or holding a portal (a type-8 object with a portal
+// tree, entry 0xF) whose other side is in the room. PC: the objects whose site is the tile.
+bool TileInRoom(int x, int y, unsigned short room) {
+  cFixedWorldImpl* w = Globs_pFixedWorld;
+  CTilePt t(x, y, 1);
+  if (w->GetFlags(t) & 0x10) return false;
+  const unsigned short r = w->GetRoom(t);
+  if (r == room || r == 0xfffb) return true;
+  bool in = false;
+  for (cXObjectImpl* o : TileObjects(t)) {
+    if (o->GetType() != 8 || o->GetTreeID(0xf) == 0 || !IsPortalObject(o)) continue;
+    cXObjectImpl* other = PortalOtherSide(o);
+    if (other && static_cast<unsigned short>(other->GetData(0x1d)) == room) in = true;
+  }
+  return in;
+}
+// A wall segment doors and windows let people through (styles 3, 5, 6, 0xF, 0x17).
+bool PassableWallStyle(int style) { return style == 3 || style == 5 || style == 6 || style == 0xf || style == 0x17; }
+}  // namespace
+
+// 80153500
+// The room's static obstacles for the router, in 1/16 tiles: blocking strips round its bounding box
+// (grown by a tile, kept inside the lot's border), blocking rectangles over the box's tiles that are not
+// the room (runs of them, each grown down while the rows stay clear of the room), the room's inner
+// walls (but doors and windows) as zero-width lines on each tile's segments 8 and 4 between two room
+// tiles, and a diagonal wall's tile as three small squares along it; then every rectangle is grown by
+// half a person's width. `third` is not read.
+void BuildRoomPartition(unsigned short room, std::vector<PenaltyRect>* rects, bool third) {
+  (void)third;
+  cFixedWorldImpl* w = Globs_pFixedWorld;
+  const int half = static_cast<int>(cXObject::GetPersonWidth()) / 2;
+  int minY = 0, minX = 0, maxX = 0, maxY = 0;
+  RoomManager::GetRoomManager()->GetRoom(room);
+  const int xs = w->GetXSize(), ys = w->GetYSize();
+  int x = 1, y = 1;
+  bool done = false;
+  do {
+    CTilePt t(x, y, 1);
+    if (w->GetRoom(t) == room) {
+      done = true;
+      minY = y, minX = x, maxX = x, maxY = y;
+    }
+    if (xs - 1 <= ++x) {
+      ++y;
+      x = 1;
+      if (ys - 1 <= y) done = true;
+    }
+  } while (!done);
+  done = false;
+  do {
+    CTilePt t(x, y, 1);
+    if (w->GetRoom(t) == room) {
+      minX = std::min(minX, x);
+      maxX = std::max(maxX, x);
+      minY = std::min(minY, y);
+      maxY = std::max(maxY, y);
+    }
+    if (xs - 1 <= ++x) {
+      ++y;
+      x = 1;
+      if (ys - 1 <= y) done = true;
+    }
+  } while (!done);
+  if (1 < minX) --minX;
+  if (maxX < xs - 2) ++maxX;
+  if (1 < minY) --minY;
+  if (maxY < ys - 2) ++maxY;
+  // The box's sides.
+  PenaltyRect side(minX - 1, minY - 1, minX, maxY + 2, PenaltyRect::kBlocked);
+  side.left <<= 4, side.top <<= 4, side.right <<= 4, side.bottom <<= 4;
+  rects->push_back(side);
+  const int dx = (maxX - minX) * 16 + 0x20;
+  side.left += dx, side.right += dx;
+  rects->push_back(side);
+  PenaltyRect top(minX - 1, minY - 1, maxX + 2, minY, PenaltyRect::kBlocked);
+  top.left <<= 4, top.top <<= 4, top.right <<= 4, top.bottom <<= 4;
+  rects->push_back(top);
+  const int dy = (maxY - minY) * 16 + 0x20;
+  top.top += dy, top.bottom += dy;
+  rects->push_back(top);
+  auto push16 = [&](int l, int t, int r, int b) {
+    PenaltyRect p(l, t, r, b, PenaltyRect::kBlocked);
+    p.left <<= 4, p.top <<= 4, p.right <<= 4, p.bottom <<= 4;
+    rects->push_back(p);
+  };
+  x = minX, y = minY;
+  for (;;) {
+    if (TileInRoom(x, y, room)) {
+      CTilePt t(x, y, 1);
+      TileWalls walls = w->GetWall(t);
+      if (walls.HasWall(TileWallsSegment(8)) && !PassableWallStyle(walls.GetStyle(TileWallsSegment(8))) &&
+          TileInRoom(x, y + 1, room))
+        push16(x, y + 1, x + 1, y + 1);
+      if (walls.HasWall(TileWallsSegment(4)) && !PassableWallStyle(walls.GetStyle(TileWallsSegment(4))) &&
+          TileInRoom(x + 1, y, room))
+        push16(x + 1, y, x + 1, y + 1);
+      if (walls.HasDiagonal()) {
+        PenaltyRect a(x, y, x + 1, y + 1, PenaltyRect::kBlocked);
+        a.left <<= 4, a.top <<= 4, a.right <<= 4, a.bottom <<= 4;
+        PenaltyRect b = a, c = a;
+        if (!walls.HasWall(TileWallsSegment(0x10))) {
+          a.bottom -= 0xe;
+          b.top += 0xe;
+        } else {
+          a.top += 0xe;
+          b.bottom -= 0xe;
+        }
+        b.left += 0xe;
+        a.right -= 0xe;
+        c.left += 7, c.right -= 7, c.top += 7, c.bottom -= 7;
+        rects->push_back(a);
+        rects->push_back(b);
+        rects->push_back(c);
+      }
+    } else {
+      PenaltyRect cell(x, y, x + 1, y + 1, PenaltyRect::kBlocked);
+      cell.left <<= 4, cell.top <<= 4, cell.right <<= 4, cell.bottom <<= 4;
+      const int hit = FindIntersectingRect(&cell, rects);
+      if (hit == -1) {
+        // The run of tiles out of the room along the row, then grown down while those rows stay out.
+        int end = x + 1;
+        while (end <= maxX && !TileInRoom(end, y, room)) ++end;
+        int row = y + 1;
+        for (;;) {
+          bool clear = true;
+          for (int i = x; i < end; ++i)
+            if (TileInRoom(i, row, room)) {
+              clear = false;
+              break;
+            }
+          if (!clear || maxY < row) break;
+          ++row;
+        }
+        cell.bottom = row << 4;
+        cell.right = end << 4;
+        rects->push_back(cell);
+      } else {
+        int r = (*rects)[static_cast<size_t>(hit)].right;
+        if (r < 0) r += 0xf;
+        if (x != (r >> 4)) x = (r >> 4) - 1;
+      }
+    }
+    ++x;
+    if (maxX < x) {
+      ++y;
+      x = minX;
+      if (maxY < y) break;
+    }
+  }
+  for (PenaltyRect& r : *rects) {
+    r.left -= half;
+    r.right += half;
+    r.top -= half;
+    r.bottom += half;
+  }
+}
+
+// 801558D0
+void BuildRoomPartition(unsigned short room, std::vector<PenaltyRect>* rects) { BuildRoomPartition(room, rects, true); }
+
+// 801558F4
+// The router is stuck at `p`: a blocking rectangle of `rects` covers it (GC: only the debug check
+// verifyRoute, off in the release build, calls it).
+int Stuck(std::vector<PenaltyRect>* rects, IPoint* p) {
+  IRect r;
+  r.top = p->y, r.left = p->x, r.bottom = p->y + 1, r.right = p->x + 1;
+  if (!rects) return 0;
+  const int i = FindIntersectingRect(&r, rects);
+  return i != -1 && (*rects)[static_cast<size_t>(i)].penalty == PenaltyRect::kBlocked ? 1 : 0;
+}
+
+// 80159738
+// Merges rectangles (but the 10000-penalty ones) that line up, twice along the rows (same top and
+// bottom, overlapping or touching on the left-right axis) and twice along the columns; a merged one is
+// replaced by the last of the list.
+void CollapsePenaltyRects(std::vector<PenaltyRect>& rects) {
+  int count = static_cast<int>(rects.size());
+  int last = count - 1;
+  for (int pass = 0; pass < 2; ++pass) {
+    last = count - 1;
+    for (int i = 0; i < last;) {
+      const int a = i++;
+      if (rects[static_cast<size_t>(a)].penalty == 10000 || count <= i) {
+        last = count - 1;
+        continue;
+      }
+      int j = i;
+      do {
+        PenaltyRect& ra = rects[static_cast<size_t>(a)];
+        PenaltyRect& rb = rects[static_cast<size_t>(j)];
+        bool merged = false;
+        if (rb.penalty != 10000 && ra.top == rb.top && ra.bottom == rb.bottom) {
+          if (ra.right < rb.left || rb.right < ra.right) {
+            if (!(ra.left < rb.left || rb.right < ra.left)) {
+              ra.left = rb.left;
+              merged = true;
+            }
+          } else {
+            ra.right = rb.right;
+            merged = true;
+          }
+        }
+        if (merged) {
+          --count;
+          rects[static_cast<size_t>(j)] = rects[static_cast<size_t>(count)];
+          rects.pop_back();
+        } else {
+          ++j;
+        }
+        last = count - 1;
+      } while (j < count);
+    }
+  }
+  for (int pass = 0; pass < 2; ++pass) {
+    for (int i = 0; i < last;) {
+      const int a = i++;
+      if (rects[static_cast<size_t>(a)].penalty == 10000 || count <= i) {
+        last = count - 1;
+        continue;
+      }
+      int j = i;
+      do {
+        PenaltyRect& ra = rects[static_cast<size_t>(a)];
+        PenaltyRect& rb = rects[static_cast<size_t>(j)];
+        bool merged = false;
+        if (rb.penalty != 10000 && ra.left == rb.left && ra.right == rb.right) {
+          if (ra.bottom < rb.top || rb.bottom < ra.bottom) {
+            if (!(ra.top < rb.top || rb.bottom < ra.top)) {
+              ra.top = rb.top;
+              merged = true;
+            }
+          } else {
+            ra.bottom = rb.bottom;
+            merged = true;
+          }
+        }
+        if (merged) {
+          --count;
+          rects[static_cast<size_t>(j)] = rects[static_cast<size_t>(count)];
+          rects.pop_back();
+        } else {
+          ++j;
+        }
+        last = count - 1;
+      } while (j < count);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------------------------------
 // XRoute
 
 // 80152D18
-XRoute::XRoute() {}
+XRoute::XRoute() { Construct(nullptr, nullptr, nullptr); }
 
 // 80152D74
 XRoute::XRoute(cXObject* person, cXObject* object, RoutingSlot* slot) { Construct(person, object, slot); }
 
 // 80152DDC
-// GC: also the person's "route id" (person data 0x48) into +0x9C.
+// The router and its target, a copy of the slot, where the router stands; a person's inset id (person
+// data 0x48) is kept for the goal search and it stops ignoring the object it routed through.
 void XRoute::Construct(cXObject* person, cXObject* object, RoutingSlot* slot) {
   m_person = person;
   m_object = object;
+  m_asked = nullptr;
+  m_avoid = nullptr;
   if (slot) m_slot = *slot;
-  m_goal = -1;
   m_maxScore = -1;
+  m_goal = -1;
+  m_stuck = 0;
+  m_waitStart = 0;
   if (cXObjectImpl* p = Impl(person)) m_personPos[0] = p->m_location[0], m_personPos[1] = p->m_location[1];
-  m_first = 1;
+  m_planned = 1;
+  m_insetId = 0;
+  m_portal = nullptr;
+  m_askedDone = 0;
   m_failure = 0;
   m_blocker = 0;
+  m_ignorePeople = 0;
+  if (cXPersonImpl* p = PersonOf(person)) {
+    m_insetId = static_cast<short>(p->GetPersonData(0x48));
+    p->ClearIgnoringObject();
+  }
   m_maxGoals = 0x30;
 }
+
+// 80152F5C
+int XRoute::HasCurrentGoal() { return m_goal != -1 ? 1 : 0; }
+
+// 80152F98
+int XRoute::GetMaxScore() {
+  if (m_maxScore == -1) {
+    m_maxScore = 0;
+    for (const RouteGoal& g : m_goals)
+      if (m_maxScore < g.m_score) m_maxScore = g.m_score;
+  }
+  return m_maxScore;
+}
+
+// 80152FE8
+void XRoute::SetCurrentGoal(int goal) { m_goal = goal; }
+
+// 80152FF0
+// The goal tried (and failed) is worth nothing now.
+void XRoute::ClearCurrentGoal() {
+  if (m_goal == -1) return;
+  if (m_goal >= 0 && static_cast<size_t>(m_goal) < m_goals.size()) m_goals[static_cast<size_t>(m_goal)].m_score = 0;
+  m_maxScore = -1;
+  m_goal = -1;
+}
+
+// 80153248
+RouteGoal* XRoute::GetCurrentGoal() { return &m_goals[static_cast<size_t>(m_goal)]; }
 
 // 80152F74 XRoute::CountGoals (inline in the header)
 // 80152F88 XRoute::GetNthGoal (inline)
 // 8015303C XRoute::GetRoutingSlot (inline)
+// 801534C8 XRoute::DoStream (inline: nothing)
 
 // 801534CC
 void XRoute::ResetGoals() {
@@ -462,68 +745,109 @@ void XRoute::AddGoal(RouteGoal& goal) {
   if (m_maxScore < goal.m_score) m_maxScore = goal.m_score;
 }
 
+// 80153328
+// Objects the router's room partition leaves out: those people may stand in (unless data 10), those
+// in a container; people when the route ignores people, the route's own avoided one, those farther than
+// three tiles from the router; other objects whose "allow intersection" tree (entry 5, the router as
+// the stack object) says so.
+int XRoute::ShouldIgnore(cXObject* object) {
+  cXObjectImpl* o = Impl(object);
+  if (!o) return 1;
+  if ((ObjCanIntersectPeople(o) && o->GetData(10) == 0) || o->GetContainer()) return 1;
+  cXObjectImpl* router = Impl(m_person);
+  if (o->GetType() == 2) {
+    if (m_ignorePeople != 0) return 1;
+    if (dynamic_cast<cXPersonImpl*>(o)) {
+      if (m_avoid && object == m_avoid) return 1;
+      if (router && router->CalcShortDistance(object) > 3.0) return 1;
+    }
+  } else if (router && o->RunTree(5, router->m_id, nullptr) != 0) {
+    return 1;
+  }
+  return 0;
+}
+
 // 8015282C
-// GC: room to stand is cXObjectImpl::CanPlace (vtable 0x134) for the person, whose placement error
-// says what is in the way (7 a wall: 3; 0xB an object: 1, a person 5); the conflict may only be the
-// route's object itself (+0x80), not another part of its multi-tile group (a goal on the next tile of
-// a 2x2 table is in the table). PC: Blocker (a person nearby on the spot: 5).
+// One goal at `pos` facing `dir` (eighths; -1 none): 0 off the lot (or a placement error other than a
+// wall or an object), 2 in another room than the router, 3 walled off from the slot's side (or a wall
+// in the way), 1 an object in the way (its id in m_blocker), 5 a person in the way, 6 good. The room and
+// wall checks are skipped with slot flag 0x800 (ignore rooms). Room to stand is the router's CanPlace.
 int XRoute::EvalTileForGoal(const int pos[2], int dir) {
   cFixedWorldImpl* w = Globs_pFixedWorld;
   cXObjectImpl* person = Impl(m_person);
-  cXObjectImpl* object = Impl(m_object);
-  CTilePt tile(pos[1] >> 4, pos[0] >> 4, person ? person->m_level : 1);
-  if (!w || pos[0] < 0 || pos[1] < 0 || w->OutOfBounds(tile)) return 0;
-  if (!(m_slot.m_flags & RoutingSlot::kIgnoreRooms) && object) {
-    CTilePt at = object->GetCTilePt();
-    if (w->GetRoom(tile) != w->GetRoom(at)) return 2;
+  if (!w || !person) return 0;
+  CTilePt tile(pos[1] >> 4, pos[0] >> 4, person->m_level);
+  if (pos[0] < 0 || pos[1] < 0 || w->OutOfBounds(tile)) return 0;
+  if (!(m_slot.m_flags & RoutingSlot::kIgnoreRooms)) {
+    if (w->GetRoom(tile) != static_cast<unsigned short>(person->GetData(0x1d))) return 2;
     if (dir != -1) {
       const unsigned int f = WallBlockFlagsAtTile(tile, (dir + 4) & 7);
       if ((f & 1) || ((dir & 1) && (f & 0x82))) return 3;
     }
   }
-  std::vector<cXObjectImpl*> ignore;
-  if (object) ignore.push_back(object);
-  Blocker blocked{&ignore};
-  blocked.AddPeople(m_person, m_object);
-  if (blocked.Person(pos[1] / 16.0f, pos[0] / 16.0f)) return 5;
-  blocked.m_people.clear();
-  if (blocked(pos[1] / 16.0f, pos[0] / 16.0f)) {
-    m_blocker = 0;
-    return 1;
+  gPlacementConflict = nullptr;
+  if (!ObjCanPlace(person, pos, person->m_level, nullptr, 0)) {
+    if (gPlacementError == 7) return 3;
+    if (gPlacementError != 0xb) return 0;
+    if (gPlacementConflict && (!m_avoid || gPlacementConflict != m_avoid)) {
+      cXObjectImpl* c = Impl(gPlacementConflict);
+      m_blocker = c ? c->m_id : 0;
+      return c && c->GetType() == 2 ? 5 : 1;
+    }
   }
   return 6;
 }
 
+// 80157FB8
+// While goals are scored the router faces the way it would there (its footprint turns with it): no
+// slot directions, toward the object's front (objDir + 4); else by the slot's facing (away: dir,
+// toward: dir + 4, anywhere: as it is, else objDir + facing).
+void SetDirectionForGoalSearch(cXObject* person, short objDir, short dir, RoutingSlot* slot) {
+  int face;
+  if ((slot->m_flags & 0xff) == 0) {
+    face = static_cast<short>(objDir + 4);
+  } else if (slot->m_facing == RoutingSlot::kFaceAway) {
+    face = dir;
+  } else if (slot->m_facing == RoutingSlot::kFaceTowards) {
+    face = static_cast<short>(dir + 4);
+  } else if (slot->m_facing == RoutingSlot::kFaceAnywhere) {
+    return;
+  } else {
+    face = static_cast<short>(objDir + slot->m_facing);
+  }
+  if (cXObjectImpl* p = Impl(person)) p->SetData(1, static_cast<short>(face % 8));
+}
+
 // 80158058
-// The person's own spot, facing its way. A person on a seat (its container is a chair) starts from the
-// free side of the seat (the chair definition's side mask +0x84, turned by the chair's facing) nearest
-// the object: m_startDirs is that side's bit.
+// The router's own spot. A person on a seat starts from the free side of the seat (the chair
+// definition's side mask +0x84, turned by the chair's facing) nearest the object, where she could stand
+// (EvalTileForGoal 5 or 6): m_startDirs is that side's bit.
 void XRoute::ChooseStartingPoint() {
   cXObjectImpl* p = Impl(m_person);
   m_startDirs = 0;
   if (!p) return;
   m_start[0] = p->m_location[0], m_start[1] = p->m_location[1];
+  const int here[2] = {m_start[0], m_start[1]};
   cXObjectImpl* seat = Impl(p->GetContainer());
   cXObjectImpl* target = Impl(m_object);
   if (!seat || !seat->IsChair() || !seat->m_def || !target) return;
   const int sides = ERQuickdata::S16(seat->m_def, 0x84);
-  static const int step[8][2] = {{-16, 0}, {-16, 16}, {0, 16}, {16, 16}, {16, 0}, {16, -16}, {0, -16}, {-16, -16}};
   bool found = false;
   int best = 0;
-  const int here[2] = {m_start[0], m_start[1]};
   for (int c = 0; c < 8; ++c) {
     if (!((sides >> c) & 1)) continue;
-    const int d = (c + seat->GetData(1)) & 7;
-    const int pos[2] = {here[0] + step[d][0], here[1] + step[d][1]};
-    const int r = EvalTileForGoal(pos, -1);
-    if (r < 5 || r > 6) continue;
-    const int dx = target->m_location[1] - pos[1], dy = target->m_location[0] - pos[0];
-    const int d2 = dx * dx + dy * dy;
+    int step[2];
+    DirectionStep((c + seat->GetData(1)) & 7, step);
+    const int pos[2] = {here[0] + step[0], here[1] + step[1]};
+    const int r = EvalTileForGoal(pos, -1);  // GC: the direction register is not set here
+    if (static_cast<unsigned int>(r - 5) >= 2) continue;
+    const int d1 = target->m_location[1] - pos[1], d0 = target->m_location[0] - pos[0];
+    const int d2 = d1 * d1 + d0 * d0;
     if (!found || d2 < best) {
       m_start[0] = pos[0], m_start[1] = pos[1];
+      found = true;
       m_startDirs = 1 << c;
       best = d2;
-      found = true;
     }
   }
 }
@@ -531,58 +855,92 @@ void XRoute::ChooseStartingPoint() {
 // 8015325C
 bool XRoute::IsPersonSittingOnChairGoal(cXObject* person) {
   cXObjectImpl* p = Impl(person);
-  if (!p) return false;
+  cXObjectImpl* object = Impl(m_object);
+  if (!p || !object) return false;
   for (const RouteGoal& g : m_goals) {
     if (g.m_object == 0) continue;
-    cXObjectImpl* chair = Impl(p->GetObjectFromID(g.m_object));
+    cXObjectImpl* chair = Impl(object->GetObjectFromID(g.m_object));
     if (chair && chair->IsChair() && Impl(p->GetContainer()) == chair) return true;
   }
   return false;
 }
 
 // 8015597C
-// GC: a big room (area over 250) allows only 8 goals; the person's data 0x49 holds its route id while
-// the goals are made.
+// The start (ChooseStartingPoint), then the goals (ConstructGoals) with the person's inset id in person
+// data 0x49 (its footprint for CanPlace) and its facing put back after. A room over 250 tiles allows
+// only 8 goals.
 void XRoute::BuildGoalList() {
   ChooseStartingPoint();
+  cXPersonImpl* person = PersonOf(m_person);
+  if (person) {
+    Room* room = RoomManager::GetRoomManager()->GetRoom(static_cast<unsigned short>(person->GetData(0x1d)));
+    if (room && room->GetArea() > 0xfa) m_maxGoals = 8;
+  }
+  cXObjectImpl* p = Impl(m_person);
+  const short dir = p ? static_cast<short>(p->GetData(1)) : 0;
+  if (person) person->SetPersonData(0x49, m_insetId);
   ConstructGoals();
+  if (person) person->SetPersonData(0x49, 0);
+  if (p) p->SetData(1, dir);
 }
 
+namespace {
+// 800E2A68
+// 800C7884
+// cXObjectImpl / cXMTObjectImpl::GetAverageLocation: its location; a multi-tile object the mean of its
+// parts' locations.
+void AverageLocation(cXObjectImpl* o, int out[2]) {
+  out[0] = o->m_location[0], out[1] = o->m_location[1];
+  PlacementGroup* g = o->IsMultiTile() ? PlacementGroupOf(o) : nullptr;
+  if (!g || g->parts.empty()) return;
+  int s0 = 0, s1 = 0, n = 0;
+  for (auto& part : g->parts) {
+    s0 += part.object->m_location[0];
+    s1 += part.object->m_location[1];
+    ++n;
+  }
+  out[0] = s0 / n, out[1] = s1 / n;
+}
+}  // namespace
+
 // 80158318
-// With slot directions: for each allowed direction (turned by the object's facing unless absolute)
-// not walled off at the object's tile, rows of spots from the minimum to the maximum distance in front
-// (a row as wide as it is far, `resolution` apart), each scored 100 - |distance - optimal| x gradient
-// + the slot's standing score (x10) (random +-10 with random scoring, +25 where no wall is beside the
-// direction, +20 at the person's own spot) and kept if EvalTileForGoal finds it good; the farther rows
-// stop at a wall. Without directions: the one spot at the slot's offset (score 100). No goal: the
-// failure says why (8 an object in the way, 9 a seat taken, 0xB walls, 0xC another room, 0xD a person).
-// GC: sitting slots also look for seats (chairs facing the spot) next to each spot; PC: not ported.
+// With slot directions: for each allowed direction (turned by the object's facing unless absolute) not
+// walled off at the object's tile, rows of spots from the minimum to the maximum distance in front (a
+// row as wide as it is far, `resolution` apart; a slot with a sitting score looks a tile at a time, a
+// row further each way). At each spot: standing there (score the standing multiplier x10), and for a
+// sitting score each of the eight tiles round it outside the rows that holds a chair facing the object
+// with that side free (its occupant none or the router; else the seat is taken and m_blocker names who
+// sits there): sitting there; standing is tried first unless sitting scores more. A spot within the
+// distances scores 100 - |distance - optimal| x gradient + that, +-10 at random with random scoring, +25
+// where no wall is beside its direction, +20 at the router's start, and is kept if EvalTileForGoal finds
+// it good (random scoring also skips spots on a door); a wall there stops the farther rows. More goals
+// than allowed: those with a seat, then random others. Without directions: the one spot at the slot's
+// offset (score 100). No goal: the failure says why (9 a seat taken, 0xD a person, 8 an object, 0xB a
+// wall or another room, 0xC (EvalTileForGoal 4), 10 only sitting was allowed).
 void XRoute::ConstructGoals() {
   ResetGoals();
   cXObjectImpl* object = Impl(m_object);
   if (!object) return;
   int objDir = object->GetData(1);
   if (m_slot.m_flags & RoutingSlot::kAbsolute) objDir = 0;
-  const int origin[2] = {object->m_location[0], object->m_location[1]};
-  if (m_slot.m_flags & RoutingSlot::kAverageLocation)
-    SIMMY_STUB("XRoute::ConstructGoals: the average location of a multi-tile object (vtable 0x34C)", 0x80158318);
-  bool anyBlocked = false, anyObject = false, anyPerson = false, anyWall = false, anyRoom = false, anyOut = false;
+  int origin[2] = {object->m_location[0], object->m_location[1]};
+  if (m_slot.m_flags & RoutingSlot::kAverageLocation) AverageLocation(object, origin);
+  bool sittingOnly = false, roomFlag = false, seatTaken = false, outFlag = false, objectFlag = false, personFlag = false,
+       wallFlag = false;
   auto note = [&](int r) {
-    switch (r) {
-      case 0: anyOut = true; break;
-      case 1: anyObject = true; break;
-      case 2: anyRoom = true; break;
-      case 3: anyWall = true; break;
-      case 5: anyPerson = true; break;
-      default: break;
-    }
+    if (r == 3 || r == 2) wallFlag = true;
+    else if (r == 1) objectFlag = true;
+    else if (r == 0) outFlag = true;
+    else if (r == 5) personFlag = true;
+    else if (r == 4) roomFlag = true;
   };
+  RouteGoal goal;
   if (m_slot.m_flags & 0xff) {
     const int minD = m_slot.m_minDist, maxD = m_slot.m_maxDist, opt = m_slot.m_optimalDist;
     if (minD > 0x200 || maxD < 1 || maxD > 0x200 || maxD < minD || opt < minD || maxD < opt) return;
     const int sitting = m_slot.m_multiplier[1] * 10;
     const int standing = std::max(m_slot.m_multiplier[0], m_slot.m_multiplier[2]) * 10;
-    if (sitting > 0 && standing == 0) SIMMY_STUB("XRoute::ConstructGoals: sitting goals (seats next to the spots)", 0x80158318);
+    const int maxD2 = maxD * maxD, minD2 = minD * minD;
     unsigned int walls = 0;
     if (!(m_slot.m_flags & RoutingSlot::kIgnoreRooms)) {
       CTilePt at = object->GetCTilePt();
@@ -591,216 +949,452 @@ void XRoute::ConstructGoals() {
     unsigned int nearWall = 0;
     for (int b = 0; b < 8; ++b)
       if ((walls >> b) & 1) nearWall |= (1u << b) | (1u << ((b + 1) & 7)) | (1u << ((b - 1) & 7));
-    const int res = sitting != 0 ? 0x10 : std::max(1, m_slot.m_resolution);
-    const float step = 16.0f / static_cast<float>(res);
+    const bool sits = sitting > 0;
+    int res = m_slot.m_resolution;
+    if (sitting != 0) res = 0x10;
+    const double scale = static_cast<double>(16.0f / static_cast<float>(res));
+    if (sits) sittingOnly = standing == 0;
     for (int c = 0; c < 8; ++c) {
       if (!((m_slot.m_flags >> c) & 1)) continue;
       if ((walls >> c) & 1) {
-        anyWall = true;
+        wallFlag = true;
         continue;
       }
       const int dir = (objDir + c) % 8;
-      int far = static_cast<int>(step * static_cast<float>(-maxD) * 0.0625f);
-      int near = static_cast<int>(step * static_cast<float>(-minD) * 0.0625f);
-      if (sitting > 0) {
+      const int seatDir = ((dir + 4) % 8 + 8) % 8;
+      int far = static_cast<int>(static_cast<double>(static_cast<float>(scale * static_cast<double>(static_cast<float>(-maxD)))) * 0.0625);
+      int row = static_cast<int>(static_cast<double>(static_cast<float>(scale * static_cast<double>(static_cast<float>(-minD)))) * 0.0625);
+      if (sits) {
         --far;
-        near = std::min(near + 1, -1);
+        ++row;
+        if (-1 < row) row = -1;
       }
-      const int facing = GoalFacing(m_slot, objDir, dir);
+      SetDirectionForGoalSearch(m_person, static_cast<short>(objDir), static_cast<short>(dir), &m_slot);
       bool stop = false;
-      for (int row = near; far <= row && !stop; --row) {
-        for (int col = row; col <= -row; ++col) {
-          const float lx = static_cast<float>(col * res) + m_slot.m_x;
-          const float ly = static_cast<float>(row * res) + m_slot.m_y;
-          if (standing == 0) continue;
-          const int d2 = static_cast<int>(lx * lx + ly * ly);
-          if (static_cast<float>(d2) > static_cast<float>(maxD * maxD) || static_cast<float>(d2) < static_cast<float>(minD * minD))
-            continue;
-          RouteGoal g;
-          TransformToWorldCoords(lx, ly, origin, dir, g.m_pos);
-          const int off = std::abs(static_cast<int>(std::sqrt(static_cast<float>(d2))) - opt);
-          g.m_score = 100 - static_cast<int>(static_cast<float>(off) * m_slot.m_gradient) + standing;
-          if (m_slot.m_flags & RoutingSlot::kRandomScoring) g.m_score += simmy::sim_rand() % 20 - 10;
-          if (!((nearWall >> c) & 1)) g.m_score += 25;
-          if (g.m_pos[0] == m_start[0] && g.m_pos[1] == m_start[1]) g.m_score += 20;
-          const int r = EvalTileForGoal(g.m_pos, dir);
-          note(r);
-          if (r == 3) stop = true;
-          if (r >= 6 || r < 0) {
-            g.m_dirMask = static_cast<unsigned short>(1u << c);
-            g.m_facing = facing;
-            AddGoal(g);
+      if (far <= row) {
+        for (;;) {
+          const int colEnd = -row;
+          const int nextRow = row - 1;
+          if (row <= colEnd) {
+            const int ly = row * res;
+            const unsigned short dirBit = static_cast<unsigned short>(1u << c);
+            for (int col = row; col <= colEnd; ++col) {
+              const int lx = col * res;
+              TransformToWorldCoords(static_cast<float>(lx) + m_slot.m_x, static_cast<float>(ly) + m_slot.m_y, origin, dir,
+                                     goal.m_pos);
+              bool tryStand = false;
+              for (int k = -1; k < 9; ++k) {
+                int score = 0;
+                int py = static_cast<int>(static_cast<float>(ly) + m_slot.m_y);
+                int px = static_cast<int>(static_cast<float>(lx) + m_slot.m_x);
+                short seatId = 0;
+                unsigned short mask = 0;
+                if (k == -1 || tryStand) {
+                  bool stand;
+                  if (standing < sitting) stand = k == 8;
+                  else stand = k == -1;
+                  if (stand) score = standing;
+                  mask = dirBit;
+                } else if (sitting != 0) {
+                  int step[2];
+                  DirectionStep(k, step);
+                  // DirectionStep gives (FTilePt [0], [1]) = (local y, local x) steps.
+                  px += step[1];
+                  py += step[0];
+                  bool outside = true;
+                  const int tx = px >> 4, ty = py >> 4;
+                  if (ty == row) outside = row <= tx && tx <= colEnd;
+                  else if (row < ty) outside = row < tx && tx < colEnd;
+                  if (outside) {
+                    int at[2];
+                    TransformToWorldCoords(static_cast<float>(px), static_cast<float>(py), origin, dir, at);
+                    CTilePt t(at[1] >> 4, at[0] >> 4, object->m_level);
+                    if (!Globs_pFixedWorld->OutOfBounds(t)) {
+                      cXObjectImpl* seat = ObstacleAtLocation(at, object->m_level, false);
+                      if (seat && seat->IsChair() && seat->GetData(1) == seatDir && seat->m_def) {
+                        mask = static_cast<unsigned short>(1u << k);
+                        if (static_cast<unsigned short>(ERQuickdata::S16(seat->m_def, 0x84)) & mask) {
+                          cXObjectImpl* occupant = seat->GetContainedObject(0);
+                          if (!occupant || occupant == Impl(m_person)) {
+                            seatId = seat->m_id;
+                            score = sitting;
+                          } else {
+                            seatTaken = true;
+                            m_blocker = occupant->m_id;
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+                bool added = false;
+                if (score != 0) {
+                  const float d2 = static_cast<float>(px * px + py * py);
+                  if (d2 <= static_cast<float>(maxD2) && static_cast<float>(minD2) <= d2) {
+                    const float dist = std::sqrt(d2);
+                    const int off = std::abs(static_cast<int>(dist) - opt);
+                    goal.m_score = (100 - static_cast<int>(static_cast<float>(off) * m_slot.m_gradient)) + score;
+                    if (m_slot.m_flags & RoutingSlot::kRandomScoring)
+                      goal.m_score += static_cast<int>(GetNextRandomNumber() % 0x14) - 10;
+                    if (!((nearWall >> c) & 1)) goal.m_score += 0x19;
+                    int at[2];
+                    TransformToWorldCoords(static_cast<float>(px), static_cast<float>(py), origin, dir, at);
+                    if (at[1] == m_start[1] && at[0] == m_start[0]) goal.m_score += 0x14;
+                    const int r = EvalTileForGoal(goal.m_pos, dir);
+                    note(r);
+                    if (r == 3) stop = true;
+                    if (r < 0 || r > 5) {
+                      bool door = false;
+                      if (m_slot.m_flags & RoutingSlot::kRandomScoring) {
+                        cXObjectImpl* d = ObstacleAtLocation(at, object->m_level, true);
+                        door = d && d->IsDoor();
+                      }
+                      if (!door) {
+                        goal.m_object = seatId;
+                        goal.m_dirMask = mask;
+                        AddGoal(goal);
+                        added = true;
+                      }
+                    }
+                  }
+                }
+                if (added) break;
+                tryStand = k + 1 == 8;
+              }
+            }
           }
+          if (!(far <= nextRow) || stop) break;
+          row = nextRow;
         }
       }
     }
     if (static_cast<int>(m_goals.size()) > m_maxGoals) {
-      // GC: the best, then random others, up to the limit.
-      std::sort(m_goals.begin(), m_goals.end(), [](const RouteGoal& a, const RouteGoal& b) { return a.m_score > b.m_score; });
-      m_goals.resize(static_cast<size_t>(m_maxGoals));
-    }
-    if (!m_goals.empty()) return;
-  } else {
-    RouteGoal g;
-    TransformToWorldCoords(m_slot.m_x, m_slot.m_y, origin, objDir, g.m_pos);
-    const int dir = DirectionBetween(origin, g.m_pos);
-    const int r = EvalTileForGoal(g.m_pos, dir);
-    note(r);
-    if (r == 6) {
-      g.m_score = 100;
-      g.m_object = 0;
-      g.m_facing = GoalFacing(m_slot, objDir, 0);
-      AddGoal(g);
-      return;
-    }
-  }
-  (void)anyBlocked;
-  (void)anyOut;
-  m_failure = anyObject ? 8 : anyPerson ? 0xd : anyWall ? 0xb : anyRoom ? 0xc : 0;
-}
-
-// 80155AC8
-// PC stand-in for the GC's FindPath (BuildRoomPartition and the SpacePartition A*): an A* from the
-// route's start over the lot in quarter tiles (8 neighbours; a cell is open when Blocker lets a person
-// stand at its centre, other people aside: they only add a cost), to the best-scoring goal it reaches (goals tried best first), then smoothed:
-// each way point is the farthest one still in a clear straight line. The start may touch an object
-// (the first steps away from it are not checked against objects).
-int XRoute::FindPath(TileList& out) {
-  out.m_points.clear();
-  cFixedWorldImpl* w = Globs_pFixedWorld;
-  if (!w || m_goals.empty()) return 0;
-  std::vector<int> order(m_goals.size());
-  for (size_t i = 0; i < order.size(); ++i) order[i] = static_cast<int>(i);
-  std::stable_sort(order.begin(), order.end(), [&](int a, int b) { return m_goals[a].m_score > m_goals[b].m_score; });
-  const std::vector<cXObjectImpl*> ignore = RouteIgnores(m_object);
-  Blocker blocked{&ignore};
-  blocked.AddPeople(m_person, m_object);
-  // People are penalty rects on GC (the route may pass them at a cost), not walls: the cells only test
-  // the lot, walls and objects; a cell a person stands on costs more.
-  Blocker fixedOnly{&ignore};
-  const float kPersonPenalty = 1.0f;
-  const int cw = w->m_xSize * 4, ch = w->m_ySize * 4;
-  if (cw <= 0 || ch <= 0) return 0;
-  const float sx = m_start[1] / 16.0f, sy = m_start[0] / 16.0f;
-  std::vector<signed char> open(static_cast<size_t>(cw * ch), -1);
-  auto cellOpen = [&](int i, int j) {
-    if (i < 0 || j < 0 || i >= cw || j >= ch) return false;
-    signed char& o = open[static_cast<size_t>(j * cw + i)];
-    if (o < 0) o = fixedOnly((i + 0.5f) * 0.25f, (j + 0.5f) * 0.25f) ? 0 : 1;
-    return o == 1;
-  };
-  const int si = std::max(0, std::min(cw - 1, static_cast<int>(sx * 4.0f)));
-  const int sj = std::max(0, std::min(ch - 1, static_cast<int>(sy * 4.0f)));
-  for (int gi : order) {
-    const RouteGoal& goal = m_goals[static_cast<size_t>(gi)];
-    const float gx = goal.m_pos[1] / 16.0f, gy = goal.m_pos[0] / 16.0f;
-    const int ti = static_cast<int>(gx * 4.0f), tj = static_cast<int>(gy * 4.0f);
-    std::vector<float> cost(static_cast<size_t>(cw * ch), 1e30f);
-    std::vector<int> from(static_cast<size_t>(cw * ch), -1);
-    // PC: a person left standing inside objects (a goal the router allowed in a table, a seat's tile)
-    // walks out: from a blocked start every cell is passable until the path reaches an open one
-    // (GC: the room partition routes from the person's own rect, which may overlap objects).
-    std::vector<char> escaping(static_cast<size_t>(cw * ch), 0);
-    using Node = std::pair<float, int>;
-    std::priority_queue<Node, std::vector<Node>, std::greater<Node>> queue;
-    const int s = sj * cw + si;
-    cost[static_cast<size_t>(s)] = 0.0f;
-    escaping[static_cast<size_t>(s)] = !cellOpen(si, sj);
-    queue.push({std::hypot(gx - sx, gy - sy), s});
-    int found = -1, expanded = 0;
-    while (!queue.empty() && expanded < 60000) {
-      const int n = queue.top().second;
-      queue.pop();
-      ++expanded;
-      const int i = n % cw, j = n / cw;
-      if (i == ti && j == tj) {
-        found = n;
-        break;
+      // The goals with a seat, then random ones (scanning on from a random place to the end of the list)
+      // until the limit.
+      std::vector<RouteGoal> all = m_goals;
+      m_goals.clear();
+      for (RouteGoal& g : all) {
+        if (g.m_object == 0) continue;
+        m_goals.push_back(g);
+        g.m_score = 0;
       }
-      for (int dj = -1; dj <= 1; ++dj) {
-        for (int di = -1; di <= 1; ++di) {
-          if (!di && !dj) continue;
-          const int ni = i + di, nj = j + dj;
-          const bool target = ni == ti && nj == tj;
-          // PC: the start's ring, and its whole tile (a sim left standing in a chair's or a counter's
-          // tile walks out of it; the GC router starts from the person's own rect, not the cells).
-          const bool nearStart = (std::abs(ni - si) <= 1 && std::abs(nj - sj) <= 1) || (ni / 4 == si / 4 && nj / 4 == sj / 4);
-          if (ni < 0 || nj < 0 || ni >= cw || nj >= ch) continue;
-          const bool escape = escaping[static_cast<size_t>(n)] != 0;
-          const bool openCell = cellOpen(ni, nj);
-          if (!target && !nearStart && !escape && !openCell) continue;
-          if (di && dj && !nearStart && !escape && (!cellOpen(i + di, j) || !cellOpen(i, j + dj))) continue;
-          const float step = (di && dj) ? 1.41421f : 1.0f;
-          const int m = nj * cw + ni;
-          float c = cost[static_cast<size_t>(n)] + step * 0.25f;
-          if (escape && !openCell) c += 0.5f;  // out of the objects the shortest way
-          if (!blocked.m_people.empty() && blocked.Person((ni + 0.5f) * 0.25f, (nj + 0.5f) * 0.25f)) c += kPersonPenalty;
-          if (c < cost[static_cast<size_t>(m)]) {
-            cost[static_cast<size_t>(m)] = c;
-            from[static_cast<size_t>(m)] = n;
-            escaping[static_cast<size_t>(m)] = escape && !openCell ? 1 : 0;
-            queue.push({c + std::hypot(gx - (ni + 0.5f) * 0.25f, gy - (nj + 0.5f) * 0.25f), m});
-          }
-        }
-      }
-    }
-    if (found < 0) continue;
-    // Cell centres back to the start, then the exact start and goal.
-    std::vector<EVec2> cells;
-    for (int n = found; n >= 0 && n != s; n = from[static_cast<size_t>(n)])
-      cells.push_back(EVec2{((n % cw) + 0.5f) * 0.25f, ((n / cw) + 0.5f) * 0.25f});
-    std::reverse(cells.begin(), cells.end());
-    if (!cells.empty()) cells.back() = EVec2{gx, gy};
-    else cells.push_back(EVec2{gx, gy});
-    std::vector<EVec2> path{EVec2{sx, sy}};
-    size_t k = 0;
-    while (k < cells.size()) {
-      size_t best = k;
-      const EVec2& p = path.back();
-      for (size_t q = cells.size(); q-- > k + 1;) {
-        if (blocked.Clear(p.x, p.y, cells[q].x, cells[q].y)) {
-          best = q;
+      int count = static_cast<int>(m_goals.size());
+      while (count < m_maxGoals) {
+        ++count;
+        const unsigned int n = static_cast<unsigned int>(all.size());
+        size_t i = GetNextRandomNumber() % n;
+        for (; i < all.size(); ++i) {
+          if (all[i].m_score == 0) continue;
+          m_goals.push_back(all[i]);
+          all[i].m_score = 0;
           break;
         }
       }
-      path.push_back(cells[best]);
-      k = best + 1;
     }
-    for (const EVec2& p : path) out.m_points.push_back(EVec2{p.x * 16.0f, p.y * 16.0f});
-    m_goal = gi;
-    return 1;
+    if (CountGoals() != 0) return;
+  } else {
+    int dir = -1;
+    TransformToWorldCoords(m_slot.m_x, m_slot.m_y, origin, objDir, goal.m_pos);
+    if (!(origin[0] == goal.m_pos[0] && origin[1] == goal.m_pos[1]) &&
+        ((origin[1] >> 4) != (goal.m_pos[1] >> 4) || (origin[0] >> 4) != (goal.m_pos[0] >> 4)))
+      dir = DirectionOfDelta(goal.m_pos[0] - origin[0], goal.m_pos[1] - origin[1]);
+    SetDirectionForGoalSearch(m_person, static_cast<short>(objDir), 0, &m_slot);
+    sittingOnly = roomFlag = seatTaken = outFlag = objectFlag = personFlag = wallFlag = false;
+    const int r = EvalTileForGoal(goal.m_pos, dir);
+    note(r);
+    if (r == 6) {
+      goal.m_score = 100;
+      goal.m_object = 0;
+      AddGoal(goal);
+      return;
+    }
   }
-  m_failure = 0x10;
-  if (std::getenv("SIMMY_ROUTE_TRACE") || std::getenv("SIMMY_SIM_TRACE")) {  // PC: why (the start's ring of cells)
-    int openNear = 0;
-    for (int dj = -2; dj <= 2; ++dj)
-      for (int di = -2; di <= 2; ++di) openNear += cellOpen(si + di, sj + dj) ? 1 : 0;
-    std::printf("[route]   no path: lot %dx%d cells, start cell %d,%d (%s), %d of 25 cells round it open\n", cw, ch, si, sj,
-                cellOpen(si, sj) ? "open" : "blocked", openNear);
-    static bool mapped = false;  // once: the lot's tiles ('.' a person fits at the centre, 'f' tile flag 0x10, 'x' not)
-    if (!mapped) {
-      mapped = true;
-      for (int ty = 0; ty < ch / 4; ++ty) {
-        std::printf("[route]   map %2d ", ty);
-        for (int tx = 0; tx < cw / 4; ++tx) {
-          CTilePt t(tx, ty, 0);
-          const char c = (w->GetFlags(t) & 0x10) ? 'f' : cellOpen(tx * 4 + 2, ty * 4 + 2) ? '.' : 'x';
-          std::printf("%c", (tx == si / 4 && ty == sj / 4) ? 'S' : c);
+  (void)outFlag;
+  m_failure = seatTaken ? 9 : personFlag ? 0xd : objectFlag ? 8 : wallFlag ? 0xb : roomFlag ? 0xc : sittingOnly ? 10 : 0;
+}
+
+namespace {
+bool TraceRoute() {
+  static const bool on = std::getenv("SIMMY_ROUTE_TRACE") != nullptr || std::getenv("SIMMY_SIM_TRACE") != nullptr;
+  return on;
+}
+// Path's search loop (FindPath's): one A* step (state 1) or smoothing pass (state 2) at a time, up to
+// `limit` steps.
+void RunPath(Path& path, int limit) {
+  while (path.m_state != 0 && path.m_steps <= limit) {
+    if (path.m_state == 1) {
+      ++path.m_steps;
+      if (path.OpenANode() != 0) path.m_state = path.m_params->smooth == 0 ? 0 : 2;
+    } else if (path.m_state == 2) {
+      ++path.m_steps;
+      if (path.DoOneSmooth()) path.m_state = 0;
+    } else {
+      break;  // PC: GC InitPath only leaves 0 or 1
+    }
+  }
+}
+}  // namespace
+
+// 80155AC8
+// The way through the router's room to the goal it can best reach, in `out` (way points; the start
+// first, then where it crosses from one free rectangle to the next, then the goal's centre); the goal
+// is the current goal. Only within the router's room (else, or without the room: no path and no current
+// goal): the room's partition (BuildRoomPartition, kept by the Room), the room's objects but those
+// ShouldIgnore leaves out, each its footprint grown by half a person's width (blocking; data 10: penalty
+// 10, not grown; a portal's wall-blocking sides as strips of penalty 10000), people too. An object or
+// person the start is inside does not block: a blocking object the router does not overlap is kept
+// ungrown, else it costs 10000 and is ignored (SetIgnoringObject); a person costs 1000 where they
+// overlap. A ghost ignores everything but the goals. Goals cost (best score - score) x 16. A big room
+// (over 256 tiles) with few objects searches coarse rectangles first and fails (3) if that finds
+// nothing. No goals: failure 1 becomes 7.
+int XRoute::FindPath(TileList& out) {
+  cXPersonImpl* person = PersonOf(m_person);
+  cXObjectImpl* router = Impl(m_person);
+  const bool ghost = person && person->IsGhost() != 0;
+  if (!router) return 0;
+  const int data11 = router->GetData(0x11);
+  if (m_goals.empty()) {
+    if (m_failure == 1) m_failure = 7;
+    return 0;
+  }
+  const unsigned short roomId = static_cast<unsigned short>(router->GetData(0x1d));
+  cXObjectImpl* object = Impl(m_object);
+  if (ghost || (object && roomId == static_cast<unsigned short>(object->GetData(0x1d)))) {
+    Room* room = RoomManager::GetRoomManager()->GetRoom(roomId);
+    if (room) {
+      int defaultPenalty = 0;
+      const int outside = room->IsOutside();
+      IPoint start;
+      start.x = m_start[1];
+      start.y = m_start[0];
+      int rr[4];
+      ObjRect(router, rr);
+      IRect routerRect;
+      routerRect.top = rr[2], routerRect.left = rr[3], routerRect.bottom = rr[0], routerRect.right = rr[1];
+      if (data11 == 0 && outside) defaultPenalty = 3;
+      const int half = static_cast<int>(cXObject::GetPersonWidth()) / 2;
+      std::vector<PenaltyRect> obstacles;
+      ObjectModuleImpl* module = Globs_pObjectModule;
+      if (!ghost && module) {
+        for (cXObjectImpl* o = module->m_first; o; o = o->m_nextObject) {
+          if (o == router || static_cast<unsigned short>(o->GetData(0x1d)) != roomId || ShouldIgnore(o)) continue;
+          int r[4];
+          ObjRect(o, r);
+          int pen = PenaltyRect::kBlocked;
+          if (o->GetData(10) != 0) pen = 10;
+          PenaltyRect pr(r[3], r[2], r[1], r[0], pen);
+          const int type = o->GetType();
+          if (type == 8) {
+            const unsigned int f = ObjWallBlockFlags(o);
+            auto strip = [&](int l, int t, int rt, int b) {
+              pen = 10000;
+              pr = PenaltyRect(l, t, rt, b, 10000);
+              pr.top -= half, pr.left -= half, pr.bottom += half, pr.right += half;
+            };
+            if (f & 1) strip(r[3], r[2], r[1], r[2] + 1);
+            if (f & 4) strip(r[1] - 1, r[2], r[1], r[0]);
+            if (f & 0x10) strip(r[3], r[0] - 1, r[1], r[0]);
+            if (f & 0x40) strip(r[3], r[2], r[3] + 1, r[0]);
+          }
+          if (type == 2 || pen == PenaltyRect::kBlocked) {
+            pr.left -= half, pr.right += half, pr.top -= half, pr.bottom += half;
+          }
+          const bool startInside = pr.left <= start.x && start.x < pr.right && pr.top <= start.y && start.y < pr.bottom;
+          if (!startInside) {
+            obstacles.push_back(pr);
+            continue;
+          }
+          IRect overlap;
+          if (!dynamic_cast<cXPersonImpl*>(o)) {
+            if (pr.penalty != PenaltyRect::kBlocked) continue;
+            pr.left += half, pr.right -= half, pr.top += half, pr.bottom -= half;
+            if (overlap.Intersect(&pr, &routerRect) == 0) {
+              obstacles.push_back(pr);
+            } else {
+              pr.penalty = 10000;
+              obstacles.push_back(pr);
+              if (person) person->SetIgnoringObject(o);
+            }
+          } else {
+            pr.left += half, pr.right -= half, pr.top += half, pr.bottom -= half;
+            if (overlap.Intersect(&pr, &routerRect) == 0) {
+              obstacles.push_back(pr);
+            } else {
+              pr.penalty = 1000;
+              obstacles.push_back(pr);
+            }
+            if (person) person->SetIgnoringObject(o);
+          }
         }
-        std::printf("\n");
       }
-      // What stands round the start.
-      for (int ty = sj / 4 - 1; ty <= sj / 4 + 1; ++ty)
-        for (int tx = si / 4 - 1; tx <= si / 4 + 1; ++tx) {
-          CTilePt t(tx, ty, 0);
-          if (w->OutOfBounds(t)) continue;
-          ObjectModuleImpl* module = Globs_pObjectModule;
-          cXObjectImpl* o = module ? Impl(module->GetObjectFromID(module->GetTileObjectID(t))) : nullptr;
-          TileWalls walls = w->GetWall(t);
-          std::printf("[route]   tile %d,%d: flags %x walls %d object %s\n", tx, ty, w->GetFlags(t), walls.HasWall() ? 1 : 0,
-                      o ? o->DebugName() : "-");
-        }
+      CollapsePenaltyRects(obstacles);
+      std::vector<PenaltyRect> goalRects;
+      std::vector<int> goalIndex;
+      goalRects.reserve(m_goals.size());
+      goalIndex.reserve(m_goals.size());
+      RoutingParams params;
+      params.obstacles = &obstacles;
+      if (!ghost) params.partition = room->GetPartition();
+      params.defaultPenalty = defaultPenalty;
+      params.goals = &goalRects;
+      for (int i = 0; i < CountGoals(); ++i) {
+        const RouteGoal* g = GetNthGoal(i);
+        if (g->m_score <= 0) continue;
+        goalRects.push_back(PenaltyRect(g->m_pos[1], g->m_pos[0], g->m_pos[1] + 1, g->m_pos[0] + 1, (m_maxScore - g->m_score) * 0x10));
+        goalIndex.push_back(i);
+      }
+      if (ghost || (room->GetObjectDensity() <= 0.2f && room->GetArea() > 99)) {
+        params.limitSize = 1;
+        params.maxSize = 0x80;
+      } else {
+        params.limitSize = ghost ? 1 : 0;
+      }
+      params.start = start;
+      params.noGoalCentre = 0;
+      params.limitAspect = 0;
+      params.field1C = 1;
+      params.smooth = 1;
+      int limit = static_cast<int>(goalRects.size()) * room->GetArea() + 0x32;
+      if (1000 < limit) limit = 1000;
+      bool none = false;
+      Path path;
+      if (0x100 < room->GetArea() && params.limitSize != 0) {
+        params.limitSize = 0;
+        path.InitPath(&params);
+        RunPath(path, limit);
+        none = path.m_points.empty();
+        params.limitSize = 1;
+        Path::fSpacePartition.Clear();
+        path.m_chain.clear();
+        path.m_pathNodes.clear();
+        path.m_points.clear();
+        path.m_state = -1;
+      }
+      if (none) {
+        m_failure = 3;
+        if (TraceRoute()) std::printf("[route] %s: no way out of the coarse search\n", router->DebugName());
+        return 0;
+      }
+      path.InitPath(&params);
+      RunPath(path, limit);
+      if (path.m_goalRect == -1) ClearCurrentGoal();
+      else SetCurrentGoal(goalIndex[static_cast<size_t>(path.m_goalRect)]);
+      for (const IPoint& p : path.m_points) {
+        TileListPoint t;
+        t.p[0] = p.y;
+        t.p[1] = p.x;
+        out.m_points.push_back(t);
+      }
+      if (!path.m_points.empty()) return 1;
+      m_failure = 3;
+      if (TraceRoute())
+        std::printf("[route] %s: no way to %zu goals (%zu obstacles, %zu partition rects, %d steps)\n", router->DebugName(),
+                    goalRects.size(), obstacles.size(), params.partition ? params.partition->size() : static_cast<size_t>(0),
+                    path.m_steps);
+      return 0;
     }
   }
+  ClearCurrentGoal();
   return 0;
 }
+
+// 80157C44
+// The point of the way nearest `pos` (rounded), on the legs from point `last` - 1 to `last` (last 0:
+// the first leg; < 0: every leg but the last one, which only says how to face); `pos` becomes it.
+void TileList::FindNearestPoint(int pos[2], int last) {
+  const int n = static_cast<int>(m_points.size());
+  int lo = 0, hi = 0;
+  if (last < 0) {
+    hi = n - 3;
+  } else if (last > 0) {
+    lo = hi = last - 1;
+  }
+  if (lo < 0) return;
+  const unsigned int lim = static_cast<unsigned int>(n - 3);
+  if (!(static_cast<unsigned int>(lo) <= lim && hi >= 0 && static_cast<unsigned int>(hi) <= lim)) return;
+  int best0 = m_points[static_cast<size_t>(lo)].p[0], best1 = m_points[static_cast<size_t>(lo)].p[1];
+  float best = static_cast<float>((best1 - pos[1]) * (best1 - pos[1]) + (best0 - pos[0]) * (best0 - pos[0]));
+  for (int i = lo; i <= hi; ++i) {
+    const int a0 = m_points[static_cast<size_t>(i)].p[0], a1 = m_points[static_cast<size_t>(i)].p[1];
+    const int b0 = m_points[static_cast<size_t>(i + 1)].p[0], b1 = m_points[static_cast<size_t>(i + 1)].p[1];
+    const float f1 = static_cast<float>(a1 - b1), f0 = static_cast<float>(a0 - b0);
+    const float len = f1 * f1 + f0 * f0;
+    float t = len != 0.0f ? (static_cast<float>(pos[1] - b1) * f1 + static_cast<float>(pos[0] - b0) * f0) / len : 0.0f;
+    if (!(0.0f <= t)) t = 0.0f;
+    else if (1.0f < t) t = 1.0f;
+    const int q1 = static_cast<int>(t * static_cast<float>(a1 - b1) + static_cast<float>(b1) + 0.5f);
+    const int q0 = static_cast<int>(t * static_cast<float>(a0 - b0) + static_cast<float>(b0) + 0.5f);
+    const float d = static_cast<float>((q1 - pos[1]) * (q1 - pos[1]) + (q0 - pos[0]) * (q0 - pos[0]));
+    if (d < best) {
+      best = d;
+      best0 = q0;
+      best1 = q1;
+    }
+  }
+  pos[0] = best0;
+  pos[1] = best1;
+}
+
+// ---------------------------------------------------------------------------------------------------
+// The router's parts of game/object.cpp (cXObjectImpl)
+
+// 800D95EC
+RET_UNKNOWN cXObject::GetPersonWidth() { return 6; }  // cXObjectImpl::gPersonWidth (804FDC74)
+
+// 800EB2A0
+RET_UNKNOWN cXObjectImpl::GetRoom() { return static_cast<unsigned short>(GetData(0x1d)); }
+
+// 800EAE40
+// A portal part with a portal tree (entry 0xF).
+RET_UNKNOWN cXObjectImpl::IsDoor() { return GetType() == 8 && GetTreeID(0xf) != 0 && IsPortalObject(this) ? 1 : 0; }
+
+// 800DC968
+// PC: over the objects whose site is the tile (GC: the tile's root object and its siblings).
+cXObjectImpl* ObstacleAtLocation(const int pos[2], int level, bool preferDoor) {
+  CTilePt t(pos[1] >> 4, pos[0] >> 4, level);
+  if (!Globs_pFixedWorld || Globs_pFixedWorld->OutOfBounds(t)) return nullptr;
+  cXObjectImpl* door = nullptr;
+  for (cXObjectImpl* o : TileObjects(t)) {
+    if (!ObjCanIntersectPeople(o)) return o;
+    if (preferDoor && o->IsDoor()) door = o;
+  }
+  return door;
+}
+
+// 800E0080
+// Beyond 5 tiles the straight distance plus, sampled every 2 tiles along the line (from the first
+// step until past `other`), 5 per blocked tile (flag 0x10) and 10 per tile of another room.
+double cXObjectImpl::CalcDistanceWithPentalties(cXObject* other) {
+  const double d = CalcShortDistance(other);
+  cXObjectImpl* o = Impl(other);
+  if (!o || d < 5.0) return d;
+  cFixedWorldImpl* w = Globs_pFixedWorld;
+  double penalty = 0.0;
+  const int to0 = o->m_location[0], to1 = o->m_location[1];
+  const unsigned short room = static_cast<unsigned short>(GetData(0x1d));
+  const int from1 = m_location[1], from0 = m_location[0];
+  const double step1 = static_cast<float>(static_cast<double>(static_cast<float>(to1 - from1) * 2.0f) / d);
+  const double step0 = static_cast<float>(static_cast<double>(static_cast<float>(to0 - from0) * 2.0f) / d);
+  double p1 = static_cast<float>(static_cast<float>(from1) + step1);
+  double p0 = static_cast<float>(static_cast<float>(from0) + step0);
+  bool alongFirst = false, increasing = false;
+  if (from1 == to1) {
+    increasing = from0 < to0;
+    alongFirst = true;
+  } else if (from1 < to1) {
+    increasing = true;
+  }
+  for (bool done = false; !done;) {
+    CTilePt t(static_cast<int>(p1) >> 4, static_cast<int>(p0) >> 4, 1);
+    if (w->GetFlags(t) & 0x10) penalty = static_cast<float>(penalty + 5.0);
+    else if (w->GetRoom(t) != room) penalty = static_cast<float>(penalty + 10.0);
+    p1 = static_cast<float>(p1 + step1);
+    p0 = static_cast<float>(p0 + step0);
+    if (!alongFirst) done = increasing ? static_cast<float>(to1) < p1 : p1 < static_cast<float>(to1);
+    else done = increasing ? !(p0 <= static_cast<float>(to0)) : p0 < static_cast<float>(to0);
+  }
+  return static_cast<float>(d + penalty);
+}
+
+// 800EAEE8
+void cXObjectImpl::SetData(int index, short value) { m_data.WriteVar(index, value); }

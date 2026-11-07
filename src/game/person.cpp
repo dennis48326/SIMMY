@@ -1,7 +1,10 @@
-// Port of game/person.cpp (partial): the person object (motives, its primitives: animate, routing,
-// motive deltas), the family put on the lot, and PC stand-ins for the action menu. Not ported: the
-// action queue, autonomy, wants and fears, social mode; see person.hpp.
+// Port of game/person.cpp: the person object (construction, Initialize/PostLoad, motives and the mood's
+// happy curves, service NPC records, the action queue, its primitives: animate, routing, motive deltas,
+// idle for input, ...), the family put on the lot, and PC stand-ins for the action menu. Autonomy is in
+// autonomy.cpp, social mode in socialmode.cpp, wants and fears in wantfear.cpp; see person.hpp. Still
+// stubbed here: Reset (8011EB78), the current room's overhead lights (UpdateCurrentRoom), reaching.
 #include "simmy/types_gen.hpp"
+#include "simmy/classes/placement.hpp"
 #include "simmy/unported_globals.hpp"
 
 #include <algorithm>
@@ -12,15 +15,26 @@
 #include <string>
 #include <vector>
 
+namespace {
+// The happy weight curves (cXPersonImpl::sAdultHappyWeightCurves 804866BC, sChildHappyWeightCurves): the
+// weight of each of sHappyMotives (80424348) by its value. The child curves are never set up.
+struct HappyCurve {
+  PiecewiseFn m_fn;
+  int m_motive = 0;  // +0x10
+};
+std::vector<HappyCurve> sAdultHappyWeightCurves, sChildHappyWeightCurves;
+bool sHappyCurvesSetup = false;
+const int kHappyMotives[7] = {7, 6, 8, 9, 0xf, 0xd, 0xe};  // hunger, comfort, hygiene, bladder, fun, room, social
+}  // namespace
+
 // 8011C65C
 cXPerson::~cXPerson() {}
 
 // 8011AE04
-// GC: also the person data (motives, skills, ...), the behaviour queue, the animator (SAnimator2) and
-// the routing state.
-// Its animator (SAnimator2) is made here and initialised with the person.
+// The object, then the person's state cleared (GC: field by field; PC: the members' initialisers): the
+// motives (Motives::Init), the action queue, the routes, the current room (0xFFFB: none). Its animator
+// (SAnimator2) is made here and initialised with the person (GC: Initialize, EGlobal::CreateAnimator).
 cXPersonImpl::cXPersonImpl(int id, ObjSelector* selector, ObjectModule* module) : cXObjectImpl(id, selector, module) {
-  SIMMY_STUB("cXPersonImpl::cXPersonImpl: behaviour queue, routing, motive effects", 0x8011AE04);
   m_animator = new SAnimator2;
   m_motives.Init();
   m_motives.m_person = this;
@@ -32,13 +46,17 @@ cXPersonImpl::cXPersonImpl(int id, ObjSelector* selector, ObjectModule* module) 
 cXPersonImpl::~cXPersonImpl() {
   delete m_animator;
   m_animator = nullptr;
+  delete m_motiveEffects;
+  m_motiveEffects = nullptr;
 }
 
 // 8011E0FC
-// Its 3D instance (ESim) in the current house. GC: before that the person data from the neighbour, the
-// animator, the wants and fears, the starting interactions and the plumb bob.
+// Person data 0x3A / 0x41 (adult, female), the neighbour's persistent data, its 3D instance (ESim), the
+// motive effects and happy curves, the animator, and a want/fear shuffle the neighbour asked for.
+// GC also gives the object its hand slot (object data 0x43 = slots - 1; PC: slots are held through
+// object data 2/3, and a person's 0x43 stays 0 as in the GC's saves), the sprite renderer and clears the
+// ignored object (not kept by the port).
 void cXPersonImpl::Initialize() {
-  SIMMY_STUB("cXPersonImpl::Initialize: wants and fears, interactions, the plumb bob", 0x8011E0FC);
   // Person data 0x3A (20 an adult, 10 a child) and 0x41 (1 female), as ReconStream sets them again
   // (PC: without them here the first save stream measured the player's new sim 2 bytes short).
   m_personData[0x3a] = IsAdult() ? 0x14 : 10;
@@ -55,6 +73,13 @@ void cXPersonImpl::Initialize() {
     }
   }
   _globals.AllocPersonInstance(this);
+  // Its motive effects (the curves autonomy scores with; LoadMotiveEffects fills them) and the happy
+  // weight curves (once).
+  if (!m_motiveEffects) {
+    m_motiveEffects = new MotiveEffects(this);
+    LoadMotiveEffects();  // PC: GC loads them in Reset (8011EB78, not ported) and PostLoad
+  }
+  if (!sHappyCurvesSetup) InitializeStaticMemory();
   if (m_animator) {
     m_animator->Initialize(this);
     // PC: the animator starts where the person stands, facing its way (GC: the move-in behaviour
@@ -62,6 +87,13 @@ void cXPersonImpl::Initialize() {
     m_animator->SnapToGrid();
     m_animator->setAnimationDirectionToPersonDirection();
   }
+  // Its neighbour asked for new wants and fears (flag 0x20 of its data 0x4A, NeedsWantFearShuffle): all
+  // seven slots are drawn again.
+  if (Neighbor* n = Globs_pNeighborhood ? Globs_pNeighborhood->FindNeighborByID(GetPersonData(0x1f)) : nullptr)
+    if (n->m_pers[0x4a] & 0x20) {
+      n->ShuffleWantFear(-1);
+      n->m_pers[0x4a] = static_cast<short>(n->m_pers[0x4a] & ~0x20);
+    }
 }
 
 // 80125048
@@ -183,12 +215,51 @@ void cXPersonImpl::PostLoad(int version, bool loaded) {
     m_animator->ForceLocation();
     m_animator->setAnimationDirectionToPersonDirection();
   }
-  if (Globs_pObjectFolder && m_selector == Globs_pObjectFolder->GetPlaceholder())
-    SIMMY_STUB("cXPersonImpl::PostLoad: a placeholder person (ObjectModule CleanupPeople, AddToKillQueue)", 0x8011EC7C);
-  if (version < 0x32) SIMMY_STUB("cXPersonImpl::PostLoad: old saves' object relationships pruned", 0x8011EC7C);
+  // A placeholder person (its object file is missing) lets go of everything and is killed.
+  if (Globs_pObjectFolder && m_selector == Globs_pObjectFolder->GetPlaceholder() && Globs_pObjectModule) {
+    Globs_pObjectModule->CleanupPeople(this);
+    Cleanup(nullptr);
+    Globs_pObjectModule->AddToKillQueue(static_cast<short>(m_id), true);
+  }
+  // Old saves (before 0x32) kept relationships to people in the object's own matrix: they go.
+  if (version < 0x32 && m_relations) {
+    bool removed;
+    do {
+      removed = false;
+      for (int i = 0; i < m_relations->CountKeys(); ++i) {
+        cXObject* other = Globs_pObjectModule ? Globs_pObjectModule->GetObjectFromID(static_cast<short>(m_relations->GetNthKey(i))) : nullptr;
+        cXObjectImpl* o = other ? other->GetObjectImplementation() : nullptr;
+        if (o && o->GetType() == 2) {
+          m_relations->RemoveArray(m_relations->GetNthKey(i));
+          removed = true;
+          break;
+        }
+      }
+    } while (removed);
+  }
   LoadMotiveEffects();
-  if (m_animator) m_animator->SetIdleInitialized(false);
-  SIMMY_STUB("cXPersonImpl::PostLoad: IsPersonDying, ESim::DrawSim", 0x8011EC7C);
+  // A dying person (IsPersonDying) is not drawn; anyone else's idles start again.
+  auto* sim = dynamic_cast<ESim*>(m_instance);
+  if (!IsPersonDying()) {
+    if (m_animator) m_animator->SetIdleInitialized(false);
+    if (sim) sim->DrawSim(true);
+  } else if (sim) {
+    sim->DrawSim(false);
+  }
+}
+
+// 8012B784
+// A frame of its tree stack runs the death tree (0x189): person data 0x4A flag 4 set. 1: dying.
+RET_UNKNOWN cXPersonImpl::IsPersonDying() {
+  if (!m_treeSim) return 0;
+  for (int i = m_treeSim->GetStackSize() - 1; i >= 0; --i) {
+    StackElem* e = m_treeSim->GetNthElem(static_cast<short>(i));
+    if (e && e->GetTreeID() == 0x189) {
+      m_personData[0x4a] = static_cast<short>(m_personData[0x4a] | 4);
+      return 1;
+    }
+  }
+  return 0;
 }
 
 // ---------------------------------------------------------------------------------------------------
@@ -205,26 +276,42 @@ void cXPersonImpl::SetMotive(int index, float value) {
   if (index >= 0 && index < Motives::kCount) m_motives.m_values[index] = value;
 }
 // 8012C980 cXPersonImpl::GetMotives (inline in the header)
+// 8012C988 cXPersonImpl::GetMotiveEffects (inline)
 // 8012CA00 cXPersonImpl::GetLastMotiveUpdateTick (inline)
 // 8012CA08 cXPersonImpl::SetLastMotiveUpdateTick (inline)
 
+int ServiceNPCKind(const unsigned char* npc) { return npc ? ERQuickdata::S32(npc, 4) : -1; }
+
 // 8012B354
-// A person without a sim description whose service NPC record is a dog, cat or monkey (2..4). PC:
-// service NPC records are not ported (GetServiceNPC: none), so no pets.
-RET_UNKNOWN cXPersonImpl::IsPet() {
+// A person without a sim description whose service NPC record is a dog, cat or monkey (kinds 2..4).
+int cXPersonImpl::IsPet() {
   if (GetSimDescription()) return 0;
-  SIMMY_STUB("cXPersonImpl::IsPet: the service NPC record's kind (GetServiceNPC)", 0x8012B354);
-  return 0;
+  const int kind = ServiceNPCKind(GetServiceNPC());
+  return kind == 2 || kind == 3 || kind == 4 ? 1 : 0;
 }
 
+// 8012B1D4
+bool cXPersonImpl::IsDog() { return !GetSimDescription() && ServiceNPCKind(GetServiceNPC()) == 2; }
+// 8012B254
+bool cXPersonImpl::IsCat() { return !GetSimDescription() && ServiceNPCKind(GetServiceNPC()) == 3; }
+// 8012B2D4
+bool cXPersonImpl::IsMonkey() { return !GetSimDescription() && ServiceNPCKind(GetServiceNPC()) == 4; }
+// 8012B42C
+// Only a service NPC (no description) whose record's kind is 1.
+bool cXPersonImpl::IsChild() { return !GetSimDescription() && ServiceNPCKind(GetServiceNPC()) == 1; }
+
 // 8012B4AC
-// From its description (+0x84); a service NPC without one by its NPC record. PC: no description and no
-// NPC record: male.
-RET_UNKNOWN cXPersonImpl::IsMale() {
+// From its description (+0x84); a person without one by its service NPC record (+0: 0 male).
+int cXPersonImpl::IsMale() {
   if (const CasSimDescriptionS2C* d = GetSimDescription()) return d->m_male ? 1 : 0;
-  SIMMY_STUB("cXPersonImpl::IsMale: a service NPC's record (GetServiceNPC)", 0x8012B4AC);
-  return 1;
+  // PC: a person with neither (GC would read through a null record) counts as male.
+  const unsigned char* npc = GetServiceNPC();
+  return !npc || ERQuickdata::S32(npc, 0) == 0 ? 1 : 0;
 }
+
+// 8012B1B8
+// Its sleep state (motive 0xB, GC +0xD4) below -30.
+bool cXPersonImpl::IsSleeping() { return m_motives.m_values[Motives::kSleepState] < -30.0f; }
 
 // 8012B564
 // Everyone is an adult (GC: asks the person's object, vtable 0x154, and answers 1 anyway).
@@ -256,16 +343,38 @@ int cXPersonImpl::GetAspirationStatus() {
   return score > 900.0 ? 3 : 2;
 }
 
+
+// 8011A824
+// The adult happy weight curves, once (MotiveCurveSet::LoadFromStringSet over seven point strings).
+void cXPersonImpl::InitializeStaticMemory() {
+  static const char* const kCurves[7] = {
+      "(-100;15) (-60;5) (-40;3) (0;1) (100;1)", "(-100;10) (-80;3) (-40;1) (100;1)", "(-100;5) (-80;3) (-40;1) (100;1)",
+      "(-100;10) (-80;3) (-60;1) (100;1)",       "(-100;5) (-40;2) (40;2) (100;5)",   "(-100;2) (0;1) (100;2)",
+      "(-100;5) (-40;2) (40;2) (100;3)"};
+  if (sHappyCurvesSetup) return;
+  sAdultHappyWeightCurves.assign(7, HappyCurve());
+  for (int i = 0; i < 7; ++i) {
+    sAdultHappyWeightCurves[static_cast<size_t>(i)].m_fn.SetMaxPoints(7);
+    sAdultHappyWeightCurves[static_cast<size_t>(i)].m_motive = kHappyMotives[i];
+    sAdultHappyWeightCurves[static_cast<size_t>(i)].m_fn.AddPointsFromText(kCurves[i]);
+  }
+  sHappyCurvesSetup = true;
+}
+
 // 80125550
-// The mood (motive 3): the motives weighted by the happiness curves (sAdult/ChildHappyWeightCurves, read
-// from a string set by MotiveCurveSet::LoadFromStringSet, not ported). PC: the needs' plain average.
+// The mood (motive 3): the happy motives' mean weighted by each one's curve at its value (a low
+// motive weighs more). Energy is not one of them; the room (0xD) is.
 void cXPersonImpl::CalcHappy() {
-  SIMMY_STUB("cXPersonImpl::CalcHappy: the happy weight curves (MotiveCurveSet)", 0x80125550);
-  static const int kNeeds[] = {Motives::kEnergy, Motives::kComfort, Motives::kHunger, Motives::kHygiene,
-                               Motives::kBladder, Motives::kSocial, Motives::kFun};
-  float sum = 0.0f;
-  for (int i : kNeeds) sum += m_motives.m_values[i];
-  m_motives.m_values[Motives::kMood] = sum / static_cast<float>(sizeof kNeeds / sizeof kNeeds[0]);
+  const std::vector<HappyCurve>& curves = IsChild() ? sChildHappyWeightCurves : sAdultHappyWeightCurves;
+  float sum = 0.0f, weights = 0.0f;
+  for (const HappyCurve& c : curves) {
+    const double v = m_motives.m_values[c.m_motive];
+    const double w = c.m_fn.Eval(static_cast<float>(v));
+    sum = static_cast<float>(v * w + sum);
+    weights = static_cast<float>(weights + w);
+  }
+  // PC: no curves (a child service NPC; GC divides 0 by 0) leaves the mood as it was.
+  if (!curves.empty()) m_motives.m_values[Motives::kMood] = sum / weights;
 }
 
 // 801253E4
@@ -481,8 +590,9 @@ int cXPersonImpl::AddAction(Interaction* action) {
   const int priority = action->m_priority;
   action->SetUniqueID();
   const bool head = (action->m_flags & (Interaction::kContinuation | Interaction::kPushToHead | Interaction::kRunAsSub)) != 0;
+  // A continuation that carries the name over takes the current action's.
   if ((action->m_flags & Interaction::kContinuation) && (action->m_flags & Interaction::kCarryNameOver))
-    SIMMY_STUB("cXPersonImpl::AddAction: the current action's name carried over", 0x80125ADC);
+    action->SetName(GetCurrentAction()->GetName());
   const unsigned int first = m_hasCurrentAction != 0 ? 1u : 0u;
   const int visible = q.CountVisible();
   if (5 < visible) {
@@ -511,8 +621,7 @@ int cXPersonImpl::AddAction(Interaction* action) {
   // An action my immediate action pushes takes its place (GC: *sImmediateAction = *action, the name
   // carried over with flag 0x40).
   if (sImmediateAction && sImmediatePerson == this) {
-    if (action->m_flags & Interaction::kCarryNameOver)
-      SIMMY_STUB("cXPersonImpl::AddAction: the immediate action's name carried over", 0x80125ADC);
+    if (action->m_flags & Interaction::kCarryNameOver) action->SetName(sImmediateAction->GetName());
     *sImmediateAction = *action;
   }
   q.Enqueue(*action);
@@ -550,6 +659,23 @@ int cXPersonImpl::RemoveAction(int id) {
     ActionSkipped(*found);
   }
   return 1;
+}
+
+// 8012606C
+// The last queued action, or the running one when nothing is queued, is removed (RemoveAction, vtable
+// 0xBC), unless the action before the last has flag 0x8000 (it must finish first). 1: removed.
+int cXPersonImpl::CancelLastAction() {
+  const int queued = CountActions(false);
+  int id;
+  int blocker = -1;
+  if (queued < 1) {
+    id = GetCurrentAction()->m_id;
+  } else {
+    id = GetIndAction(queued - 1, false)->m_id;
+    const Interaction* before = queued < 2 ? GetCurrentAction() : GetIndAction(queued - 2, false);
+    if (before->m_flags & 0x8000) blocker = before->m_id;
+  }
+  return blocker == -1 ? RemoveAction(id) : 0;
 }
 
 // 80126194
@@ -963,6 +1089,29 @@ bool TraceRoutes() {
   static const bool on = std::getenv("SIMMY_SIM_TRACE") != nullptr || std::getenv("SIMMY_ROUTE_TRACE") != nullptr;
   return on;
 }
+cXObjectImpl* ImplOf(cXObject* o) { return o ? o->GetObjectImplementation() : nullptr; }
+// ResourceBehavior::GetTreeIDByName (800ACA38): the behaviour's tree of that name (its own file's, then
+// the semi-global and the global ones); 0 for none.
+short RouteTreeByName(Behavior* b, const char* name) {
+  if (!b) return 0;
+  for (short cls : {static_cast<short>(0x1000), static_cast<short>(0x2000), static_cast<short>(0x100)})
+    if (EREdithTreeSet* set = b->TreeSetFor(cls))
+      for (const EREdithTreeSet::Tree& t : set->m_trees)
+        if (t.m_name && std::strcmp(t.m_name, name) == 0) return static_cast<short>(t.m_id);
+  return 0;
+}
+int SimTicks() { return Globs_pSimulator ? Globs_pSimulator->GetTicks() : 0; }
+// The people of the lot (ObjectModuleImpl::GetPeople).
+std::vector<cXPersonImpl*> LotPeople() {
+  std::vector<cXPersonImpl*> out;
+  if (!Globs_pObjectModule) return out;
+  for (cXObjectImpl* o = Globs_pObjectModule->m_first; o; o = o->m_nextObject)
+    if (auto* p = dynamic_cast<cXPersonImpl*>(o)) out.push_back(p);
+  return out;
+}
+const char* const kStateNames[] = {"new",      "plan",     "rooms",     "follow",   "seat",   "stood", "failed",
+                                   "fail",     "done",     "arrived",   "lost",     "endfail", "begin", "wait",
+                                   "asking",   "endplan",  "feedback",  "fedback",  "init",   "gone",  "endgone"};
 }  // namespace
 
 // 801203A8
@@ -1007,153 +1156,802 @@ XRoute* cXPersonImpl::GetCurrentRoute() { return m_routes.empty() ? nullptr : &m
 // 8012C878
 bool cXPersonImpl::IsRouting() { return !m_routes.empty(); }
 
+// 8012C9D8 cXPersonImpl::GetRouteStackSize (inline in the header)
+// 8012CA10 cXPersonImpl::IgnoringObject (inline)
+
+// 8012CA18
+void cXPersonImpl::SetIgnoringObject(cXObject* object) { m_ignoringObject = object; }
+
+// 8012CA20
+void cXPersonImpl::ClearIgnoringObject() { m_ignoringObject = nullptr; }
+
+// 8012B5A0
+// Each route plans again (from its state 2 / 1) at its next tick.
+void cXPersonImpl::InvalidateRoutes() {
+  for (XRoute& r : m_routes) r.m_planned = 0;
+}
+
+// 801298E8
+void cXPersonImpl::ForceLocation() {
+  if (m_animator) m_animator->ForceLocation();
+  SetPersonData(0x40, 0);
+}
+
 // 80120640
-// The first tick makes the route (its goals; none: false) and, unless the person is at a goal already,
-// the path, which the animator walks (BeginFollow); then it waits until the walk ends: there (true,
-// facing as the slot says) or stopped (false). A person who should give way (ShouldInterrupt) does not
-// set out, or stops walking, and the route fails with code 4 (GC states 1-3). The person's data tell
-// the tree how it went: 0x25 the side of the object the goal is on (the goal's direction bit, as
-// InitRoute 8012373C sets it), 0x3E the failure code (0: there; else the route's, at least 1), 0x48 the
-// portal routed through (none on PC), 0x27 set after a single route when data 0x26 is clear; data 9 of
-// the object part is cleared. GC: a state machine over the frame's primitive state (0x13 states) that
-// also routes room by room through portals (TryRoomRouting), asks people in the way to move
-// (AskOthersToMove), retries, plays the "waiting" and "route failure feedback" global trees (slot flag
-// 0x4000), and frees a seat; PC: one try, no failure trees.
+// Routes to `slot` of the frame's stack object over several ticks, a state machine on the frame's
+// primitive state (1 there, 0 failed, 2 on its way, 3 a tree was pushed: the stand-up / sit / portal /
+// waiting / failure trees, after which it goes on). A new route (state 0) is pushed on the person's
+// route stack (a person routing to itself, facing it, at no distance is there at once). Then: to
+// another room the best portal's tree walks it through (TryRoomRouting; a portal tree that failed marks
+// that portal failed; routing to a portal it is already going through fails); in the room, a seated
+// person whose goal is not her seat stands up first (the seat's entry 0x1B); then the goals and the
+// path (InitRoute), which the animator follows (BeginFollow / FollowOneStep, which places the person at
+// the end); a goal that is a seat is sat in (its entry 0x1A). A failed path: if the person moved since
+// the last try it tries again; else it asks a person in the way to move (AskOthersToMove: the "ask to
+// move" animation, then waiting up to 300 ticks with the "waiting" one) and tries once more; then it
+// fails: the target's "route failure feedback" tree runs when the slot allows failure trees (flag
+// 0x4000). A person who should give way (ShouldInterrupt, and the animator allows it) fails with 4. At
+// the end the person's data tell the tree how it went: 0x3E the failure code (0: there), 0x25 the side
+// of the object the goal is on, 0x27 set after a single route when 0x26 is clear; object data 9 is
+// cleared, and a route that had asked this person to move is told whether it did.
 int cXPersonImpl::TryGotoRoutingSlot(StackElem* frame, RoutingSlot* slot) {
-  cXObject* object = GetObjectFromID(frame->m_stackObject);
-  // The end of a route: the person's data say how it went.
-  auto finish = [this](int failure) {
-    SetPersonData(0x3e, static_cast<short>(failure));
-    if (m_routes.size() == 1 && GetPersonData(0x26) == 0) SetPersonData(0x27, 1);
-    m_data.WriteVar(9, 0);
-    m_routes.pop_back();
-    return failure == 0 ? 1 : 0;
-  };
-  // Back from the seat's stand-up tree (GC state 5): still seated, the route fails (6); else the goals
-  // are made again from where the person now stands.
-  bool replan = false;
-  if (frame->m_primState == 2) {
-    frame->m_primState = 0;
-    if (m_routes.empty()) return 0;
-    SetPersonData(0x26, 0);
-    if (GetIdleState() != 0 && GetIdleState() != 3) return finish(6);
-    replan = true;
-  }
-  if (frame->m_primState == 0) {
-    if (!object || !m_animator) return 0;
-    if (!replan) m_routes.emplace_back(this, object, slot);
-    XRoute& route = m_routes.back();
-    // GC state 1: a person who should give way (ShouldInterrupt: a cancelled action, or a queued one of
-    // higher priority) and whose animator allows it does not set out: the route fails with code 4.
-    if (ShouldInterrupt() && m_animator->IsInterruptable()) {
-      route.m_failure = 4;
-      if (TraceRoutes()) {
-        const std::string who = DebugName();
-        std::printf("[route] %s -> %s: interrupted before it starts\n", who.c_str(), object->GetObjectImplementation()->DebugName());
-      }
-      return finish(4);
+  bool gone = false;
+  double dist = -1.0;
+  cXObjectImpl* object = ImplOf(GetObjectFromID(frame->m_stackObject));
+  int state = frame->m_primState;
+  if (!object || !ObjIsInWorld(object)) gone = true;
+  if (state == 0) {
+    if (gone) return 0;  // GC: also asks a found object IsPortal (vtable 0x44), unused
+    XRoute route(this, object, slot);
+    if (IsGhost()) route.GetRoutingSlot()->m_flags |= RoutingSlot::kIgnoreRooms;
+    if (m_routes.empty() || (route.GetRoutingSlot()->m_flags & RoutingSlot::kFailureTrees)) {
+      if (m_routes.empty() && GetData(0x11) == 0 && (dist = CalcShortDistance(object)) == 0.0 && route.m_object == route.m_person &&
+          slot && slot->m_facing == RoutingSlot::kFaceTowards)
+        return 1;
+    } else {
+      // A route within a route has no failure trees.
+      route.GetRoutingSlot()->m_flags &= ~static_cast<unsigned int>(RoutingSlot::kFailureTrees);
     }
-    SetPersonData(0x48, 0);
-    route.BuildGoalList();
-    const std::string who = DebugName();
-    // A seated person (GC states 1 / 7 / 8): one of the goals is the seat she is in, so she is there;
-    // else she stands up first through the seat's "stand" function (entry 0x1B; a person not in a seat
-    // is an error 0x35), and routes when it is done.
-    if (GetIdleState() == 1) {
-      if (route.IsPersonSittingOnChairGoal(this)) return finish(0);
-      cXObjectImpl* seat = static_cast<cXObjectImpl*>(GetContainer());
-      if (seat) seat = seat->GetObjectImplementation();
-      if (!seat || !seat->IsChair()) {
-        m_treeSim->SetError(0x35);
-        Error(0x35);
-        return -1;
-      }
-      const short stand = seat->GetTreeID(0x1b);
-      if (stand != 0) {
-        const short params[2] = {static_cast<short>(route.m_startDirs), 0};
-        if (GosubObjectTree(seat, params, stand, false)) {
-          SetPersonData(0x26, 0);
-          SetPersonData(0x25, static_cast<short>(route.m_startDirs));
-          frame->m_primState = 2;
-          return 3;
-        }
-      }
-    }
-    if (route.CountGoals() == 0) {
-      if (TraceRoutes())
-        std::printf("[route] %s -> %s: no goal (failure %d)\n", who.c_str(), object->GetObjectImplementation()->DebugName(),
-                    route.m_failure);
-      return finish(route.m_failure ? route.m_failure : 1);
-    }
-    for (int i = 0; i < route.CountGoals(); ++i) {
-      const RouteGoal* g = route.GetNthGoal(i);
-      if (g->m_pos[0] == m_location[0] && g->m_pos[1] == m_location[1]) {
-        SetPersonData(0x25, static_cast<short>(g->m_dirMask));
-        if (g->m_facing >= 0) m_data.WriteVar(1, static_cast<short>(g->m_facing));
-        m_animator->setAnimationDirectionToPersonDirection();
-        return finish(0);
-      }
-    }
-    TileList path;
-    if (!route.FindPath(path)) {
-      if (TraceRoutes())
-        std::printf("[route] %s -> %s: %d goals, none reachable\n", who.c_str(), object->GetObjectImplementation()->DebugName(),
-                    route.CountGoals());
-      if (TraceRoutes()) {  // where it stands and the goals
-        std::printf("[route]   from %.2f,%.2f data0 %d data2 %d data3 %d:", m_location[1] / 16.0f, m_location[0] / 16.0f, GetPersonData(0), m_data[2], m_data[3]);
-        for (int i = 0; i < route.CountGoals(); ++i) std::printf(" %.2f,%.2f", route.GetNthGoal(i)->m_pos[1] / 16.0f, route.GetNthGoal(i)->m_pos[0] / 16.0f);
-        std::printf("\n");
-      }
-      return finish(route.m_failure ? route.m_failure : 1);
-    }
-    const RouteGoal* g = route.GetNthGoal(route.m_goal);
-    SetPersonData(0x25, static_cast<short>(g->m_dirMask));
-    float endDir = SAnimator2::kNoDir;
-    if (g->m_facing >= 0) {
-      endDir = (2.0f - static_cast<float>(g->m_facing)) * 0.7853982f;
-      while (endDir > 3.1415927f) endDir -= 6.2831855f;
-      while (endDir < -3.1415927f) endDir += 6.2831855f;
-    }
-    if (TraceRoutes()) {
-      std::printf("[route] %s -> %s: %d goals, goal %d at %.2f,%.2f (score %d, facing %d, side %x), %d way points:",
-                  who.c_str(), object->GetObjectImplementation()->DebugName(), route.CountGoals(), route.m_goal,
-                  g->m_pos[1] / 16.0f, g->m_pos[0] / 16.0f, g->m_score, g->m_facing, g->m_dirMask,
-                  static_cast<int>(path.m_points.size()));
-      for (const EVec2& p : path.m_points) std::printf(" %.2f,%.2f", p.x / 16.0f, p.y / 16.0f);
-      std::printf("\n");
-    }
-    m_animator->BeginRoute(path.m_points, endDir);
-    frame->m_primState = 1;
-    return 2;
+    if (m_routes.empty() && m_animator) m_animator->m_carryType = 0;  // +0x5F8
+    m_routes.push_back(route);
+    state = 1;
+    if (TraceRoutes())
+      std::printf("[route] %s -> %s: route %zu (slot flags %x, facing %d, dist %d..%d opt %d)\n", std::string(DebugName()).c_str(),
+                  object->DebugName(), m_routes.size(), route.m_slot.m_flags, route.m_slot.m_facing, route.m_slot.m_minDist,
+                  route.m_slot.m_maxDist, route.m_slot.m_optimalDist);
   }
   XRoute* route = GetCurrentRoute();
-  if (!route || !m_animator) {
+  if (!route) return 0;
+  if (!route->m_object) {
+    if (m_animator) m_animator->IsFollowing();
     frame->m_primState = 0;
+    m_routes.pop_back();
+    return 2;
+  }
+  if (gone) state = state == 3 ? 0x14 : 0x13;
+  if (route->m_planned == 0) {
+    if (state == 2) route->m_portal = nullptr;
+    else if (state == 3) state = 0xf;
+    route->m_planned = 1;
+  }
+  RoutingSlot* rslot = route->GetRoutingSlot();
+  int result = 2;
+  int lastPos[2] = {route->m_personPos[0], route->m_personPos[1]};
+  bool done = false;
+  int stuck = static_cast<short>(route->m_stuck);
+  SAnimator2* anim = m_animator;
+  if (!anim) return 0;
+  const int startState = state;
+  for (int guard = 0;; ++guard) {
+    if (guard > 64) state = 7;  // PC: a guard against a state loop (none is known)
+    switch (state) {
+      case 1:  // plan
+        if (!(GetData(8) & 8)) {
+          state = 7;
+          break;
+        }
+        if (!IsGhost() && object->GetData(0x1d) != GetData(0x1d)) {
+          // To another room. Routing to a portal this person is already going through fails.
+          state = 2;
+          if (object->GetType() == 8)
+            for (XRoute& r : m_routes)
+              if (ImplOf(r.m_portal) == object) state = 7;
+          break;
+        }
+        if (ShouldInterrupt() && anim->IsInterruptable()) {
+          state = 7;
+          route->m_failure = 4;
+          break;
+        }
+        state = 0x12;
+        route->BuildGoalList();
+        if (GetIdleState() == 1) {
+          state = 8;
+          if (!route->IsPersonSittingOnChairGoal(this)) {
+            state = 7;
+            cXObjectImpl* seat = ImplOf(GetContainer());
+            if (!seat || !seat->IsChair()) {
+              m_treeSim->SetError(0x35);
+              Error(0x35);
+              return -1;
+            }
+            const short stand = seat->GetTreeID(0x1b);
+            if (stand != 0) {
+              const short params[2] = {static_cast<short>(route->m_startDirs), 0};
+              if (GosubObjectTree(seat, params, stand, false)) {
+                state = 5;
+                SetPersonData(0x48, 0);
+                result = 3;
+                SetPersonData(0x25, static_cast<short>(route->m_startDirs));
+                done = true;
+              }
+            }
+          }
+        }
+        break;
+      case 2:  // to another room
+        if (ShouldInterrupt() && anim->IsInterruptable()) {
+          route->m_failure = 4;
+          state = 7;
+          break;
+        }
+        if (object->GetData(0x1d) != GetData(0x1d)) {
+          if (route->m_portal && m_treeSim->GetLastResult() == 0) PortalFailedTree(this, ImplOf(route->m_portal));
+          if (TryRoomRouting(route)) {
+            state = 2;
+            result = 3;
+            SetPersonData(0x48, 0);
+            done = true;
+          } else {
+            state = 0x10;
+            route->m_failure = 2;
+          }
+          break;
+        }
+        state = 1;
+        SetPersonData(0x48, route->m_insetId);
+        break;
+      case 3: {  // following the path
+        if (ShouldInterrupt() && anim->IsInterruptable()) {
+          state = 0xb;
+          route->m_failure = 4;
+          break;
+        }
+        if (m_routes.empty() || m_path.m_points.empty()) {
+          state = 0xb;
+          break;
+        }
+        const int r = anim->FollowOneStep();
+        if (r == 1) state = 9;
+        else if (r == 0) state = 10;
+        else if (r == 2) done = true;
+        break;
+      }
+      case 4:  // back from the seat's sit tree
+        state = 8;
+        if (!m_treeSim->GetLastTransition()) {
+          int failure = GetPersonData(0x3e);
+          if (failure == 0) failure = 5;
+          state = 0x10;
+          route->m_failure = failure;
+        }
+        break;
+      case 5:  // back from the seat's stand-up tree
+        SetPersonData(0x48, route->m_insetId);
+        if (m_treeSim->GetLastTransition() && (GetIdleState() == 0 || GetIdleState() == 3)) {
+          state = 1;
+          break;
+        }
+        state = 0x10;
+        route->m_failure = 6;
+        break;
+      case 6:  // the path failed
+        if (stuck == 0) {
+          const int d1 = m_location[1] - lastPos[1], d0 = m_location[0] - lastPos[0];
+          lastPos[1] = m_location[1];
+          lastPos[0] = m_location[0];
+          if (d1 * d1 + d0 * d0 < 0x41) {
+            stuck = 1;
+          } else {
+            state = 1;
+            if (anim) anim->m_carryType = 0;
+          }
+        } else if (stuck == 1) {
+          stuck = 2;
+          if (!route->m_asked && AskOthersToMove(route)) state = 0xe;
+          else state = 0x10;
+          if (anim) anim->m_carryType = 0;
+        } else if (stuck == 2) {
+          stuck = 3;
+          state = 1;
+          if (anim) anim->m_carryType = 0;
+        } else if (stuck == 3) {
+          state = 0x10;
+          if (anim) anim->m_carryType = 0;
+        } else {
+          state = 7;
+          if (anim) anim->m_carryType = 0;
+        }
+        break;
+      case 7:
+      case 8: {  // the end: failed / there
+        done = true;
+        if (state == 8) {
+          bool ok;
+          const int at[2] = {m_location[0], m_location[1]};
+          if (GetPersonData(0x48) == 0) {
+            ok = ObjCanPlace(this, at, m_level, nullptr, 0) != 0;
+          } else {
+            SetPersonData(0x49, GetPersonData(0x48));
+            ok = ObjCanPlace(this, at, m_level, nullptr, 0) != 0;
+            if (!ok) SetPersonData(0x49, 0);
+          }
+          if (!ok) {
+            if (GetPersonData(0) == 0) {
+              route->m_failure = 1;
+              state = 7;
+            }
+          } else {
+            PlacePerson(at);
+            if (m_path.m_points.size() > 1 && GetData(9) == 0) {
+              const TileListPoint& last = m_path.m_points.back();
+              const TileListPoint& prev = m_path.m_points[m_path.m_points.size() - 2];
+              const int from[2] = {prev.p[0], prev.p[1]}, to[2] = {last.p[0], last.p[1]};
+              m_data.WriteVar(1, static_cast<short>(DirectionBetween(from, to)));
+              ForceLocation();
+            }
+          }
+        }
+        if (anim && anim->IsFollowing()) anim->EndFollow();
+        if (state == 7) {
+          result = 0;
+          if (route->m_failure == 0) route->m_failure = 1;
+          if (anim) anim->m_carryType = 0;
+        } else {
+          route->m_failure = 0;
+          result = 1;
+        }
+        SetPersonData(0x3e, static_cast<short>(route->m_failure));
+        if (m_routes.size() == 1 && GetPersonData(0x26) == 0) SetPersonData(0x27, 1);
+        SetData(9, 0);
+        // A route that asked this person to move out of its way with the action now running learns
+        // whether it did.
+        Interaction* current = GetCurrentAction();
+        const int id = current ? current->GetID() : 0;
+        if (id != 0)
+          for (cXPersonImpl* p : LotPeople()) {
+            XRoute* r = p != this ? p->GetCurrentRoute() : nullptr;
+            if (r && ImplOf(r->m_asked) == this && r->m_askedAction == id) {
+              r->m_askedAction = 0;
+              r->m_askedDone = state == 8 ? 1 : 0;
+              r->m_asked = nullptr;
+            }
+          }
+        if (cXPersonImpl* asked = dynamic_cast<cXPersonImpl*>(ImplOf(route->m_asked))) asked->RemoveAction(route->m_askedAction);
+        if (TraceRoutes()) {
+          std::printf("[route] %s -> %s: %s (failure %d, blocker %d)\n", std::string(DebugName()).c_str(), object->DebugName(),
+                      state == 8 ? "there" : "failed", route->m_failure, route->m_blocker);
+        }
+        if (!m_routes.empty()) m_routes.pop_back();
+        route = nullptr;
+        break;
+      }
+      case 9:  // arrived
+        if (!anim->EndFollow()) done = true;
+        else state = 8;
+        break;
+      case 10:  // the follow failed
+        if (!anim->EndFollow()) done = true;
+        else state = 6;
+        anim->m_carryType = 0;
+        break;
+      case 0xb:
+        if (!anim->EndFollow()) done = true;
+        else state = 7;
+        anim->m_carryType = 0;
+        break;
+      case 0xc:  // set out
+        if (dist == -1.0) dist = CalcShortDistance(object);
+        state = 3;
+        done = true;
+        anim->BeginFollow(static_cast<float>(dist));
+        break;
+      case 0xd: {  // waiting
+        if (ShouldInterrupt() && anim->IsInterruptable()) {
+          route->m_failure = 4;
+          state = 7;
+          break;
+        }
+        int start = route->m_waitStart;
+        if (start == 0) start = SimTicks();
+        if (SimTicks() - start < 0x1e) {
+          const short tree = RouteTreeByName(GetBehavior(), "sg_route waiting animation");
+          if (tree != 0 && GosubObjectTree(this, nullptr, tree, false)) {
+            done = true;
+            result = 3;
+          }
+        }
+        if (!done) {
+          start = 0;
+          state = 1;
+        }
+        route->m_waitStart = start;
+        anim->m_carryType = 0;
+        break;
+      }
+      case 0xe: {  // a person was asked to move
+        if (ShouldInterrupt() && anim->IsInterruptable()) {
+          route->m_failure = 4;
+          state = 7;
+          break;
+        }
+        int start = route->m_waitStart;
+        if (!route->m_asked) {
+          start = 0;
+          state = 1;
+          if (route->m_askedDone != 0) stuck = 0;
+        } else {
+          bool pushed = false;
+          if (start == 0) {
+            const short tree = RouteTreeByName(GetBehavior(), "sg_route ask to move animation");
+            if (tree != 0 && GosubObjectTree(this, nullptr, tree, false)) {
+              result = 3;
+              done = true;
+              pushed = true;
+              if (StackElem* top = m_treeSim->GetCurElem()) top->m_stackObject = ImplOf(route->m_asked)->m_id;
+              start = SimTicks();
+            }
+          } else {
+            if (SimTicks() - start < 300) {
+              const short tree = RouteTreeByName(GetBehavior(), "sg_route waiting animation");
+              if (tree != 0 && GosubObjectTree(this, nullptr, tree, false)) {
+                done = true;
+                result = 3;
+                pushed = true;
+              }
+            }
+            if (!pushed) start = 0;
+          }
+          if (!pushed) state = 6;
+        }
+        route->m_waitStart = start;
+        anim->m_carryType = 0;
+        break;
+      }
+      case 0xf:  // plan again
+        if (!anim->EndFollow()) done = true;
+        else state = 1;
+        anim->m_carryType = 0;
+        break;
+      case 0x10: {  // failure feedback
+        if (route->m_failure == 0) route->m_failure = 1;
+        state = 7;
+        SetPersonData(0x3e, static_cast<short>(route->m_failure));
+        if (!(rslot->m_flags & RoutingSlot::kFailureTrees)) {
+          if (!anim->EndFollow()) done = true;
+        } else {
+          const short tree = RouteTreeByName(object->GetBehavior(), "gl_route failure feedback");
+          const short params[4] = {static_cast<short>(route->m_failure), route->m_blocker, 0, 0};
+          if (tree != 0 && GosubObjectTree(object, params, tree, false)) {
+            SetPersonData(0x48, 0);
+            result = 3;
+            state = 0x11;
+            done = true;
+          }
+        }
+        anim->m_carryType = 0;
+        break;
+      }
+      case 0x11:
+        state = 7;
+        SetPersonData(0x3e, static_cast<short>(route->m_failure));
+        anim->m_carryType = 0;
+        break;
+      case 0x12: {  // the goals and the path
+        const int r = InitRoute(route);
+        result = r;
+        if (r == 1) state = 8;
+        else if (r == 0) state = 6;
+        else if (r == 2) state = 0xc;
+        else if (r == 3) {
+          state = 4;
+          SetPersonData(0x48, 0);
+          done = true;
+        }
+        break;
+      }
+      case 0x13:  // the target went
+        state = 7;
+        anim->m_carryType = 0;
+        break;
+      case 0x14:
+        if (!anim->EndFollow()) done = true;
+        else state = 0x13;
+        anim->m_carryType = 0;
+        break;
+      default:
+        state = 7;
+        break;
+    }
+    if (!done) continue;
+    frame->m_primState = state;
+    if (route) {
+      route->m_stuck = stuck;
+      route->m_personPos[0] = lastPos[0];
+      route->m_personPos[1] = lastPos[1];
+    }
+    if (TraceRoutes() && state != startState && state != 3)
+      std::printf("[route] %s: state %s -> %s (result %d)\n", DebugName(), kStateNames[startState < 21 ? startState : 0],
+                  kStateNames[state < 21 ? state : 0], result);
+    if (result != 2) {
+      ClearIgnoringObject();
+      return result;
+    }
+    return 2;
+  }
+}
+
+// cXPersonImpl::Place (80128294): cXObjectImpl::Place, then the person's room (UpdateCurrentRoom).
+void cXPersonImpl::PlacePerson(const int pos[2]) {
+  ObjPlace(this, pos, m_level, nullptr, 0);
+  UpdateCurrentRoom();
+}
+
+// 8012373C
+// The path (FindPath) into m_path. A seat goal: there already (1), or the seat's sit tree (entry 0x1A)
+// pushed (3), else failure 5. Else the person walks it (2) with one more point a tile on from its end
+// in the direction to face there: along the last leg (slot facing "any"; on the spot: as it faces), at
+// the object (toward / away, the slot's direction to it unless any rotation: the object's spot itself),
+// or the object's facing turned by the slot's.
+int cXPersonImpl::InitRoute(XRoute* route) {
+  if (!route) return 0;
+  cXObjectImpl* object = ImplOf(route->m_object);
+  RoutingSlot* slot = route->GetRoutingSlot();
+  Room* room = RoomManager::GetRoomManager()->GetRoom(static_cast<unsigned short>(GetData(0x1d)));
+  int found = 0;
+  if (room) {
+    m_path.m_points.clear();
+    found = route->FindPath(m_path);
+  }
+  int r;
+  if (found == 0) {
+    r = 0;
+    route->IsPersonSittingOnChairGoal(this);
+  } else {
+    route->HasCurrentGoal();
+    r = 2;
+    RouteGoal* goal = route->m_goal >= 0 ? route->GetCurrentGoal() : nullptr;  // GC: reads goal -1
+    if (goal) SetPersonData(0x25, static_cast<short>(goal->m_dirMask));
+    if (goal && goal->m_object != 0) {
+      r = 0;
+      cXObjectImpl* chair = ImplOf(GetObjectFromID(goal->m_object));
+      if (chair && chair->IsChair()) {
+        if (ImplOf(GetContainer()) == chair) {
+          r = 1;
+        } else if (GosubObjectTree(chair, nullptr, chair->GetTreeID(0x1a), false)) {
+          r = 3;
+        }
+      }
+      if (r == 0) route->m_failure = 5;
+    }
+  }
+  if (r == 2 && m_path.m_points.size() < 2) r = 0;
+  if (r != 2) {
+    route->ResetGoals();
+    return r;
+  }
+  const TileListPoint last = m_path.m_points.back();
+  int at[2] = {object->m_location[0], object->m_location[1]};
+  if ((slot->m_flags & RoutingSlot::kAverageLocation) && object->IsMultiTile()) {
+    PlacementGroup* g = PlacementGroupOf(object);
+    if (g && !g->parts.empty()) {
+      int s0 = 0, s1 = 0, n = 0;
+      for (auto& part : g->parts) s0 += part.object->m_location[0], s1 += part.object->m_location[1], ++n;
+      at[0] = s0 / n, at[1] = s1 / n;
+    }
+  }
+  int face[2] = {last.p[0], last.p[1]};
+  const int facing = slot->m_facing;
+  if (facing == RoutingSlot::kFaceAnywhere) {
+    const TileListPoint& prev = m_path.m_points[m_path.m_points.size() - 2];
+    const int d1 = last.p[1] - prev.p[1], d0 = last.p[0] - prev.p[0];
+    if (d1 == 0 && d0 == 0) {
+      int step[2];
+      DirectionStep(GetData(1) & 7, step);
+      face[1] += step[1];
+      face[0] += step[0];
+    } else {
+      face[1] = last.p[1] + d1;
+      face[0] = last.p[0] + d0;
+    }
+  } else if (facing == RoutingSlot::kFaceAway || facing == RoutingSlot::kFaceTowards) {
+    int dir;
+    if (slot->m_flags & 0xff) {
+      face[0] = at[0], face[1] = at[1];
+      if (!(slot->m_flags & RoutingSlot::kAnyRotation)) {
+        const int from[2] = {last.p[0], last.p[1]};
+        dir = DirectionBetween(from, at);
+        if (facing == RoutingSlot::kFaceAway) dir += 4;
+        int step[2];
+        DirectionStep(dir & 7, step);
+        face[1] = last.p[1] + step[1];
+        face[0] = last.p[0] + step[0];
+      }
+    } else {
+      if (at[0] == last.p[0] && at[1] == last.p[1]) {
+        dir = object->GetData(1);
+      } else {
+        const int from[2] = {last.p[0], last.p[1]};
+        dir = DirectionBetween(from, at);
+      }
+      if (facing == RoutingSlot::kFaceAway) dir += 4;
+      int step[2];
+      DirectionStep(dir & 7, step);
+      face[1] = last.p[1] + step[1];
+      face[0] = last.p[0] + step[0];
+    }
+  } else {
+    int step[2];
+    DirectionStep((object->GetData(1) + facing) & 7, step);
+    face[1] = last.p[1] + step[1];
+    face[0] = last.p[0] + step[0];
+  }
+  if (face[1] == last.p[1] && face[0] == last.p[0]) return 0;
+  TileListPoint f;
+  f.p[0] = face[0];
+  f.p[1] = face[1];
+  m_path.m_points.push_back(f);
+  if (TraceRoutes()) {
+    const RouteGoal* g = route->m_goal >= 0 ? route->GetCurrentGoal() : nullptr;
+    std::printf("[route] %s -> %s: %d goals, goal %d at %.2f,%.2f (score %d, side %x), %zu way points:", std::string(DebugName()).c_str(),
+                object->DebugName(), route->CountGoals(), route->m_goal, g ? g->m_pos[1] / 16.0f : 0.0f,
+                g ? g->m_pos[0] / 16.0f : 0.0f, g ? g->m_score : 0, g ? g->m_dirMask : 0, m_path.m_points.size());
+    for (const TileListPoint& p : m_path.m_points) std::printf(" %.2f,%.2f", p.p[1] / 16.0f, p.p[0] / 16.0f);
+    std::printf("\n");
+  }
+  return 2;
+}
+
+// 80124698
+// To the target's room through a portal: the best portal of this room (its route scores made fresh for
+// a route's first portal) whose portal tree (entry 0xF) runs on this person.
+int cXPersonImpl::TryRoomRouting(XRoute* route) {
+  cXObjectImpl* target = ImplOf(route->m_object);
+  if (!target) return 0;
+  if (!(route->m_portal != nullptr || PortalInitRoute(this) != 0)) return 0;
+  cXObjectImpl* portal = PortalFindBest(this, target);
+  if (!portal) {
+    if (TraceRoutes()) {
+      const std::string me = DebugName();
+      std::printf("[route] %s -> %s: no portal from room %d toward room %d (route id %d)\n", me.c_str(), target->DebugName(),
+                  GetData(0x1d), target->GetData(0x1d), GetData(6));
+      for (int i = 0; i < static_cast<int>(Globs_pObjectModule->GetNumPortals()); ++i) {
+        auto* q = reinterpret_cast<cXObjectImpl*>(Globs_pObjectModule->GetPortal(i));
+        cXObjectImpl* o = PortalOtherSide(q);
+        std::printf("[route]   portal #%d %s room %d tree %d other #%d room %d score %.1f\n", q->m_id, q->DebugName(),
+                    q->GetData(0x1d), q->GetTreeID(0xf), o ? o->m_id : 0, o ? o->GetData(0x1d) : -1, PortalRouteScore(q, GetData(6)));
+      }
+    }
     return 0;
   }
-  const int result = m_animator->m_routeResult;
-  if (result == 0) {
-    // GC states 2 / 3 (then 0xB, 7): while walking, a person who should give way stops where she is
-    // (SAnimator2::EndFollow; PC: AbortRoute) and the route fails with code 4, so the tree can end the
-    // action and the queued one (e.g. a player's sim's "Socializer" at priority 100) starts.
-    if (!(ShouldInterrupt() && m_animator->IsInterruptable())) return 2;
-    m_animator->AbortRoute();
-    frame->m_primState = 0;
-    route->m_failure = 4;
-    if (TraceRoutes()) std::printf("[route] %s: walk interrupted\n", DebugName());
-    return finish(4);
+  const short tree = portal->GetTreeID(0xf);
+  if (tree == 0 || !GosubObjectTree(portal, nullptr, tree, false)) return 0;
+  PortalBeginningTree(this, portal);
+  route->m_portal = portal;
+  if (TraceRoutes())
+    std::printf("[route] %s -> %s: through portal #%d (room %d -> %d)\n", std::string(DebugName()).c_str(), target->DebugName(), portal->m_id,
+                GetData(0x1d), target->GetData(0x1d));
+  return 1;
+}
+
+// 80122998
+// The interaction is the "move out of the way" object's (GUID 0x7C4) entry 3.
+bool IsMoveOutOfWay(Interaction* a) {
+  cXObject* so = a ? a->GetStackObject() : nullptr;
+  cXObjectImpl* o = ImplOf(so);
+  if (!o || !o->m_def) return false;
+  return objdef::GUID(o->m_def) == 0x7c4 && a->m_index == 3;
+}
+
+// 80122A14
+// One of its actions (the running one too) is a "move out of the way".
+bool IsAskedToMove(cXPersonImpl* p) {
+  for (int i = p->CountActions(true); i != 0;) {
+    --i;
+    if (IsMoveOutOfWay(p->GetIndAction(i, true))) return true;
   }
-  frame->m_primState = 0;
-  const RouteGoal* g = route->m_goal >= 0 ? route->GetNthGoal(route->m_goal) : nullptr;
-  if (result == 1 && g) {
-    m_location[0] = g->m_pos[0];
-    m_location[1] = g->m_pos[1];
-    if (g->m_facing >= 0) m_data.WriteVar(1, static_cast<short>(g->m_facing));
-    m_animator->SnapToGrid();
-    m_animator->setAnimationDirectionToPersonDirection();
-    return finish(0);
+  return false;
+}
+
+namespace {
+// The "move out of the way" object made at the person's spot (GC: GetSelectorByGUID 0x7C4,
+// MakeNewOutOfWorldObject, CanPlace then Place there); null when it cannot be.
+cXObjectImpl* MakeMoveOutOfWayObject(cXPersonImpl* p, bool* made) {
+  *made = false;
+  ObjSelector* sel = Globs_pObjectFolder ? Globs_pObjectFolder->GetSelectorByGUID(0x7c4) : nullptr;
+  ObjectModuleImpl* module = Globs_pObjectModule;
+  if (!sel || !module) return nullptr;
+  short id = 0;
+  if (!module->MakeNewOutOfWorldObject(sel, &id) || id == 0) return nullptr;
+  *made = true;
+  cXObjectImpl* o = ImplOf(module->GetObjectFromID(id));
+  if (!o) return nullptr;
+  const int at[2] = {p->m_location[0], p->m_location[1]};
+  if (!ObjCanPlace(o, at, p->m_level, nullptr, 0)) return nullptr;
+  ObjPlace(o, at, p->m_level, nullptr, 0);
+  return o;
+}
+}  // namespace
+
+// 80122AAC
+// GC: Globs::bStupidMode is off while the object is made.
+bool cXPersonImpl::MoveOutOfWay(int priority) {
+  if (IsAskedToMove(this)) return false;
+  bool made = false;
+  cXObjectImpl* o = MakeMoveOutOfWayObject(this, &made);
+  if (!o) return false;  // GC: an object that cannot be placed stays out of the world
+  RoutingSlot slot;
+  for (int d = 0; d < 8; d += 2) slot.AllowDirection(d);
+  slot.AllowAnyRotation();
+  slot.SetDistances(0x10, 0x50, 0x10);
+  slot.AllowAnyFacing();
+  slot.SetMultiplier(0, 1);
+  slot.m_flags |= RoutingSlot::kRandomScoring;
+  SetObjectRoutingSlot(o, 0, slot);
+  Interaction action(this, o, 3, priority);
+  const int added = AddAction(&action);
+  if (!added) Globs_pObjectModule->KillObject(o->m_id);
+  else SetPersonData(0x2a, static_cast<short>(GetPersonData(0x2a) | 1));
+  return added != 0;
+}
+
+// 80122E00
+// This person, standing on `route`'s path (another's), is asked to step aside: where the path enters
+// and leaves its footprint gives the way the path runs; the "move out of the way" object's slot is the
+// two sides across it (a ring of 1..5 tiles, random scoring; if no way there, also straight ahead and
+// at the far end), and its action is pushed at the asker's priority (person data 0x21). The route
+// remembers whom it asked and the action's id. Not while this person is asking someone itself or was
+// asked already.
+int cXPersonImpl::MoveOutOfWay(XRoute* route, TileList& path) {
+  if (IsAskedToMove(this)) return 0;
+  if (path.m_points.size() < 2) return 0;
+  XRoute* mine = GetCurrentRoute();
+  if (mine && mine->m_asked) return 0;
+  int r[4];
+  ObjRect(this, r);
+  int crossing = 0;
+  int enter[2] = {0, 0}, leave[2] = {0, 0};
+  size_t seg = 1;
+  for (; seg < path.m_points.size(); ++seg) {
+    const TileListPoint& a = path.m_points[seg - 1];
+    const TileListPoint& b = path.m_points[seg];
+    int n = std::max(std::abs(b.p[0] - a.p[0]), std::abs(b.p[1] - a.p[1]));
+    const double steps = static_cast<double>(n + 1);
+    float t = 0.0f;
+    do {
+      const int x = static_cast<int>(t * static_cast<float>(b.p[1] - a.p[1]) + static_cast<float>(a.p[1]) + 0.5f);
+      const int y = static_cast<int>(t * static_cast<float>(b.p[0] - a.p[0]) + static_cast<float>(a.p[0]) + 0.5f);
+      const bool inside = x < r[1] && r[3] <= x && y < r[0] && r[2] <= y;
+      if (inside) {
+        if (crossing == 0) {
+          crossing = 1;
+          enter[0] = y, enter[1] = x;
+        }
+      } else if (crossing == 1) {
+        crossing = 2;
+        leave[0] = y, leave[1] = x;
+        break;
+      }
+      t = static_cast<float>(t + 1.0 / static_cast<float>(steps));
+    } while (t < 1.0f);
+    if (crossing >= 2 || seg + 1 >= path.m_points.size()) break;
   }
-  return finish(route->m_failure ? route->m_failure : 1);
+  if (crossing == 0) {
+    enter[0] = path.m_points[0].p[0], enter[1] = path.m_points[0].p[1];
+    leave[0] = m_location[0], leave[1] = m_location[1];
+  } else if (crossing == 1) {
+    const TileListPoint& end = path.m_points[std::min(seg, path.m_points.size() - 1)];
+    leave[0] = end.p[0], leave[1] = end.p[1];
+  }
+  bool made = false;
+  cXObjectImpl* o = MakeMoveOutOfWayObject(this, &made);
+  if (!o) return 0;
+  const int d1 = leave[1] - enter[1], d0 = leave[0] - enter[0];
+  if (d1 == 0 && d0 == 0) return 0;  // GC: the object stays where it was placed
+  const int dir = DirectionBetween(enter, leave);
+  RoutingSlot slot;
+  slot.AllowDirection((dir + 2) & 7);
+  slot.AllowDirection((dir + 6) & 7);
+  slot.AllowAnyRotation();
+  slot.SetDistances(0x10, 0x50, 0x10);
+  slot.m_resolution = 8;
+  slot.AllowAnyFacing();
+  slot.SetMultiplier(0, 1);
+  slot.m_flags |= RoutingSlot::kRandomScoring;
+  {
+    XRoute test(this, o, &slot);
+    test.BuildGoalList();
+    TileList way;
+    if (!test.FindPath(way)) {
+      slot.AllowDirection(dir);
+      slot.SetDistances(0x10, 0x50, 0x50);
+    }
+  }
+  SetObjectRoutingSlot(o, 0, slot);
+  cXPersonImpl* asker = dynamic_cast<cXPersonImpl*>(ImplOf(route->m_person));
+  Interaction action(this, o, 3, asker ? asker->GetPersonData(0x21) : 0);
+  if (AddAction(&action)) {
+    SetPersonData(0x2a, static_cast<short>(GetPersonData(0x2a) | 1));
+    route->m_askedAction = action.GetID();
+    route->m_askedDone = 0;
+    route->m_asked = this;
+    if (TraceRoutes()) std::printf("[route] %s steps aside for %s\n", std::string(DebugName()).c_str(), asker ? asker->DebugName() : "?");
+    return 1;
+  }
+  Globs_pObjectModule->KillObject(o->m_id);
+  return 0;
+}
+
+// 80122120
+// The people in the way of `route` (not one a player steers, not one ShouldIgnore leaves out, not one
+// another route has asked already; the asker standing, person data 0): the route's path ignoring
+// people is followed (but its last leg) until it crosses one's footprint, who is asked to move.
+int cXPersonImpl::AskOthersToMove(XRoute* route) {
+  if (!route) return 0;
+  static std::vector<cXPersonImpl*> consider;  // GC: a function static
+  consider.clear();
+  const std::vector<cXPersonImpl*> people = LotPeople();
+  for (cXPersonImpl* p : people) {
+    bool steered = false;
+    for (int player = 0; player < 2; ++player) {
+      cXPerson* sel = _globals.GetSelectedPerson(player);  // DAT_80475E88
+      if (!sel || sel->AsObject() != p) continue;
+      if (PlayerDirectInteractor(player) && p->m_animator && !p->m_animator->IsSimulatorControlled()) {
+        steered = true;
+        break;
+      }
+    }
+    if (steered || p == this || route->ShouldIgnore(p) != 0 || GetPersonData(0) != 0) continue;
+    bool asked = false;
+    for (cXPersonImpl* q : people)
+      for (XRoute& r : q->m_routes)
+        if (ImplOf(r.m_asked) == p) asked = true;
+    if (!asked) consider.push_back(p);
+  }
+  if (consider.empty()) return 0;
+  XRoute test(this, route->m_object, route->GetRoutingSlot());
+  test.m_ignorePeople = 1;
+  test.m_avoid = nullptr;
+  test.BuildGoalList();
+  TileList way;
+  if (!test.FindPath(way) || way.m_points.size() < 2) return 0;
+  cXPersonImpl* found = nullptr;
+  for (size_t seg = 1; seg < way.m_points.size() && !found; ++seg) {
+    const TileListPoint& a = way.m_points[seg - 1];
+    const TileListPoint& b = way.m_points[seg];
+    const int n = std::max(std::abs(b.p[0] - a.p[0]), std::abs(b.p[1] - a.p[1]));
+    const double steps = static_cast<double>(n + 1);
+    float t = 0.0f;
+    do {
+      const float next = static_cast<float>(t + 1.0 / static_cast<float>(steps));
+      const int x = static_cast<int>(t * static_cast<float>(b.p[1] - a.p[1]) + static_cast<float>(a.p[1]) + 0.5f);
+      const int y = static_cast<int>(t * static_cast<float>(b.p[0] - a.p[0]) + static_cast<float>(a.p[0]) + 0.5f);
+      for (cXPersonImpl* p : consider) {
+        int r[4];
+        ObjRect(p, r);
+        if (x < r[1] && r[3] <= x && y < r[0] && r[2] <= y) {
+          found = p;
+          break;
+        }
+      }
+      t = next;
+    } while (!found && t < 1.0f);
+  }
+  if (found && found->MoveOutOfWay(route, way)) {
+    if (TraceRoutes()) std::printf("[route] %s asks %s to move\n", std::string(DebugName()).c_str(), found->DebugName());
+    return 1;
+  }
+  return 0;
 }
 
 // 80124370
@@ -1193,11 +1991,12 @@ int cXPersonImpl::TryGotoRelative(StackElem* frame, const unsigned char* params)
 }
 
 // 80129934
-// GC: also the action queue's icon object and the tree's object's "in use" count (data 0x3E).
+// Also the action queue's icon object (when `setIcon`) and the tree's object's "in use" count (data 0x3E).
 int cXPersonImpl::GosubObjectTree(cXObject* object, const short* params, short tree, bool setIcon) {
   if (!cXObjectImpl::GosubObjectTree(object, params, tree, setIcon)) return 0;
   cXObjectImpl* impl = object->GetObjectImplementation();
-  if (setIcon) SIMMY_STUB("cXPersonImpl::GosubObjectTree: ActionQueue::SetIconObject", 0x80129934);
+  // The running action's queue icon becomes the tree's object.
+  if (setIcon && m_hasCurrentAction) m_actionQueue.SetIconObject(object, 0);
   m_gosubObjects.push_back({impl, m_treeSim->GetStackSize(), setIcon});
   if (impl) impl->m_data.WriteVar(0x3e, static_cast<short>(impl->m_data[0x3e] + 1));
   return 1;
@@ -1254,8 +2053,25 @@ cXObject* cXPersonImpl::GetControllingObject() {
 // 8012C8C0
 // GC: the selector's neighbour record's description. PC: the one it was made with.
 CasSimDescriptionS2C* cXPersonImpl::GetSimDescription() { return m_desc; }
+// 8012B804
+void cXPersonImpl::SetCurrentActionText(const std::u16string& text) { m_actionQueue.SetActionText(text, 0); }
+
+// 8012C08C
+// Its neighbour (by its id, person data 0x1F) puts its wants and fears on the HUD.
+void cXPersonImpl::InitWantFearIcons() {
+  Neighbor* n = Globs_pNeighborhood ? Globs_pNeighborhood->FindNeighborByID(GetPersonData(0x1f)) : nullptr;
+  if (n) n->InitWantFearIcons();
+}
+
+// 8012C0F8
+void cXPersonImpl::SpawnWantFearDialog(unsigned int slot) const {
+  Neighbor* n = Globs_pNeighborhood ? Globs_pNeighborhood->FindNeighborByID(GetPersonData(0x1f)) : nullptr;
+  if (n) n->SpawnWantFearDialog(slot);
+}
+
 // 8012C8D0
-int cXPersonImpl::GetServiceNPC() { return 0; }
+// The selector's service NPC record (+0x90; null for everyone else).
+const unsigned char* cXPersonImpl::GetServiceNPC() { return m_selector ? m_selector->m_npc : nullptr; }
 // 8012C8E0
 int cXPersonImpl::IsInvisible() { return 0; }
 // 8012C8EC
@@ -1486,9 +2302,9 @@ CasSimDescriptionS2C* FamilyMemberDescription(int family, int index) {
 // Player 1 plays the player family's first member, player 2 (two-player mode) its second
 // (Player::GetPrimaryNeighbor: member m_index). GC: a two-player game without a second member gets one
 // before CAS (PreGameState::InsertPlayer2Roommate: family 2's first member moves in as a roommate,
-// NeighborhoodImpl::AddAsPlayerRoommate) and player 2 makes it over in CAS. PC: that path is not
-// ported, so player 2 falls back to family 2's first member as it is, then the CAS slot 1, then a
-// default female sim.
+// NeighborhoodImpl::AddAsPlayerRoommate) and player 2 makes it over in CAS (both ported: pregame.cpp).
+// Without a second member, player 2 falls back to family 2's first member as it is, then the CAS slot
+// 1, then a default female sim.
 CasSimDescriptionS2C* PlayerSimDescription(int player) {
   if (player != 0 && (player != 1 || !_gd.m_fieldEC)) return nullptr;
   if (CasSimDescriptionS2C* desc = FamilyMemberDescription(_gd.m_fieldD8, player)) return desc;
@@ -1584,6 +2400,8 @@ void MoveFamilyOntoLot(EHouse* house) {
                 static_cast<unsigned short>(person->GetTreeID(1)));
     _globals.SetSelectedPerson(player, person);
   }
+  // GC: the move-in's new people (GlobalDispatch 0xDE -> HouseImpl::DoCommand) redo the visitor types.
+  if (Globs_pNeighborhood) Globs_pNeighborhood->UpdateInstanceVisitorTypes();
 }
 
 // GC: ObjectModuleImpl::MakeNewOutOfWorldObject (ConstructObject: a cXPersonImpl for the type-2
@@ -1609,6 +2427,9 @@ cXPersonImpl* MakeNeighborPerson(Neighbor* n, ObjSelector* selector) {
     for (int i = 0; d && i < 31 && d->m_firstName[i]; ++i) first[i] = static_cast<char>(d->m_firstName[i]);
     std::printf("[sim] neighbour %d (%s) made: object %d (%s)\n", n->m_id, first, person->m_id, person->DebugName());
   }
+  // GC: MakeNewOutOfWorldObject's GlobalDispatch(0xDE) -> HouseImpl::DoCommand: a new person redoes the
+  // people's visitor types.
+  Globs_pNeighborhood->UpdateInstanceVisitorTypes();
   return person;
 }
 

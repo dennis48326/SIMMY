@@ -4,6 +4,7 @@
 // by time of day: RoomScoreConstants, CollectTileStats, CollectObjectStats, ComputeRoom), room
 // partitions and overhead lights.
 #include "simmy/types_gen.hpp"
+#include "simmy/classes/placement.hpp"
 #include "simmy/unported_globals.hpp"
 
 RoomManager* Globs_pRoomManager = nullptr;  // 804FDC08 Globs::pRoomManager
@@ -25,6 +26,7 @@ Room::~Room() { Clear(); }
 // Forgets its statistics; the tiles stay. GC: also empties the +0x14 array.
 void Room::Clear() {
   m_inUse = 0;
+  m_objectCount = 0;
   m_field48 = 0;
   m_tileStats = 0;
   m_field7C = 0.0f;
@@ -134,9 +136,38 @@ void RoomManager::ResetRooms() {
   m_diagonals.clear();
 }
 
+// 80136014
+void RoomManager::RoomScoreChanged(int id) {
+  auto it = m_rooms.find(static_cast<unsigned short>(id));
+  if (it == m_rooms.end() || !it->second) return;
+  it->second->m_statsDirty = 1;
+  m_dirty = 1;
+}
+
+// 801361E0
+void RoomManager::AllRoomsScoreChanged() {
+  for (auto& entry : m_rooms)
+    if (entry.second && entry.second->m_inUse) entry.second->m_statsDirty = 1;
+  m_dirty = 1;
+}
+
+// 80137780
+std::vector<PenaltyRect>* Room::GetPartition() {
+  if (m_partition.empty()) BuildRoomPartition(m_id, &m_partition);
+  return &m_partition;
+}
+
+// 80138300
+double Room::GetObjectDensity() {
+  return static_cast<float>(static_cast<float>(m_objectCount) / static_cast<float>(m_tileStats));
+}
+
 // 80137034
-// GC: empties each room's partition array (+0x24); the port keeps none.
-void RoomManager::ClearRoomPartitions() {}
+// Each room's partition (+0x24) is built again when next asked for.
+void RoomManager::ClearRoomPartitions() {
+  for (auto& entry : m_rooms)
+    if (entry.second) entry.second->m_partition.clear();
+}
 
 // 801370D4
 void RoomManager::ResetRoomManager() {
@@ -252,8 +283,15 @@ void RoomManager::ComputeRooms() {
       room->m_inUse = 1;
       room->m_statsDirty = 0;
       // GC: per tile CollectTileStats and CollectObjectStats (ObjectIterator over the tile), then
-      // ComputeRoom; a changed ambient light is dispatched (0xED). PC: the tile count only.
+      // ComputeRoom; a changed ambient light is dispatched (0xED). PC: the tile count and the object count
+      // (CollectObjectStats +0x54: the objects at its tiles, those in slots too; GetObjectDensity) only.
       room->m_tileStats = static_cast<int>(room->m_tiles.size()) * 2;
+      if (Globs_pObjectModule)
+        for (cXObjectImpl* o = Globs_pObjectModule->m_first; o; o = o->m_nextObject) {
+          if (o->m_location[0] < 0 || o->m_location[1] < 0) continue;
+          CTilePt t = o->GetCTilePt();
+          if (room->IsTileInRoom(t)) ++room->m_objectCount;
+        }
     }
     if (room->m_inUse && !room->IsOutside()) area = static_cast<short>(area + room->GetArea());
   }

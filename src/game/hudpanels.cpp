@@ -278,8 +278,9 @@ bool NeighborWantFearSlot(Neighbor* neighbor, int slot, WantFearSlotInfo* out) {
   return true;
 }
 
+// cXPerson vtable 0x3B4: cXPersonImpl::InitWantFearIcons (8012C08C).
 void PersonInitWantFearIcons(cXPerson* person) {
-  if (Neighbor* n = PersonNeighbor(person)) n->InitWantFearIcons();
+  if (auto* impl = dynamic_cast<cXPersonImpl*>(person)) impl->InitWantFearIcons();
 }
 
 // Part of 801C9A0C MODTarget::DrawMoodHeadCallback: the person's ESim's (cXObject +0x14) head draws
@@ -634,6 +635,8 @@ int WAFTarget::IsWantsAndFearsActive() { return m_shown; }
 // bookmark; a spin or flip (with its sound and the d-pad warning) runs now, or once the panel shows;
 // otherwise the icon is set at once.
 void WAFTarget::NewWantsAndFearsIcon(int slot, unsigned int base, unsigned int overlay, int anim, Neighbor* neighbor) {
+  if (std::getenv("SIMMY_WANTS_TRACE"))
+    std::printf("[wants] WAF %d: slot %d icon %08X anim %d (icons %d, shown %d)\n", m_player, slot, base, anim, m_iconsInitialized, m_wantShown);
   if (!m_iconsInitialized || slot < 0 || slot >= 7) return;
   WantFearSlotInfo info;
   NeighborWantFearSlot(neighbor, slot, &info);  // Neighbor +0x198: WantFear::Bookmark
@@ -738,7 +741,7 @@ void WAFTarget::FinishSettingIcon(int slot) {
   icon.newBase = 0;
   icon.newOverlay = 0;
   if (icon.dialog && icon.type != 1) {
-    SIMMY_STUB("WAFTarget::FinishSettingIcon: Neighbor::SpawnWantFearDialog", 0x801E3E60);
+    icon.dialog->SpawnWantFearDialog(static_cast<unsigned int>(slot));
     icon.dialog = nullptr;
   }
 }

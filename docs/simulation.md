@@ -38,7 +38,11 @@ globals" (0x30 shorts, scope 6 in trees; names in [`simulator.hpp`](../include/s
 **PC differences to know.** The port's `PlaceObject`/`SetLocation` keep containment in object data 2/3 and
 "first object wins" in the tile map; GC linked a hierarchy (`HierSetSite`). Objects placed during play on
 an occupied tile are therefore not in the tile chain (a window bought onto a lamp's tile misses its wall
-cut). The lot's people are owned by a PC list in person.cpp (`g_lotPeople`); `KillAllObjects` calls
+cut). Each object remembers the tile map entry it holds (`m_siteTile`; `ObjectModuleImpl::SeverTile` /
+`SetSiteTile`, PC stand-ins for `HierSever` / `HierSetSite`), and the walker moves a person's entry with
+its location: on GC only `Place` moves a person (per frame under direct control, per path point when
+following), so a tile's object is always where the map says; a stale entry made `TrySetToNext` kind 9
+(neighbours E/S/W/N) step round forever (TREEASSERT 1101 on tables). The lot's people are owned by a PC list in person.cpp (`g_lotPeople`); `KillAllObjects` calls
 `RemoveFamilyFromLot()` first, or they are freed twice.
 
 ## The behaviour VM
@@ -100,8 +104,31 @@ simulator's seed inside a tick, an outer seed for check trees run from menus.
 - **Person data** (`GetPersonData`, `m_personData[0x100]`): the neighbour's 0x50 values (`Neighbor::m_pers`) are copied in at `Initialize` (personality,
   skills 9..0x12, career 0x38 / level 0x39 / performance 0x3F, censor bits 0x1E, social target 0x28,
   idle state 0 (3 = waiting: the hourglass)...).
-- **Motives** (`Motives`, treesim.cpp): 16 values -100..100; 0 aspiration, 5 energy, 6 comfort, 7 hunger,
-  8 hygiene, 9 bladder, 0xE social, 0xF fun. `Motives::Sim` every 60 ticks applies decay.
+- **Motives** (`Motives`, treesim.cpp): 16 values -100..100; 0 aspiration, 3 mood, 5 energy, 6 comfort,
+  7 hunger, 8 hygiene, 9 bladder, 0xB sleep state (`IsSleeping` 8012B1B8: below -30), 0xD room, 0xE
+  social, 0xF fun. `Motives::Sim` every 60 ticks applies decay. The mood is `CalcHappy` (80125550): the
+  mean of hunger, comfort, hygiene, bladder, fun, room and social, each weighted by its happy curve at its
+  value (a low motive weighs more; `InitializeStaticMemory` 8011A824's seven point lists). Energy is not
+  in it. The room motive (0xD) stays 0 in the port's runs (on GC it follows the room's score, which
+  rooms.cpp does not compute yet), so the mood sits lower than the needs alone would give.
+- **Service NPCs**: an NPC object file's selector has its CAS "Sim::NPC" record (`ObjSelector::m_npc`, set
+  by `ObjectFolderImpl::AddSelector` with the NPC's name as the user name; +0 gender, +4 kind: 0 adult, 1
+  child, 2 dog, 3 cat, 4 monkey). `GetServiceNPC`, `IsMale`, `IsChild`, `IsPet`/`IsDog`/`IsCat`/`IsMonkey`
+  read it when the person has no sim description (the maid, the repair woman, the police woman and the
+  firefighter are female). `ESim::IsMale` (the skeleton) and the sound director ask the person.
+- **Visitor type** (person data 0x20: 0 a resident, else a visitor; autonomy's thresholds and attenuations
+  use it): `NeighborhoodImpl::UpdateInstanceVisitorTypes` (800D12E0) on every new person (GC:
+  GlobalDispatch 0xDE) and family change; a resident is in the house's family or, outside free play, the
+  player family (`IsResidentOfHouse`, PC for `HouseImpl::IsResident` 800BC00C). PC: a player's selected
+  sim always counts as a resident (on GC it is always a family member; the port's player-2 fallback sim
+  belongs to no family and would otherwise be sent home as a visitor).
+- **Killing a person** (`ObjectModuleImpl::KillObject`, GC `KillOutOfWorldObject` 800F50FC): a player's
+  selected person hands the selection on (`AdvanceSelectedPerson`; none left: no selection) before the
+  other people clean up after it (`CleanupPeople`).
+- **Load** (`PostLoad` 8011EC7C): a placeholder person is cleaned up and killed, saves before 0x32 lose
+  object relationships to people, the motive effects are loaded, a dying person (a frame of tree 0x189 on
+  its stack, `IsPersonDying` 8012B784) is not drawn. `Initialize` also redraws all wants and fears when the
+  neighbour's data 0x4A has flag 0x20.
 - **Animator** `SAnimator2` ([`sanimator2.cpp`](../src/game/sanimator2.cpp)): position in 1/16 tiles (tile
   centre at +8, already a world position: `positionCharacter` 80065094 must **not** add the house's
   0.5 offset; objects do add it in `SetObjOrient`), animation states, free-move walk/run for direct
@@ -119,8 +146,12 @@ simulator's seed inside a tick, an outer seed for check trees run from menus.
 ## Interactions and the action queue
 
 `Interaction` ([`interaction.hpp`](../include/simmy/classes/interaction.hpp)) = one TTAB entry of an object
-chosen for a person (from the menu, a push primitive or autonomy) with priority and flags. `ActionQueue`
-is the person's ring of ten; the running one first.
+chosen for a person (from the menu, a push primitive or autonomy) with priority, flags and a name
+(`GetName` 800C18B0: one given by `SetName`, else the entry's; a menu item a check tree made keeps its
+text, a continuation with flag 0x40 takes the current action's, primitive 0x32 in the main simulation
+renames the current action, `SetCurrentActionText`). The action queue widget shows `GetName`. `ActionQueue`
+is the person's ring of ten; the running one first; an object tree run with the icon flag makes its
+object the running action's icon (`SetIconObject` 8011A150).
 
 Menu path: A in direct control -> `DirectInteractor::ExecuteActionMenu` (802057C8) ->
 `FlashPiMenu::CreateObjectMenuFromObjList` over `MenuObjectsNear` (PC: objects within 2 tiles, nearest
@@ -131,7 +162,8 @@ same menu from the highlighted objects. Priorities: the player's menu choices ar
 interrupts the running one only with a strictly higher priority (`ShouldInterrupt`).
 
 Cancel: B under the HUD goes through `H2DTarget::UpdateCancelButton` (GC `H2DTarget::Update` 801B8484):
-short press -> `PersonCancelLastAction` (a PC helper in hudtarget.cpp for GC 8012606C), held 30 frames ->
+short press -> `cXPersonImpl::CancelLastAction` (8012606C: the last queued action, or the running one,
+unless the one before it has flag 0x8000), held 30 frames ->
 the action queue widget's cancel mode. A walking sim can be interrupted: `TryGotoRoutingSlot` (80120640)
 checks `ShouldInterrupt() && SAnimator2::IsInterruptable()` before and during the walk.
 
@@ -151,34 +183,59 @@ few is picked at random (sim RNG). `SIMMY_AUTO_TRACE=1` (`=ads` for the ads) tra
   data resource 33B78948 ("wantdata_gc.bin", big-endian, kept as loaded): events, trees, nodes. A
   `Neighbor` has 20 bookmarks (0..12 wants, 13..19 fears) and 7 active slots (0..3 wants, 4..6 fears).
   `Neighbor::Notify` (from primitive 0x42 and C++ events) advances them; the HUD gets icons through
-  `H2DTarget::NewWantFearIcon`. `SIMMY_WANTS_TRACE=1`. Not ported: the want/fear dialog.
+  `H2DTarget::NewWantFearIcon`. A want that flips or spins in (not a fear) ends with the want/fear dialog
+  (`WAFTarget::FinishSettingIcon` -> `Neighbor::SpawnWantFearDialog` 800CAB20): the want's short text with
+  its icon on its kind's backdrop in the HUD's modeless box (MDI), for a selected sim, not while player
+  1's camera eases back from a shot (`CameraDirector` +0x320, e.g. the lot intro). C++ events besides
+  primitive 0x42 and the motives' 0xDFBB: purchases (`NotifyBuildBuyPurchase`), walls bought
+  (`kEventBuildWalls`, `PCTTarget::WallManipulatorCallback` 801D7A50), a new room
+  (`kEventAddARoom`, `WallManipulator::HandleFinalizeRequest` 80221028) for the residents, and every rise of
+  the funds (`kEventFamilyFundsOfX`/`Plat`, count = funds / 100, `cSimulatorImpl::SetFunds` 801413EC) for
+  every person on the lot; the event ids are `WantFearEvent::` in wantfear.hpp. `SIMMY_WANTS_TRACE=1`
+  (also traces the dialog and the MDI box).
 - **Relationships**: `RelMatrixImpl` per neighbour ([`neighbor.cpp`](../src/game/neighbor.cpp)), primitives
   0x18/0x1A, read by the relationships page (`R2LTarget`, `PlayerRelatedPeople`).
 
 ## Routing
 
-[`xrouting.cpp`](../src/game/xrouting.cpp), [`routing.hpp`](../include/simmy/classes/routing.hpp): a
-routing slot (the object's SLOT entry) -> `XRoute::ConstructGoals` (candidate spots scored, checked
-against bounds, room, walls, room to stand) -> a path. **PC stand-in:** an A* over a quarter-tile grid of
-the lot (walls, blocked tiles, footprints, target object excluded), smoothed by line of sight; GC used a
-room partition (`SpacePartition`). One route try, no failure trees, no re-planning toward a moving target.
-`SIMMY_ROUTE_TRACE=1`.
+All GC code: [`person.cpp`](../src/game/person.cpp) (the primitive), [`xrouting.cpp`](../src/game/xrouting.cpp)
+(goals, the path), [`routing.cpp`](../src/game/routing.cpp) (the rectangle search,
+[`spacepartition.hpp`](../include/simmy/classes/spacepartition.hpp)), [`portal.cpp`](../src/game/portal.cpp)
+(doors), [`routing.hpp`](../include/simmy/classes/routing.hpp). `SIMMY_ROUTE_TRACE=1` traces it.
+
+| Step | GC | What |
+|---|---|---|
+| `cXPersonImpl::TryGotoRoutingSlot` | 80120640 | Primitive 0x2D / 0x1B's state machine on the frame's primitive state (states in [`person.cpp`](../src/game/person.cpp)); a stack of `XRoute`s per person (`m_routes`, GC +0x40C) |
+| `TryRoomRouting` / `cXPortal::FindBestPortal` | 80124698 / 801316A0 | Target in another room (object data 0x1D): the best door of this room by per-route portal scores (`GetDistToPortal`: a shortest-path search between portals); the door's portal tree (entry 0xF) walks the sim through, then the route goes on. Route ids are object data 6 |
+| `XRoute::BuildGoalList` / `ConstructGoals` | 8015597C / 80158318 | Goals in the router's room only: rows of spots per allowed side, chairs facing the object for sitting slots, scored; `EvalTileForGoal` = room, walls (`GetWallBlockFlagsAtTile`), the router's `CanPlace` (people are tested by `TestIntersection`'s person branch: footprint `gPersonWidth` 6, person data 0x49 insets) |
+| `cXPersonImpl::InitRoute` | 8012373C | `FindPath` into the person's `m_path` (GC +0x3F8) plus a "facing" point a tile on; a seat goal pushes the chair's sit tree (0x1A) |
+| `XRoute::FindPath` | 80155AC8 | `Room::GetPartition` (`BuildRoomPartition`, cached per room until `ClearRoomPartitions`) + the room's objects (`ShouldIgnore` leaves some out; grown by 3/16) + goal rectangles -> `Path` (A* over free rectangles that `SpacePartition` grows on demand, then `DoOneSmooth`); big sparse rooms first try coarse rectangles |
+| `SAnimator2::BeginFollow` / `FollowOneStep` / `EndFollow` | 8005E7CC / 8005EAB8 / 8005EC74 | Follow `m_path`; each sim tick `FollowOneStep` reports walking (2), arrived (1: the person is placed at the nearest path point, `TileList::FindNearestPoint`) or failed (0) |
+| Failure | | A failed path: the sim retries if it moved; else `AskOthersToMove` (a person on the path, not player-steered, gets the "move out of the way" object GUID 0x7C4's entry 3, `MoveOutOfWay`) with the "sg_route ask to move" / "waiting" animations, retries once; then the target's "gl_route failure feedback" tree (slot flag 0x4000). Codes in person data 0x3E (2 no portal, 3 no path, 4 interrupted, 5 seat, 6 could not stand, 8 object, 9 seat taken, 0xB wall, 0xD person) |
+
+`HouseImpl::EnterLiveMode` (800BC0E0, from `LiveModeInitState`) clears the partitions and portal scores
+(`InvalidateAllRoutes`). **PC parts:** the walk itself is still the PC walker (`BeginRoute` /
+`moveAnimation`: turn, walk the points, turn to the facing point; GC follow modes, side steps and
+awareness auto-run are not ported); portals are the type-8 multi-tile parts (no `cXPortalImpl`), their
+scores in `cXMTObjectImpl::m_portalValues`; the module's people / portal lists are its objects of those
+kinds in object order; `TrySnap` (primitive) still uses the PC `PersonCanStandAt`. A slot rewritten by
+`MoveOutOfWay` is kept per object in xrouting.cpp (GC: the object's own slot vector).
 
 ## Social mode
 
-[`socialmode.cpp`](../src/game/socialmode.cpp): `TrySocialMode` (801282E0, person primitive 0x3E;
-operand step: 0 start with the other, 4 join, 2 the social menu, 3 leave the menu, 1 end). "Socialize"
-makes a `social_interactions_*` object whose trees run both sims. The player's social menu is a PC
-stand-in for `SocialModeInteractor` (interactor 7). Flags live in a PC map (`Flags()`), not in the person.
+[`socialmode.cpp`](../src/game/socialmode.cpp): `TrySocialMode` (801282E0, person primitive 0x3E; operand step:
+0 start with the other, 4 join, 2 the social menu, 3 leave the menu, 1 end). "Socialize" makes a
+`social_interactions_*` object whose trees run both sims. State as on GC: person data 0x28 is the partner's
+id (`IsInSocialMode` 8012CA2C: it is set, for both sims; `GetSocialModeTarget`: that person), and the
+person's first / second / waiting flags (+0x544 / +0x548 / +0x54C, hashed by `SIMMY_DET`). The player's
+social menu is still a PC stand-in for `SocialModeInteractor` (interactor 7; the GC one lives in the
+`InteractorManager`, which is a PC stand-in too).
 
 GC person vtable slots used (handy when reading raw code): 0x334 IsInSocialMode, 0x33C SetFirst, 0x344
 SetSecond, 0x34C IsFirst, 0x354 IsSecond, 0x35C IsWaiting, 0x364 SetWaiting, 0x36C GetSocialModeTarget,
 0x374 CheckFirstPlayerForFailedSocialModeEntry (8012B8CC), 0x37C CheckSecond (8012B978); 0xF4
 GetCurrentInteractionStackObject (8012640C). `DirectInteractor::Update` (80204838) runs both Check*
 functions first each frame; without them a failed Socialize leaves the player stuck in social mode.
-
-**Known difference:** the port's `IsInSocialMode` is first||second flag; GC's (8012CA2C) is "person data
-0x28 != 0". They agree for the selected sim, not for the partner.
 
 ## Gotchas
 

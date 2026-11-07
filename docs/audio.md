@@ -89,6 +89,5 @@ lines: events, notes, volume/pan, streams, modes), `SIMMY_SOUND_EVENT="<frames>:
 
 ## Gaps
 
-`AmbientScorePlayer::SetPause` stops at the first valid sound (GC quirk kept); `cAudioInfo::IsChild` is
-false for service NPCs;
+`AmbientScorePlayer::SetPause` stops at the first valid sound (GC quirk kept);
 rumble notes are stubbed; CAS has no score (silent on GC too).

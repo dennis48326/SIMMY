@@ -3,9 +3,6 @@
 
 Interaction::Interaction(cXPerson *, cXPerson *) { SIMMY_STUB("Interaction::Interaction(cXPerson *, cXPerson *)", 0x800C12F8); }
 void Interaction::SetLocalVars(short *, int) { SIMMY_STUB("Interaction::SetLocalVars(short *, int)", 0x800C17A4); }
-RET_UNKNOWN Interaction::GetName() const { SIMMY_STUB("Interaction::GetName(void) const", 0x800C18B0); return {}; }
-void Interaction::SetName(BString2 &) { SIMMY_STUB("Interaction::SetName(BString2 &)", 0x800C1960); }
-void Interaction::SetName(int, int) { SIMMY_STUB("Interaction::SetName(int, int)", 0x800C199C); }
 RET_UNKNOWN Interaction::GetCTilePt() const { SIMMY_STUB("Interaction::GetCTilePt(void) const", 0x800C1CBC); return {}; }
 RET_UNKNOWN Interaction::GetTextColor() const { SIMMY_STUB("Interaction::GetTextColor(void) const", 0x800C1D20); return {}; }
 void Interaction::SetTextColor(Interaction__tColor) { SIMMY_STUB("Interaction::SetTextColor(Interaction::tColor)", 0x800C1D2C); }

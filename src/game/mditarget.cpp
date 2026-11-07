@@ -5,6 +5,7 @@
 
 #include <cctype>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <string>
 
@@ -179,8 +180,13 @@ void MDITarget::SpawnModelessDialog(UIDialog* dialog) {
   ++m_count;
   d->m_body = dialog->m_body;
   d->m_title = dialog->m_title;
-  d->m_icon = dialog->m_icon;  // GC: else the dialog's shader id (+0x40), AddRefAsync (PC: none given)
-  if (d->m_icon) d->m_icon->AddRef();  // released with the dialog (ReleaseIcons)
+  // The icon (held), else the one with the dialog's shader id (GC: AddRefAsync; PC: loaded at once);
+  // its backdrop (held). Released with the dialog (ReleaseIcons).
+  d->m_icon = dialog->m_icon;
+  if (d->m_icon) d->m_icon->AddRef();
+  else if (dialog->m_iconId) d->m_icon = static_cast<ERShader*>(_shaderman.AddRef(dialog->m_iconId, nullptr, 0));
+  d->m_iconBg = dialog->m_iconBg;
+  if (d->m_iconBg) d->m_iconBg->AddRef();
   d->m_iconW = dialog->m_iconW;
   d->m_iconH = dialog->m_iconH;
   d->m_timeMs = dialog->m_timeoutMs == -1 ? 1 : 2;
@@ -270,6 +276,7 @@ void MDITarget::SetupModelessDialog() {
   if (d->m_timeMs > 2) d->m_timeMs = 2;
   d->m_timeMs *= static_cast<int>(area);
   if (s_fastHints) d->m_timeMs = 500;
+  if (std::getenv("SIMMY_WANTS_TRACE")) std::printf("[mdi] dialog set up: %d ms, exists %d\n", d->m_timeMs, m_exists);
   if (d->m_timeMs > 16000) d->m_timeMs = 16000;
   float content = height + titleH;
   if (content < iconH) content = iconH;

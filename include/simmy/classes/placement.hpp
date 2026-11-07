@@ -74,6 +74,10 @@ int SectWall(const int rect[4], int level);                                    /
 // game/object.cpp (cXObjectImpl), dispatching to game/mtobject.cpp for multi-tile parts
 int ObjIsInWorld(cXObjectImpl* o);                                             // 800DCB50
 void ObjComputeRect(cXObjectImpl* o, const int pos[2], int rect[4]);           // 800DF4D0
+// The objects whose site is `tile` (GC: the tile's object chain; PC: the module's objects there).
+std::vector<cXObjectImpl*> TileObjects(CTilePt& tile);
+// cXObjectImpl::CanIntersectPeople (800EB6C4): people may stand in it.
+bool ObjCanIntersectPeople(cXObjectImpl* o);
 int ObjTestIntersection(cXObjectImpl* o, const int pos[2], int level);         // 800DEBB8
 int ObjTestAndPlace(cXObjectImpl* o, PlaceSpec& spec, bool place);         // 800DD6E8
 int ObjCanPlace(cXObjectImpl* o, const int pos[2], int level, cXObjectImpl* container, int slot);  // 800DE340 / 800C6044

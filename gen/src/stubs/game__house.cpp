@@ -11,7 +11,6 @@ void HouseImpl::GetFirstObject() { SIMMY_STUB("HouseImpl::GetFirstObject(void)",
 RET_UNKNOWN HouseImpl::DoCommand(short, int) { SIMMY_STUB("HouseImpl::DoCommand(short, int)", 0x800BBD40); return {}; }
 bool HouseImpl::IsNative(cXPerson *) { SIMMY_STUB("HouseImpl::IsNative(cXPerson *)", 0x800BBF9C); return {}; }
 RET_UNKNOWN HouseImpl::IsResident(cXPerson *) { SIMMY_STUB("HouseImpl::IsResident(cXPerson *)", 0x800BC00C); return {}; }
-void HouseImpl::EnterLiveMode() { SIMMY_STUB("HouseImpl::EnterLiveMode(void)", 0x800BC0E0); }
 void HouseImpl::PrepareForBudgetWindow() { SIMMY_STUB("HouseImpl::PrepareForBudgetWindow(void)", 0x800BC154); }
 void HouseImpl::DoStream(ReconBuffer *, int) { SIMMY_STUB("HouseImpl::DoStream(ReconBuffer *, int)", 0x800BC1B8); }
 void HouseImpl::GetHouseStats(HouseStats &) { SIMMY_STUB("HouseImpl::GetHouseStats(HouseStats &)", 0x800BC24C); }

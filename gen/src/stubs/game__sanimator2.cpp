@@ -7,9 +7,6 @@ void SAnimator2::Render(int) { SIMMY_STUB("SAnimator2::Render(int)", 0x8005C78C)
 void SAnimator2::ResetSuits() { SIMMY_STUB("SAnimator2::ResetSuits(void)", 0x8005D120); }
 RET_UNKNOWN SAnimator2::IsSkillIdleAnimRunning() { SIMMY_STUB("SAnimator2::IsSkillIdleAnimRunning(void)", 0x8005D6A0); return {}; }
 void SAnimator2::SetAnimDisplacements(float, float, float) { SIMMY_STUB("SAnimator2::SetAnimDisplacements(float, float, float)", 0x8005E7C8); }
-void SAnimator2::BeginFollow(float) { SIMMY_STUB("SAnimator2::BeginFollow(float)", 0x8005E7CC); }
-RET_UNKNOWN SAnimator2::FollowOneStep() { SIMMY_STUB("SAnimator2::FollowOneStep(void)", 0x8005EAB8); return {}; }
-bool SAnimator2::EndFollow() { SIMMY_STUB("SAnimator2::EndFollow(void)", 0x8005EC74); return {}; }
 void SAnimator2::SetPixelated(int) { SIMMY_STUB("SAnimator2::SetPixelated(int)", 0x8005F4E4); }
 RET_UNKNOWN SAnimator2::endFollowDone() { SIMMY_STUB("SAnimator2::endFollowDone(void)", 0x8005F958); return {}; }
 RET_UNKNOWN SAnimator2::followStandToTurnUpdate(float &, float &, float) { SIMMY_STUB("SAnimator2::followStandToTurnUpdate(float &, float &, float)", 0x8005FB50); return {}; }

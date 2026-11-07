@@ -65,10 +65,13 @@ int ObjectModuleImpl::Load(iResFile* file) {
   // The tile map: each object (not one held in another's slot, data 0x1A) at its tile.
   for (short& id : m_tileMap) id = 0;
   for (cXObjectImpl* o = m_first; o; o = o->m_nextObject) {
+    o->m_siteTile = -1;
     CTilePt tile = o->GetCTilePt();
     if (static_cast<unsigned int>(tile.GetX()) < 0x40 && static_cast<unsigned int>(tile.GetY()) < 0x40 &&
-        o->GetData(0x1a) == 0)
+        o->GetData(0x1a) == 0) {
       SetTileObjectID(tile, static_cast<short>(o->GetID()));
+      o->m_siteTile = tile.GetX() + tile.GetY() * 0x40;
+    }
   }
   if (r == 0) SIMMY_STUB("ObjectModuleImpl::Load: UpdateSimObjects, CheckIntegrity", 0x800F30BC);
   m_loaded = 1;
@@ -370,6 +373,26 @@ void ObjectModuleImpl::SetTileObjectID(CTilePt& tile, short id) {
   if (x < 0x40 && y < 0x40) m_tileMap[x + y * 0x40] = id;
 }
 
+// PC (HierSever's tile branch): the entry is cleared where the object was placed, not at its current
+// location: the PC animator moves a walking person's location between places (GC: only Place does, at
+// the tile it then leaves), so a stale entry would name a person standing elsewhere.
+void ObjectModuleImpl::SeverTile(cXObjectImpl* object) {
+  const int site = object->m_siteTile;
+  object->m_siteTile = -1;
+  if (site >= 0 && site < 0x40 * 0x40 && m_tileMap[site] == object->m_id) m_tileMap[site] = 0;
+}
+
+// PC (HierSetSite's tile branch): the object becomes its tile's object, unless the tile has one.
+void ObjectModuleImpl::SetSiteTile(cXObjectImpl* object) {
+  SeverTile(object);
+  if (object->m_location[0] < 0 || object->m_location[1] < 0) return;
+  CTilePt tile = object->GetCTilePt();
+  const int x = tile.GetX(), y = tile.GetY();
+  if (x < 0 || y < 0 || x >= 0x40 || y >= 0x40 || m_tileMap[x + y * 0x40]) return;
+  m_tileMap[x + y * 0x40] = object->m_id;
+  object->m_siteTile = x + y * 0x40;
+}
+
 // ---------------------------------------------------------------------------------------------------
 // ObjectIterator (game/objectiterator.cpp)
 
@@ -453,7 +476,7 @@ ObjectIterator& ObjectIterator::operator++() {
 // selector (sub index -1) makes every part (its sub selectors, in order; the first leads), then the group
 // is reset (each part's init tree; the parts are all there by then); if one cannot be made, the group goes.
 // GC: also the selector's file is loaded first, misc flag 0x80, the module's "new object" event (vtable
-// 0x244) and GlobalDispatch 0xDE; a lone part (sub index >= 0) is not made (PC: it is, for buy mode's
+// 0x244) and GlobalDispatch 0xDE (only its people part: the visitor types); a lone part (sub index >= 0) is not made (PC: it is, for buy mode's
 // CreateObjectFromGUID, which makes the parts one by one).
 int ObjectModuleImpl::MakeNewOutOfWorldObject(ObjSelector* selector, short* id) {
   if (id) *id = 0;
@@ -512,6 +535,8 @@ int ObjectModuleImpl::MakeNewOutOfWorldObject(ObjSelector* selector, short* id) 
   // what it sets (its attributes cleared, data) is in place before the creator's tree goes on.
   if (impl->m_treeSim && impl->m_treeSim->HasMainTreeSim()) impl->RunTree(0, 0, nullptr);
   if (id) *id = impl->m_id;
+  // GlobalDispatch 0xDE: HouseImpl::DoCommand redoes the people's visitor types for a new person.
+  if (impl->GetType() == 2 && Globs_pNeighborhood) Globs_pNeighborhood->UpdateInstanceVisitorTypes();
   return impl->m_id;
 }
 
@@ -546,8 +571,18 @@ void ObjectModuleImpl::KillObject(short id) {
   if (!impl) return;
   static int logged = 0;
   if (logged++ < 20) std::printf("[vm] %s killed\n", impl->DebugName());
-  CTilePt tile = impl->GetCTilePt();
-  if (GetTileObjectID(tile) == id) SetTileObjectID(tile, 0);
+  SeverTile(impl);
+  // GC KillOutOfWorldObject (800F50FC): a player's selected person being killed hands the selection on
+  // (AdvanceSelectedPerson, vtable 0x124); still the same: the player has none (SetSelectedPerson 0).
+  // Before CleanupPeople. (PC: without it the HUD/interactors kept a freed person.)
+  if (impl->GetType() == 2)
+    for (int player = 0; player < 2; ++player) {
+      cXPerson* selected = _globals.GetSelectedPerson(player);
+      if (!selected || selected->AsObject() != object) continue;
+      _globals.AdvanceSelectedPerson(player);
+      selected = _globals.GetSelectedPerson(player);
+      if (selected && selected->AsObject() == object) _globals.SetSelectedPerson(player, nullptr);
+    }
   // People running its trees or doing actions with it let go (GC: KillOutOfWorldObject's CleanupPeople).
   CleanupPeople(object);
   for (int other = 1; other <= GetNumObjects(); ++other) {

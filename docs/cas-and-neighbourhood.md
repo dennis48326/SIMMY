@@ -20,6 +20,14 @@ bulldoze).
 | A CAS-made sim's look | `User` (`UserDataSaveLoad`: GUID + `CasSimDescriptionS2C`) | On a "user" `ObjSelector` (`m_simDesc`, `m_userName`); `ObjectFolderImpl::LoadUserData/SaveUserData` |
 | Portraits | `thmb` | `ThumbnailLoader` ([`thumbnail.cpp`](../src/game/thumbnail.cpp)): 32x32 C8 + palette |
 
+Tuning: `NeighborhoodConstants::UpdateConstants` (800CC740) reads group 4 of the global object file's
+float constants at the first load (architecture value x0.7, new family money 20,000, start hour, friend
+count, house score weights; the code's defaults when a name is missing). `NeighborhoodImpl::Save` puts the
+played house's number in variable 2, gives the played family its house value from the simulator (objects
++ architecture x0.7 + lot) and brings each family's friend count up to date before writing it.
+`AddToFamily` / `RemoveFromFamily` also give the person on the lot its family number (person data 0x3D)
+and redo the visitor types ([simulation.md](simulation.md)).
+
 Lookups for other code: the player family is `Globs_pNeighborhood->GetFamily(_gd.m_fieldD8)` (not
 `GetFamilyInHouse`); `NeighborhoodImpl::SimDescriptionOf(guid)` gives a sim's look;
 `_gd.m_players[p].GetPrimaryNeighbor()` a player's own sim; `PersonNeighbor(person)` the neighbour of a

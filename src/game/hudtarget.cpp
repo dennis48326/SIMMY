@@ -688,29 +688,6 @@ unsigned short* H2DTarget::GetLocalizable(char*) {
 // 801B8480
 void H2DTarget::Draw(ERC*) {}
 
-namespace {
-// GC 8012606C cXPersonImpl::CancelLastAction (person vtable 0xC4). PC: here, as the HUD's B is its only
-// caller in the port (game/person.cpp is not this file's to change): the last queued action, or the
-// running one when none is queued, is removed (RemoveAction, vtable 0xBC), unless the action before it
-// has flag 0x8000 (it must finish first). 1: removed.
-int PersonCancelLastAction(cXPersonImpl* person) {
-  const int queued = person->CountActions(false);
-  int id;
-  int blocker = -1;
-  if (queued < 1) {
-    Interaction* current = person->GetCurrentAction();
-    if (!current) return 0;
-    id = current->m_id;
-  } else {
-    Interaction* last = person->GetIndAction(queued - 1, false);
-    if (!last) return 0;
-    id = last->m_id;
-    Interaction* before = queued < 2 ? person->GetCurrentAction() : person->GetIndAction(queued - 2, false);
-    if (before && (before->m_flags & 0x8000)) blocker = before->m_id;
-  }
-  return blocker == -1 ? person->RemoveAction(id) : 0;
-}
-}  // namespace
 
 // Part of 801B8484 H2DTarget::Update: B (pad command 6, read through the HUD's own button filter
 // +0xEC, once the HUD movie has said H2D_CANCEL) held 30 frames turns on the action queue's cancel mode
@@ -744,7 +721,7 @@ void H2DTarget::UpdateCancelButton(int p) {
       cXPerson* sel = _globals.GetSelectedPerson(p);
       auto* person = sel ? dynamic_cast<cXPersonImpl*>(sel->AsObject()->GetObjectImplementation()) : nullptr;
       if (person) {
-        const int cancelled = PersonCancelLastAction(person);
+        const int cancelled = person->CancelLastAction();
         std::printf("[sim] player %d cancels: %d\n", p + 1, cancelled);
         if (cancelled && m_act[p]) m_act[p]->CancellingLastObject();
       }

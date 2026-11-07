@@ -14,20 +14,11 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <map>
 #include <string>
 #include <vector>
 
 namespace {
-// The person's social-mode flags (GC: cXPersonImpl fields) and the player's social-mode interactor.
-struct SocialFlags {
-  bool first = false, second = false, waiting = false;
-  cXPersonImpl* target = nullptr;
-};
-std::map<const cXPersonImpl*, SocialFlags>& Flags() {
-  static std::map<const cXPersonImpl*, SocialFlags> m;
-  return m;
-}
+// PC stand-in for the player's social-mode interactor (GC InteractorModule::SocialModeInteractor).
 struct SocialInteractor {
   bool active = false;  // InteractorManager: interactor 7 is the player's
   short chosen = -1;    // +0x60 the chosen entry (-1 none yet, -2 backed out)
@@ -63,12 +54,20 @@ bool SocialModeChooseAction(int player, const MenuInteraction* m) {
 bool PlayerInSocialMode(int player) { return player >= 0 && player < 2 && s_interactor[player].active; }
 
 // 8012B82C
-void cXPersonImpl::SetFirstPlayerInSocialMode(bool on) { Flags()[this].first = on; }
+void cXPersonImpl::SetFirstPlayerInSocialMode(bool on) { m_firstInSocialMode = on ? 1 : 0; }
 // 8012B834
-// GC: also the social camera for the player whose sim it is.
-void cXPersonImpl::SetSecondPlayerInSocialMode(bool on) { Flags()[this].second = on; }
+// The player whose selected sim this is gets its direct interactor's idle time reset (GC:
+// InteractorManager::GetPlayerInteractor(player, 0), vtable 0x84 ResetIdleTime).
+void cXPersonImpl::SetSecondPlayerInSocialMode(bool on) {
+  for (int player = 0; player < 2; ++player) {
+    cXPerson* s = _globals.GetSelectedPerson(player);  // DAT_80475E88
+    if (!s || s->AsObject() != this) continue;
+    if (InteractorModule__DirectInteractor* d = PlayerDirectInteractor(player)) d->ResetIdleTime();
+  }
+  m_secondInSocialMode = on ? 1 : 0;
+}
 // 8012B8C4
-void cXPersonImpl::SetWaitingForSocialMode(bool on) { Flags()[this].waiting = on; }
+void cXPersonImpl::SetWaitingForSocialMode(bool on) { m_waitingForSocialMode = on ? 1 : 0; }
 // 8012B8CC
 // The player's sim went into social mode (it is the one that started it, or joined it: TrySocialMode
 // steps 0/4) but runs no interaction any more (the Socialize was cancelled or failed before the social
@@ -104,15 +103,20 @@ void cXPersonImpl::CheckSecondPlayerForFailedSocialModeEntry() {
   if (p->m_animator) p->m_animator->StartDefaultIdle();
 }
 // 8012BB20
-RET_UNKNOWN cXPersonImpl::GetSocialModeTarget() { return reinterpret_cast<RET_UNKNOWN>(Flags()[this].target); }
+// The person person data 0x28 names (the social partner), or null.
+RET_UNKNOWN cXPersonImpl::GetSocialModeTarget() {
+  if (GetPersonData(0x28) == 0) return 0;
+  return reinterpret_cast<RET_UNKNOWN>(PersonFromID(GetPersonData(0x28)));
+}
 // 8012CA2C
-RET_UNKNOWN cXPersonImpl::IsInSocialMode() { return Flags()[this].first || Flags()[this].second ? 1 : 0; }
+// Person data 0x28 (the social partner's id) is set: true for both sims of a social mode.
+RET_UNKNOWN cXPersonImpl::IsInSocialMode() { return GetPersonData(0x28) != 0 ? 1 : 0; }
 // 8012CA44
-RET_UNKNOWN cXPersonImpl::IsSecondPlayerInSocialMode() { return Flags()[this].second ? 1 : 0; }
+RET_UNKNOWN cXPersonImpl::IsSecondPlayerInSocialMode() { return m_secondInSocialMode; }
 // 8012CA4C
-RET_UNKNOWN cXPersonImpl::IsFirstPlayerInSocialMode() { return Flags()[this].first ? 1 : 0; }
+RET_UNKNOWN cXPersonImpl::IsFirstPlayerInSocialMode() { return m_firstInSocialMode; }
 // 8012CA54
-RET_UNKNOWN cXPersonImpl::IsWaitingForSocialMode() { return Flags()[this].waiting ? 1 : 0; }
+RET_UNKNOWN cXPersonImpl::IsWaitingForSocialMode() { return m_waitingForSocialMode; }
 
 // 8012640C
 // The stack object of the interaction it runs (the queue's head while it runs); 0 for none.
@@ -179,8 +183,6 @@ int cXPersonImpl::TrySocialMode(StackElem* frame, const unsigned char* params) {
         s_interactor[player].chosen = -1;
         s_autoPicks[player] = 0;
       }
-      Flags()[p].target = this;
-      Flags()[this].target = p;
       const std::string me = DebugName();
       std::printf("[social] %s starts social mode with %s (player %d)\n", me.c_str(), p->DebugName(), player + 1);
       return 1;
@@ -209,9 +211,7 @@ int cXPersonImpl::TrySocialMode(StackElem* frame, const unsigned char* params) {
       if (p) {
         p->SetPersonData(0x28, 0);
         p->SetSecondPlayerInSocialMode(false);
-        Flags()[p].target = nullptr;
       }
-      Flags()[this].target = nullptr;
       if (player >= 0) {
         s_interactor[player].active = false;
         if (_gd.m_hudTarget) _gd.m_hudTarget->CloseMenu(player);

@@ -105,8 +105,14 @@ unsigned int GetRequiredSegment(cXObjectImpl* o) {
   if (seg && o->GetData(1)) seg = RotateSegment(seg, o->GetData(1) / 2);
   return seg;
 }
-// 800E178C GetTileWidth: the definition's +0x86 (0: a tile, 16). GC: people their person width.
+// 800E178C GetTileWidth: the definition's +0x86 (0: a tile, 16); people the person width
+// (cXObject::GetPersonWidth, gPersonWidth 6), a ghost none.
 int GetTileWidth(cXObjectImpl* o) {
+  if (o->GetType() == 2) {
+    auto* p = dynamic_cast<cXPersonImpl*>(o);
+    if (p && p->IsGhost()) return 0;
+    return static_cast<int>(cXObject::GetPersonWidth());
+  }
   const int w = o->m_def ? ERQuickdata::S16(o->m_def, 0x86) : 0;
   return w ? w : 16;
 }
@@ -142,18 +148,12 @@ std::vector<cXObjectImpl*> ObjectsAtTile(CTilePt& tile) {
 // tile map (the tile's first object), its model moved (ISimInstance::SetObjOrient).
 void SetLocation(cXObjectImpl* o, const int pos[2], int level) {
   ObjectModuleImpl* module = Globs_pObjectModule;
-  if (module && o->m_location[0] >= 0 && o->m_location[1] >= 0) {
-    CTilePt old = o->GetCTilePt();
-    if (module->GetTileObjectID(old) == o->m_id) module->SetTileObjectID(old, 0);
-  }
+  if (module) module->SeverTile(o);
   const int was[2] = {o->m_location[0], o->m_location[1]};
   o->m_location[0] = pos[0];
   o->m_location[1] = pos[1];
   o->m_level = level;
-  if (module && pos[0] >= 0 && pos[1] >= 0 && o->m_data[2] == 0) {
-    CTilePt tile = o->GetCTilePt();
-    if (!module->GetTileObjectID(tile)) module->SetTileObjectID(tile, o->m_id);
-  }
+  if (module && pos[0] >= 0 && pos[1] >= 0 && o->m_data[2] == 0) module->SetSiteTile(o);
   UpdateObjectRoomID(o);  // 800DF784: ResolveRoomID, data 0x1D
   PassiveInfluenceLocationChanged(o, was[0], was[1]);
 }
@@ -374,17 +374,27 @@ int ObjIsInWorld(cXObjectImpl* o) { return (o->m_location[1] >> 4) > 0 && (o->m_
 
 // 800DF4D0
 // The object's footprint at `pos`: its tile width around it, less the definition's insets (+0x9A, a
-// nibble per side) turned by its direction. GC: people also take person data 0x49 off the insets.
+// nibble per side) turned by its direction. A person facing along an axis takes person data 0x49 (a
+// nibble per side, set while its routes look for goals) off the insets.
 void ObjComputeRect(cXObjectImpl* o, const int pos[2], int rect[4]) {
   const int half = GetTileWidth(o) / 2;
   rect[3] = pos[1] - half;
   rect[2] = pos[0] - half;
   rect[1] = pos[1] + half;
   rect[0] = pos[0] + half;
-  const unsigned int insets = o->m_def ? static_cast<unsigned short>(ERQuickdata::S16(o->m_def, 0x9a)) : 0;
-  if (!insets) return;
-  const int side[4] = {static_cast<int>(insets & 0xf), static_cast<int>(insets >> 4 & 0xf),
-                       static_cast<int>(insets >> 8 & 0xf), static_cast<int>(insets >> 12 & 0xf)};
+  const unsigned int insets = o->m_def ? static_cast<unsigned int>(ERQuickdata::S16(o->m_def, 0x9a)) : 0;
+  unsigned int less = 0;
+  if (o->GetType() == 2 && !(o->GetData(1) & 1))
+    if (auto* p = dynamic_cast<cXPersonImpl*>(o)) less = static_cast<unsigned int>(p->GetPersonData(0x49));
+  if (!insets && !less) return;
+  int side[4] = {static_cast<int>(insets & 0xf), static_cast<int>(insets >> 4 & 0xf),
+                 static_cast<int>(insets >> 8 & 0xf), static_cast<int>(insets >> 12 & 0xf)};
+  if (less) {
+    side[0] -= static_cast<int>(less & 0xf);
+    side[1] -= static_cast<int>(less >> 4 & 0xf);
+    side[2] -= static_cast<int>(less >> 8 & 0xf);
+    side[3] -= static_cast<int>(less >> 12 & 0xf);
+  }
   const int q = (8 - o->GetData(1) % 8) / 2;
   rect[2] += side[q % 4];
   rect[1] -= side[(q + 1) % 4];
@@ -397,10 +407,41 @@ void ObjComputeRect(cXObjectImpl* o, const int pos[2], int rect[4]) {
 // overlaps its own (people only when they do not route through it and it cannot stand in people); on
 // its own tile, zero-extent objects clash only when they use the same layer (data 0x3F bit 0; bit 1
 // unless both are zero-extent) or, both zero-extent, need the same wall; and no wall crosses it unless
-// data 0x2A has 0x400. PC: the other object's "allow intersection" tree (RunTree 5) is not run, and
-// people count as standing still (cXPerson vtable 0x21C).
+// data 0x2A has 0x400. A person (not a ghost: it fits anywhere) clashes with any footprint but those of
+// objects people may stand in, the object it routes through (IgnoringObject) and those whose "allow
+// intersection" tree (RunTree 5) or its own says so. PC: for other objects those trees are not run.
 int ObjTestIntersection(cXObjectImpl* o, const int pos[2], int level) {
-  if (o->GetType() == 2) return 1;  // GC: a routing person fits anywhere (people are not placed here)
+  if (o->GetType() == 2) {
+    auto* me = dynamic_cast<cXPersonImpl*>(o);
+    if (me && me->IsGhost()) return 1;
+    cFixedWorldImpl* w = World();
+    if (!w) return 0;
+    int rect[4];
+    ObjComputeRect(o, pos, rect);
+    cXObject* ignoring = me ? me->IgnoringObject() : nullptr;
+    cXObjectImpl* ignored = ignoring ? ignoring->GetObjectImplementation() : nullptr;
+    for (int i = 0; i < 9; ++i) {
+      CTilePt tile((pos[1] >> 4) + kXDir[i], (pos[0] >> 4) + kYDir[i], level);
+      if (w->OutOfBounds(tile)) continue;
+      for (cXObjectImpl* other : ObjectsAtTile(tile)) {
+        if (IsPartOfMe(o, other) || CanIntersectPeople(other) || other == ignored) continue;
+        // The "allow intersection" trees (entry 5) of both, each with the other as the stack object.
+        if (o->RunTree(5, other->m_id, nullptr) != 0 || other->RunTree(5, o->m_id, nullptr) != 0) continue;
+        int otherRect[4];
+        ObjComputeRect(other, other->m_location, otherRect);
+        if (otherRect[2] < rect[0] && rect[2] < otherRect[0] && otherRect[3] < rect[1] && rect[3] < otherRect[1]) {
+          gPlacementError = 0xb;
+          gPlacementConflict = other;
+          return 0;
+        }
+      }
+    }
+    if (!(o->GetData(0x2a) & 0x400) && SectWall(rect, level)) {
+      gPlacementError = 7;
+      return 0;
+    }
+    return 1;
+  }
   cFixedWorldImpl* w = World();
   if (!w) return 0;
   const bool zero = HasZeroExtent(o);
@@ -970,3 +1011,7 @@ void ObjSetWasPlacedFromInventory(cXObjectImpl* o, bool on) {
   const int f = o->m_data[8];
   o->m_data.WriteVar(8, static_cast<short>(on ? (f | 0x4000) : (f & ~0x4000)));
 }
+
+// PC: the tile helpers above for the router (xrouting.cpp, portal.cpp).
+std::vector<cXObjectImpl*> TileObjects(CTilePt& tile) { return ObjectsAtTile(tile); }
+bool ObjCanIntersectPeople(cXObjectImpl* o) { return CanIntersectPeople(o); }

@@ -1,4 +1,4 @@
-// @class Room after CTilePt
+// @class Room after CTilePt PenaltyRect
 // @class Room__Sides
 // @class RoomManager
 // The lot's rooms (game/rooms.cpp). cFixedWorldImpl::ComputeRooms floods the tile grid between walls
@@ -22,7 +22,9 @@ struct Room {
   Room(unsigned short id, RoomManager* manager);  // 801374C4
   ~Room();  // 80137578
   void Clear();  // 801376EC
-  RET_UNKNOWN GetPartition();  // 80137780
+  // The room's static obstacles for the router (BuildRoomPartition), built when first asked for and kept
+  // until ClearRoomPartitions.
+  std::vector<PenaltyRect>* GetPartition();  // 80137780
   void ComputeRoom();  // 801377D8
   void CollectTileStats(CTilePt &);  // 80137BE0
   void CollectObjectStats(ObjectIterator);  // 80137E44
@@ -42,7 +44,8 @@ struct Room {
   unsigned short m_id = 0;              // +0x00
   unsigned short m_lightingGroup = 0;   // +0x02 rooms sharing lights (ChangeLightingGroup)
   std::vector<CTilePt> m_tiles;         // +0x04
-  // +0x14 TArray (0x0C each), +0x24 the room's partitions (0x14 each): not ported.
+  // +0x14 TArray (0x0C each): not ported.
+  std::vector<PenaltyRect> m_partition; // +0x24 GetPartition
   int m_inUse = 0;                      // +0x34 holds a computed room
   float m_field38 = 1.0f;               // +0x38 the room's light colour scale (SetRoomIntensityScale)
   float m_field3C = 1.0f;               // +0x3C
@@ -50,6 +53,7 @@ struct Room {
   int m_field44 = 0;                    // +0x44 the scale changed (for EHouse::UpdateRoomLights)
   float m_field48 = 0;                  // +0x48 the overhead lights (EHouse::UpdateRoomLights: 0 by day)
   int m_tileStats = 0;                  // +0x4C twice the area (CollectTileStats)
+  int m_objectCount = 0;                // +0x54 the objects on its tiles (CollectObjectStats)
   float m_field7C = 0.0f;               // +0x7C the outdoor score of its objects
   int m_statsDirty = 1;                 // +0x84 its statistics are to be recollected
   int m_outsideKnown = 0;               // +0x88 IsOutside's answer is cached

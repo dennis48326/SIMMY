@@ -9,6 +9,8 @@
 #include "simmy/unported_globals.hpp"
 
 #include <algorithm>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <map>
 #include <string>
@@ -174,7 +176,17 @@ int ObjectFolderImpl::AddSelector(ObjDefinition* def, char*, char* fileName, Res
   selector->m_folder = this;
   selector->m_resFile = file;
   selector->m_fileName = fileName;
-  if (npc) SIMMY_STUB("ObjectFolderImpl::AddSelector: the NPC's user name", 0x800EDD94);
+  // A service NPC: its record, and its name (the record's +0x10) as the user name.
+  selector->m_npc = reinterpret_cast<const unsigned char*>(npc);
+  if (npc) {
+    const unsigned short* name = ERQuickdata::Ptr(npc, 0x10) ? ERQuickdata::LocString(npc, 0x10) : nullptr;
+    std::u16string user;
+    for (const unsigned short* c = name; c && *c; ++c) user.push_back(static_cast<char16_t>(*c));
+    selector->SetUserName(user);
+    if (std::getenv("SIMMY_NPC_TRACE"))
+      std::printf("[npc] %s: gender %d kind %d \"%s\"\n", fileName, ERQuickdata::S32(npc, 0), ERQuickdata::S32(npc, 4),
+                  std::string(user.begin(), user.end()).c_str());
+  }
   selector->m_row = RowIndex(m_objects, def);
   if (ERQuickdata::Ptr(def, 0x34)) selector->m_row2 = RowIndex(m_objects, ERQuickdata::Ptr(def, 0x34));
   SIMMY_STUB("ObjectFolderImpl::AddSelector: XObjLang, the definition's data (SmartDataFactory)", 0x800EDD94);

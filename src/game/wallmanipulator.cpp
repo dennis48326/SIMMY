@@ -263,8 +263,14 @@ void InteractorModule__WallManipulator::HandleFinalizeRequest() {
   }
   m_flags &= ~0x20u;
   if (done == 1) {
-    if (before < ibuild::CountRoomsInUse())
-      SIMMY_STUB("WallManipulator::HandleFinalizeRequest: the want/fear event kEventAddARoom (Neighborhood vtable 0x1A4)", 0x80221028);
+    // A room more: the residents' wants (kEventAddARoom, NotifyAllResidents: vtable 0x1A4).
+    if (before < ibuild::CountRoomsInUse() && Globs_pNeighborhood) {
+      WantFear__Notification n;
+      n.m_event = WantFearEvent::kAddARoom;
+      n.m_target = WantFearEvent::kGenericParam;
+      n.m_count = WantFearEvent::kGenericParam;
+      Globs_pNeighborhood->NotifyAllResidents(n, nullptr);
+    }
     // GC: Globs::pObjectModule vtable 0x184 InvalidateAllRoutes (the world side's).
     play_sound((m_flags & 4) ? 0x80e1a9cd : 0x66dede72);
     m_anchor = m_pos;

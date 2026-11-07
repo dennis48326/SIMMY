@@ -131,6 +131,7 @@ owner's pad.
   produce is recorded.
 - The F1 overlay neutralises pads but keeps `err`, and keeps each pad blocked until fully released after
   closing, so the B/Start that closed it never reaches the game.
-- `SimInteractor::OnCommandPressed` still calls the generated stub `cXPersonImpl::CancelLastAction` for
-  B and logs a stub for `CheckNewSimInSocialMode` although `InteractorModule::CheckNewSimInSocialMode`
-  (80213C60) is ported in familyselect.cpp (see [known-gaps.md](known-gaps.md)).
+- `SimInteractor::OnCommandPressed`'s B (command 4) calls `cXPersonImpl::CancelLastAction`, but the
+  classic interactor's command table maps no button to 4 (GC too): B in classic control is the HUD's
+  (`H2DTarget::UpdateCancelButton`, the same function). After a sim switch it runs
+  `InteractorModule::CheckNewSimInSocialMode` (80213C60, familyselect.cpp) as the direct interactor does.

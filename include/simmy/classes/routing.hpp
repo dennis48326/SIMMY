@@ -8,13 +8,12 @@
 // (1/16 tiles, in the object's frame), the directions around it that are allowed (flags bits 0..7,
 // eighths of a turn from the object's facing), the distances (min, max, optimal, 1/16 tiles), the
 // step between candidate spots (resolution), how the person faces there, and score multipliers for
-// standing and sitting. XRoute turns a slot into goals (ConstructGoals: candidate spots scored by
-// their distance from the optimal one, checked against the world: in bounds, the object's room, no
-// wall between, room to stand) and then a path to the best goal it can reach (FindPath).
-// GC: FindPath searches the room partition (BuildRoomPartition: free rectangles between walls and
-// objects, SpacePartition/Path in game/routing.cpp, an A* over rectangles with smoothing). PC: an A*
-// over a quarter-tile grid of the lot (walls, blocked tiles and object footprints, the target object
-// left out), smoothed by line of sight; see xrouting.cpp.
+// standing and sitting. XRoute turns a slot into goals (ConstructGoals: candidate spots and seats
+// scored by their distance from the optimal one, checked with EvalTileForGoal: the router's room, the
+// walls, the router's CanPlace there) and then a path within the router's room to the best goal it can
+// reach (FindPath: the room's partition and its objects as penalty rectangles, SpacePartition / Path's
+// rectangle A* and smoothing, spacepartition.hpp). Other rooms are reached through portals
+// (portal.cpp, cXPersonImpl::TryRoomRouting); cXPersonImpl::TryGotoRoutingSlot drives it all.
 #pragma once
 #include <vector>
 
@@ -101,61 +100,68 @@ struct RouteGoal {
   int m_score = 0;               // +0x08
   short m_object = 0;            // +0x0C
   unsigned short m_dirMask = 0;  // +0x0E
-  // PC: how the person faces there (eighths of a turn; -1 as it arrives; GC: SetDirectionForGoalSearch
-  // sets it on the person while the goals are scored).
-  int m_facing = -1;
 };
 
-// GC: a list of tiles and points (the route's way points); PC: points in the animation format
-// (x = location +0x6C, y = +0x68, 1/16 tiles).
+// A way point (8 bytes): an FTilePt ([0] the location's +0x68, [1] +0x6C; 1/16 tiles).
+struct TileListPoint {
+  int p[2] = {};
+};
+
+// The way a person walks (GC: cXPersonImpl +0x3F8, which the animator follows): FindPath's way points,
+// then (InitRoute) one more a tile on in the direction the person is to face at the end.
 struct TileList {
   TileList() = default;
-  RET_UNKNOWN FindNearestPoint(FTilePt *, int);  // 80157C44
-  std::vector<EVec2> m_points;
+  void FindNearestPoint(int pos[2], int last);  // 80157C44
+  std::vector<TileListPoint> m_points;
 };
 
+// A route of a person to a routing slot of an object (0xA4 bytes; cXPersonImpl keeps a stack of them).
 struct XRoute {
   XRoute();  // 80152D18
   XRoute(cXObject* person, cXObject* object, RoutingSlot* slot);  // 80152D74
   // The person routing to `slot` of `object` (null: no slot).
   void Construct(cXObject* person, cXObject* object, RoutingSlot* slot);  // 80152DDC
-  // One goal at `pos` (FTilePt) facing `dir` (eighths): 0 off the lot, 1 an object in the way (its id in
-  // m_blocker), 2 another room, 3 a wall between it and the object, 5 a person in the way, 6 good.
   int EvalTileForGoal(const int pos[2], int dir);  // 8015282C
-  RET_UNKNOWN HasCurrentGoal();  // 80152F5C
+  int HasCurrentGoal();  // 80152F5C
   int CountGoals() { return static_cast<int>(m_goals.size()); }  // 80152F74
   RouteGoal* GetNthGoal(int n) { return &m_goals[static_cast<size_t>(n)]; }  // 80152F88
-  RET_UNKNOWN GetMaxScore();  // 80152F98
-  void SetCurrentGoal(int);  // 80152FE8
+  int GetMaxScore();  // 80152F98
+  void SetCurrentGoal(int goal);  // 80152FE8
   void ClearCurrentGoal();  // 80152FF0
   RoutingSlot* GetRoutingSlot() { return &m_slot; }  // 8015303C
   void AddGoal(RouteGoal& goal);  // 80153044
-  RET_UNKNOWN GetCurrentGoal();  // 80153248
+  RouteGoal* GetCurrentGoal();  // 80153248
   // A goal is a seat (goal object) and `person` sits in it.
   bool IsPersonSittingOnChairGoal(cXObject* person);  // 8015325C
-  RET_UNKNOWN ShouldIgnore(cXObject *);  // 80153328
-  void DoStream(ReconBuffer *, int);  // 801534C8
+  int ShouldIgnore(cXObject* object);  // 80153328
+  void DoStream(ReconBuffer*, int) {}  // 801534C8
   void ResetGoals();  // 801534CC
-  // The start (ChooseStartingPoint), then the goals (ConstructGoals) with the person's facing kept.
   void BuildGoalList();  // 8015597C
-  // The way to the best goal it can reach, in `out` (the start first, the goal last; m_goal says
-  // which). 1: found. PC: see the header comment.
   int FindPath(TileList& out);  // 80155AC8
   void ChooseStartingPoint();  // 80158058
   void ConstructGoals();  // 80158318
 
   std::vector<RouteGoal> m_goals;   // +0x00
   RoutingSlot m_slot;               // +0x10 a copy
-  cXObject* m_object = nullptr;     // +0x4C the object routed to (null: a place)
-  cXObject* m_person = nullptr;     // +0x50
-  int m_goal = -1;                  // +0x54 the goal the path leads to
+  cXObject* m_object = nullptr;     // +0x4C the object routed to
+  cXObject* m_person = nullptr;     // +0x50 the router
+  int m_goal = -1;                  // +0x54 the goal the path leads to (the current goal)
   int m_maxScore = -1;              // +0x58
-  int m_personPos[2] = {};          // +0x64 where the person stood when it began
+  int m_stuck = 0;                  // +0x5C TryGotoRoutingSlot's retry state after a failed route
+  int m_waitStart = 0;              // +0x60 the tick the waiting / asking animations started
+  int m_personPos[2] = {};          // +0x64 where the router stood (to see whether it moved)
+  cXObject* m_portal = nullptr;     // +0x6C the portal (door) routed through (TryRoomRouting)
   int m_start[2] = {};              // +0x70 where the route starts (ChooseStartingPoint)
-  int m_startDirs = 0;              // +0x78
-  int m_first = 1;                  // +0x7C its first tick
+  int m_startDirs = 0;              // +0x78 the seat side it gets up on
+  int m_planned = 1;                // +0x7C 0: plan again from state 2 (InvalidateRoutes)
+  cXObject* m_avoid = nullptr;      // +0x80 (never set: a conflict that does not count)
+  cXObject* m_asked = nullptr;      // +0x84 the person asked to move out of the way
+  int m_askedDone = 0;              // +0x88 the asked person moved (MoveOutOfWay's action ended well)
   int m_failure = 0;                // +0x8C why it failed (the tree's "route failure" code)
-  short m_blocker = 0;              // +0x90 the object in the way
+  short m_blocker = 0;              // +0x90 the object or person in the way
+  int m_ignorePeople = 0;           // +0x94
+  int m_askedAction = 0;            // +0x98 the id of the "move out of the way" action asked for
+  short m_insetId = 0;              // +0x9C the router's person data 0x48 (footprint insets)
   int m_maxGoals = 0x30;            // +0xA0
 };
 
@@ -177,3 +183,42 @@ void RoutingSlotPosition(cXObjectImpl* object, const RoutingSlot& slot, int out[
 // PC stand-in for cXObjectImpl::CanPlace (vtable 0x134) of a person at `pos` (FTilePt): on the lot, no
 // wall within reach, no object's footprint but `near`'s group and `person` itself, no other person.
 bool PersonCanStandAt(cXObject* person, cXObject* near, const int pos[2]);
+
+// The router's helpers (xrouting.cpp).
+// The tile step of direction `dir` (eighths) as an FTilePt delta ([0], [1]).
+void DirectionStep(int dir, int out[2]);
+// The eighth of a turn from `from` toward `to` (FTilePt).
+int DirectionBetween(const int from[2], const int to[2]);
+void TransformToWorldCoords(float x, float y, const int origin[2], int dir, int out[2]);  // 80152A78
+unsigned int WallBlockFlagsAtTile(CTilePt& tile, int dir);  // 800E28AC cXObject::GetWallBlockFlagsAtTile
+unsigned int ObjWallBlockFlags(cXObjectImpl* o);  // 800E2848 cXObjectImpl::GetWallBlockFlags
+// cXObjectImpl::GetRect: the footprint at its location ([0] max [0], [1] max [1], [2] min [0], [3] min [1]).
+void ObjRect(cXObjectImpl* o, int r[4]);
+void SetDirectionForGoalSearch(cXObject* person, short objDir, short dir, RoutingSlot* slot);  // 80157FB8
+struct PenaltyRect;
+struct IPoint;
+void BuildRoomPartition(unsigned short room, std::vector<PenaltyRect>* rects, bool third);  // 80153500
+void BuildRoomPartition(unsigned short room, std::vector<PenaltyRect>* rects);  // 801558D0
+int Stuck(std::vector<PenaltyRect>* rects, IPoint* p);  // 801558F4
+void CollapsePenaltyRects(std::vector<PenaltyRect>& rects);  // 80159738
+// cXObjectImpl::GetObstacleAtLocation (800DC968): the first object at `pos` people cannot stand in;
+// else (preferDoor) the last door there; else null.
+cXObjectImpl* ObstacleAtLocation(const int pos[2], int level, bool preferDoor);
+// cXPortalImpl::GetOtherSide (8013048C): the next part of the portal's group with a portal tree.
+cXObjectImpl* PortalOtherSide(cXObjectImpl* portal);
+// The routing slots of `object` a route may have rewritten (GC: its own slot vector +0xA0; MoveOutOfWay
+// gives the "move out of the way" object its slot 0).
+void SetObjectRoutingSlot(cXObjectImpl* object, int index, const RoutingSlot& slot);
+// Portal routing (portal.cpp; GC cXPortal / cXPortalImpl). `portal`: a portal part (IsPortalObject).
+float PortalRouteScore(cXObjectImpl* portal, int id);                // 80132788 GetRouteScore
+void PortalSetRouteScore(cXObjectImpl* portal, int id, float score);  // 8012E608 SetRouteScore
+int PortalFindAvailRouteID();                                         // 80130824 FindAvailRouteID
+void PortalDirtyAllRoutes();                                          // 80130960 DirtyAllRoutes
+void PortalClearRoute(int id, float score);                           // 801314B0 ClearRoute
+void PortalClearRouteScores(int id);                                  // 8013156C ClearRouteScores
+int PortalInitRoute(cXObjectImpl* person);                            // 80130A34 InitPortalRoute
+float PortalDistToPortal(cXObjectImpl* from, cXObjectImpl* to);      // 80130AC8 GetDistToPortal
+float PortalEstimateDistance(cXObjectImpl* from, cXObjectImpl* to);  // 801312A4 EstimateDistance
+cXObjectImpl* PortalFindBest(cXObjectImpl* person, cXObjectImpl* target);  // 801316A0 FindBestPortal
+void PortalFailedTree(cXObjectImpl* person, cXObjectImpl* portal);    // 80131B98 FailedPortalTree
+void PortalBeginningTree(cXObjectImpl* person, cXObjectImpl* portal);  // 80131C7C BeginningPortalTree

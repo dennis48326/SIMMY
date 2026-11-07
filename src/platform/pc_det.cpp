@@ -235,6 +235,7 @@ void HashAnimator(Hash& h, SAnimator2* a) {
   h.i("aaware", a->m_awareFlags);
   h.i("arnode", static_cast<long long>(a->m_routeNode));
   h.i("arres", a->m_routeResult);
+  h.i("afollow", a->m_follow);
   h.f("arend", a->m_routeEndDir);
 }
 
@@ -270,6 +271,25 @@ void HashPerson(Hash& h, cXPersonImpl* p) {
   h.floats("pos", p->m_pos, 2);
   h.i("dir", p->m_dir);
   h.i("routes", static_cast<long long>(p->m_routes.size()));
+  for (const XRoute& r : p->m_routes) {
+    h.i("rgoals", static_cast<long long>(r.m_goals.size()));
+    h.i("rgoal", r.m_goal);
+    h.i("rstuck", r.m_stuck);
+    h.i("rwait", r.m_waitStart);
+    h.i("rportal", ObjId(r.m_portal));
+    h.i("rasked", ObjId(r.m_asked));
+    h.i("rfail", r.m_failure);
+    h.i("rplan", r.m_planned);
+  }
+  h.i("path", static_cast<long long>(p->m_path.m_points.size()));
+  for (const TileListPoint& t : p->m_path.m_points) {
+    h.i("p0", t.p[0]);
+    h.i("p1", t.p[1]);
+  }
+  h.i("ignobj", ObjId(p->m_ignoringObject));
+  h.i("soc1", p->m_firstInSocialMode);
+  h.i("soc2", p->m_secondInSocialMode);
+  h.i("socw", p->m_waitingForSocialMode);
   h.i("ngh", p->m_neighbor ? p->m_neighbor->m_id : -1);
   HashAnimator(h, p->m_animator);
 }
@@ -289,6 +309,8 @@ void HashObject(Hash& h, cXObjectImpl* o) {
   h.i("misc", o->m_miscFlags);
   if (!o->m_slotContents.empty()) h.shorts("slots", o->m_slotContents.data(), static_cast<int>(o->m_slotContents.size()));
   h.i("errs", o->m_errorRepeats);
+  if (auto* mt = dynamic_cast<cXMTObjectImpl*>(o))
+    if (!mt->m_portalValues.empty()) h.floats("proute", mt->m_portalValues.data(), static_cast<int>(mt->m_portalValues.size()));
   ObjectModuleImpl* m = Globs_pObjectModule;
   h.i("sf1", m->GetSimFlag(o->m_id, ObjectModule__SimFlag{1}));
   h.i("sf2", m->GetSimFlag(o->m_id, ObjectModule__SimFlag{2}));

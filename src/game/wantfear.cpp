@@ -1,7 +1,8 @@
 // Port of game/wantfear.cpp (WantFearManager, WantFear::Bookmark / Tree / Node / Event) and the wants
 // and fears of game/neighbor.cpp (InitWantsFears, the bookmark lottery, ads, active slots, the HUD
 // icons), notifications (Neighbor::Notify, SatisfiedBy, ApplyReward, NeighborhoodImpl::NotifyAll*) and
-// forced trees (ForceNewTree, GetStoryTreeRoot). See wantfear.hpp for the data. Not ported: the dialog.
+// forced trees (ForceNewTree, GetStoryTreeRoot), the want/fear dialog (SpawnWantFearDialog). See
+// wantfear.hpp for the data.
 #include "simmy/types_gen.hpp"
 #include "simmy/unported_globals.hpp"
 
@@ -19,11 +20,11 @@ const short kNoTarget = 0;        // WantFear::kNoTarget 8050063E
 const int kMaxAdMax = 0x7f;       // WantFear::kMaxAdMax 80500640
 const unsigned int kWantsObjectGUID = 0x9e12bf3cu;
 const int kTotalAspirationMax = 999999;  // 804FDxxx kTotalAspirationMax (playerfamilyimpl.cpp)
-const short kEventBuildBuyCategory = 0x2ffb;         // WantFear::kEventBuildBuyCategory 80500644
-const short kEventBuildBuyWorth = static_cast<short>(0x9fd5);  // WantFear::kEventBuildBuyWorth 80500646
-const short kEventBuildBuyWorthPlatinum = 0x4c73;    // WantFear::kEventBuildBuyWorthPlatinum 8050064C
-const short kEventBuyXLights = static_cast<short>(0x96c8);     // WantFear::kEventBuyXLights 80500652
-const short kEventBuyXChairs = static_cast<short>(0xb53f);     // WantFear::kEventBuyXChairs 80500654
+const short kEventBuildBuyCategory = WantFearEvent::kBuildBuyCategory;
+const short kEventBuildBuyWorth = WantFearEvent::kBuildBuyWorth;
+const short kEventBuildBuyWorthPlatinum = WantFearEvent::kBuildBuyWorthPlatinum;
+const short kEventBuyXLights = WantFearEvent::kBuyXLights;
+const short kEventBuyXChairs = WantFearEvent::kBuyXChairs;
 
 inline unsigned int U32(const unsigned char* p) { return simmy::be32(p); }
 inline unsigned short U16(const unsigned char* p) { return simmy::be16(p); }
@@ -727,6 +728,38 @@ int Neighbor::SelectInactiveBookmark(bool fear, bool storyOnly) {
     m_bookmarks[pick].Clear();
     weights[pick] = 0;
   }
+}
+
+// 800CAB20
+// The want or fear just set in active slot `slot` as a modeless dialog (the HUD's MDI box): its short
+// text, its icon (the base shader) on its kind's backdrop, 32x32, for both players. Only for a selected
+// sim (either player's), with the HUD up, and not while player 1's camera director eases back from a
+// shot (CameraDirector +0x320).
+void Neighbor::SpawnWantFearDialog(unsigned int slot) const {
+  CameraDirector* d = _globals.CameraDirectorOf(0);  // DAT_80475EE4
+  if (d && d->m_field320 != 0) return;
+  if (slot >= 7 || m_active[slot] < 0 || !_gd.m_h2dTarget) return;
+  Neighbor* self = const_cast<Neighbor*>(this);
+  cXPersonImpl* person = NeighborPerson(self);  // GC: +0x18
+  if (!person) return;
+  cXPerson* p1 = _globals.GetSelectedPerson(0);  // DAT_80475E88
+  cXPerson* p2 = _globals.GetSelectedPerson(1);  // DAT_80475E8C
+  if (!((p1 && p1->AsObject() == person) || (p2 && p2->AsObject() == person))) return;
+  const Bookmark& b = m_bookmarks[m_active[slot]];
+  UIDialog dialog;
+  dialog.m_field14 = 1;
+  dialog.m_timeoutMs = -1;
+  dialog.m_players = 3;
+  const std::u16string text = b.GetText(self, false);
+  dialog.m_body.assign(text.begin(), text.end());
+  dialog.m_body.push_back(0);
+  dialog.m_iconId = b.GetBaseShader(self);
+  dialog.m_iconBg = static_cast<ERShader*>(_shaderman.AddRef(b.GetBackgroundShader(self), nullptr, 0));
+  dialog.m_iconW = 0x20;
+  dialog.m_iconH = 0x20;
+  if (std::getenv("SIMMY_WANTS_TRACE"))
+    std::printf("[wants] %s: dialog for slot %u \"%s\"\n", m_name, slot, std::string(text.begin(), text.end()).c_str());
+  if (!text.empty()) H2DTarget::SpawnModelessDialog(&dialog);
 }
 
 // 800CC380

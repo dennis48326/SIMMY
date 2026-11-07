@@ -758,10 +758,7 @@ void ActionQueue::AddActionToHUD(int index) {
   if (!shader && !resource) return;
   const unsigned int before = static_cast<unsigned int>(FindVisualInsertGUID(static_cast<unsigned int>(index)));
   if (H2DTarget* h2d = _gd.m_h2dTarget) {
-    const unsigned short* text = action.NameText();
-    std::u16string name;
-    for (const unsigned short* p = text; p && *p; ++p) name += static_cast<char16_t>(*p);
-    h2d->AddAction(m_hudPlayer, &action, name, shader, resource, before);
+    h2d->AddAction(m_hudPlayer, &action, action.GetName(), shader, resource, before);
   }
 }
 

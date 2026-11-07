@@ -23,6 +23,21 @@ struct WantFear__Notification {
   short m_count = 0;   // +0x04
 };
 
+// The events C++ code sends (WantFear:: constants in .sdata, 80500638..80500654); kGenericParam fills a
+// target or count the event does not use.
+namespace WantFearEvent {
+constexpr short kGenericParam = 0;                                      // 80500638
+constexpr short kBuildBuyCategory = 0x2ffb;                             // 80500644
+constexpr short kBuildBuyWorth = static_cast<short>(0x9fd5);            // 80500646
+constexpr short kFamilyFundsOfX = 0x1684;                               // 80500648
+constexpr short kFamilyFundsPlat = static_cast<short>(0xb902);          // 8050064A
+constexpr short kBuildBuyWorthPlatinum = 0x4c73;                        // 8050064C
+constexpr short kAddARoom = 0x1a40;                                     // 8050064E
+constexpr short kBuildWalls = 0x03ff;                                   // 80500650
+constexpr short kBuyXLights = static_cast<short>(0x96c8);               // 80500652
+constexpr short kBuyXChairs = static_cast<short>(0xb53f);               // 80500654
+}  // namespace WantFearEvent
+
 // 0x0C bytes. PC: the node is its index in its tree (GC: a WantFear::Node*; saved as the node's id,
 // which is its index), -1 for none.
 struct WantFear__Bookmark {

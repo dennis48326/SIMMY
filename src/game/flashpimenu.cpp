@@ -2,6 +2,7 @@
 // name/icon helpers; plus the PC stand-ins for the simulator side it calls (CollectInteractionsForObject
 // with ObjTestSim::AppendInteractionsForMenu, and starting the chosen interaction). See actionmenu.hpp.
 #include "simmy/types_gen.hpp"
+#include "simmy/classes/placement.hpp"
 #include "simmy/unported_globals.hpp"
 #include "simmy/classes/interaction.hpp"
 
@@ -234,15 +235,18 @@ void FlashPiMenu::CreateGoHereObjectForMenu() {
   };
   int x = round(info.m_x - static_cast<float>(_globals.m_fieldA4));  // DAT_80475E70
   int y = round(info.m_y - static_cast<float>(_globals.m_fieldA8));  // DAT_80475E74
-  SIMMY_STUB("FlashPiMenu::CreateGoHereObjectForMenu: person vtable 0x194 (PC: the tile's centre), "
-             "cXObjectImpl::CanPlace/Place (PC: put there)",
+  SIMMY_STUB("FlashPiMenu::CreateGoHereObjectForMenu: person vtable 0x194 FindGoodLocation (PC: the tile's centre)",
              0x8003A7F8);
   x = (x & ~0xf) | 8;
   y = (y & ~0xf) | 8;
-  impl->m_location[0] = x;
-  impl->m_location[1] = y;
-  impl->m_level = 1;
-  if (impl->m_instance) impl->m_instance->SetObjOrient();
+  // CanPlace there (level 1), then Place (its location, room id and model), else it goes.
+  const int at[2] = {x, y};
+  if (!ObjCanPlace(impl, at, 1, nullptr, 0)) {
+    module->KillObject(id);
+    m_destination = nullptr;
+    return;
+  }
+  ObjPlace(impl, at, 1, nullptr, 0);
   m_destination = impl;
 }
 
@@ -435,6 +439,9 @@ int StartMenuInteraction(const MenuInteraction& m) {
   if (!person || !m.object || !person->m_treeSim || m.entry < 0) return 0;
   Interaction action(person, m.object, m.entry);
   for (int k = 0; k < 4; ++k) action.m_stackVars[k] = m.vars[k];
+  // Its name as the menu showed it (ObjTestSim::MakeNewMenuItem puts a check tree's own item text in the
+  // interaction, +0x34; a plain entry's is its tree table name, as GetName would give).
+  action.m_name = m.name;
   const int r = person->AddAction(&action);
   const std::string who = person->DebugName();
   std::printf("[sim] %s queues \"%s\" on %s (menu): %s\n", who.c_str(), Narrow(m.name).c_str(), m.object->DebugName(),

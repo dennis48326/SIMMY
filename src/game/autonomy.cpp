@@ -231,6 +231,17 @@ float PiecewiseFn::Eval(float v) const {
 // ---------------------------------------------------------------------------------------------------
 // MotiveEffects
 
+// 8011EF40
+// The default curves (803DCC3C) unless its definition (+0x66) names a string set of its own
+// (MotiveCurveSet::LoadFromFile: no definition on the disc does).
+void cXPersonImpl::LoadMotiveEffects() {
+  if (!m_motiveEffects) m_motiveEffects = new MotiveEffects(this);
+  if (m_def && ERQuickdata::S16(m_def, 0x66) != 0)
+    SIMMY_STUB("cXPersonImpl::LoadMotiveEffects: curves from a string set file (MotiveCurveSet::LoadFromFile)", 0x8011EF40);
+  else
+    m_motiveEffects->LoadFromStringSet(kMotiveCurves, 9);
+}
+
 // 800C2F34
 // Nine identity curves (-100,-100)..(100,100) over the autonomy motives; LoadMotiveEffects replaces them.
 MotiveEffects::MotiveEffects(cXPerson* person) : m_person(person) {
@@ -401,11 +412,11 @@ int cXPersonImpl::TryFindBestAction(StackElem* frame) {
   const bool plumbBob = SelectedByPlayer(this);
   if (freeWill == 0 || (SelectedByPlayer(this) && freeWill == -1 && (!plumbBob || sFreeWill == 0))) return no("free will off");
 
-  MotiveEffects effects(this);
-  if (m_def && ERQuickdata::S16(m_def, 0x66) != 0)
-    SIMMY_STUB("cXPersonImpl::LoadMotiveEffects: curves from a string set file (MotiveCurveSet::LoadFromFile)", 0x8011EF40);
-  else
-    effects.LoadFromStringSet(kMotiveCurves, 9);
+  if (!m_motiveEffects) {  // PC: a person Initialize has not run for
+    m_motiveEffects = new MotiveEffects(this);
+    LoadMotiveEffects();
+  }
+  MotiveEffects& effects = *m_motiveEffects;
   const double base = effects.GetCurrentScore();
   const float minScore = GetPersonData(0x20) != 0 ? gMinAutonomyVisitorScore : gMinAutonomyFamilyScore;
   std::vector<ScoredInteraction> list;

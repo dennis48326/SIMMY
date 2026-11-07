@@ -443,7 +443,7 @@ void InteractorModule__SimInteractor::OnCommandPressed(InteractorModule__Interac
         // The person's location (vtable 0x344) in tiles: SnapToPos (vtable 0xC4).
         EVec3 p{static_cast<float>(t.GetY()), static_cast<float>(t.GetX()), 0.0f};
         m_pos = p;
-        SIMMY_STUB("SimInteractor::OnCommandPressed: CheckNewSimInSocialMode", 0x80213C60);
+        InteractorModule::CheckNewSimInSocialMode(static_cast<unsigned int>(m_player));
       }
       break;
     }

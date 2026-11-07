@@ -8,6 +8,7 @@
 #include "simmy/types_gen.hpp"
 #include "simmy/unported_globals.hpp"
 #include "simmy/roomresolve.hpp"
+#include "simmy/classes/placement.hpp"
 
 #include <cmath>
 #include <cstdlib>
@@ -1293,6 +1294,8 @@ void SAnimator2::handleFreeMoveWalkRunAnimation() {
     impl->m_location[1] = static_cast<int>(m_pos[0] + 0.5f);
     impl->m_location[0] = static_cast<int>(m_pos[1] + 0.5f);
     UpdateObjectRoomID(impl);  // GC: cXObjectImpl::SetLocation
+    // GC Place: the person is its new tile's object (the tile map; TrySetToNext kind 9 reads it).
+    if (Globs_pObjectModule && impl->m_data[2] == 0) Globs_pObjectModule->SetSiteTile(impl);
   }
 }
 
@@ -1883,6 +1886,84 @@ void SAnimator2::UpdateAnimationValidity() {}
 // 8005ED9C
 int SAnimator2::IsFollowing() { return m_routing != 0 ? 1 : 0; }
 
+// 8005E7CC
+// The person's path (cXPersonImpl::m_path, InitRoute's): walk it but its last point, then turn toward
+// that one. The walk style: the low-motive one (person not a pet), else object data 0x11 (GC: else an
+// auto run by AwarenessManager::AwarenessAutoRunCheck, not ported: none). PC: the walk itself is
+// BeginRoute's (moveAnimation); GC: the follow modes (a side step first for a short three-point path
+// unless +0x5F8), UpdatePortalMode, the optional motion animations.
+void SAnimator2::BeginFollow(float dist) {
+  (void)dist;
+  cXPersonImpl* p = dynamic_cast<cXPersonImpl*>(Impl(m_person));
+  if (!p) return;
+  const std::vector<TileListPoint>& pts = p->m_path.m_points;
+  std::vector<EVec2> route;
+  for (size_t i = 0; i + 1 < pts.size(); ++i) {
+    const EVec2 q{static_cast<float>(pts[i].p[1]), static_cast<float>(pts[i].p[0])};
+    // PC: a leg of no length (smoothing can leave two equal points) is not walked (the PC walker would
+    // turn toward it first).
+    if (!route.empty() && route.back().x == q.x && route.back().y == q.y) continue;
+    route.push_back(q);
+  }
+  float endDir = kNoDir;
+  if (pts.size() >= 2) {
+    const EVec2 last{static_cast<float>(pts.back().p[1]), static_cast<float>(pts.back().p[0])};
+    endDir = -std::atan2(last.y - route.back().y, last.x - route.back().x);
+  }
+  if (route.empty()) route.push_back(EVec2{static_cast<float>(getPersonX()), static_cast<float>(getPersonY())});
+  BeginRoute(route, endDir);
+  m_follow = 1;
+  int style;
+  if (m_lowMotive == 0 || p->IsPet()) style = p->GetData(0x11);
+  else if (m_lowMotive == 5) style = 2;
+  else if (m_lowMotive == 9) style = 3;
+  else style = 0;
+  if (style == 0 && m_followMode == 2) style = 4;
+  if (style != m_walkStyle) {
+    m_prevWalkStyle = m_walkStyle;
+    m_walkStyle = style;
+  }
+}
+
+// 8005EAB8
+int SAnimator2::FollowOneStep() {
+  m_sim->DrawSim(true);
+  if (m_sim->HasQueuedOperation()) return 2;
+  if (m_routing == 1) return 2;
+  if (m_routing != 2) return 0;
+  cXPersonImpl* p = dynamic_cast<cXPersonImpl*>(Impl(m_person));
+  if (!p) return 0;
+  int pos[2] = {static_cast<int>(m_pos[1] + 0.5f), static_cast<int>(m_pos[0] + 0.5f)};
+  p->m_path.FindNearestPoint(pos, -1);
+  const int x = getPersonX(), y = getPersonY();
+  const int ok = ObjCanPlace(p, pos, p->m_level, nullptr, 0);
+  if (!ok) {
+    pos[0] = y;
+    pos[1] = x;
+    SnapToGrid();
+  }
+  p->PlacePerson(pos);
+  setPersonDirection(m_dir);
+  return ok ? 1 : 0;
+}
+
+// 8005EC74
+// The follow ends: the default idle unless the main track idles already, back to standing; an auto run
+// is undone. True unless it was still walking. PC: a walk under way stops where it is.
+bool SAnimator2::EndFollow() {
+  if (!(MainTrackFlags() & 0x21)) StartDefaultIdle();
+  const int old = m_routing;
+  if (m_routing == 1) {
+    m_routeResult = -1;
+    setPersonDirection(m_dir);
+  }
+  m_routing = 0;
+  m_followMode = 0;
+  m_follow = 0;
+  m_route.clear();
+  return old != 1;
+}
+
 // 8005EDB4
 // A walk can always be interrupted (TryGotoRoutingSlot asks when the person should give way).
 RET_UNKNOWN SAnimator2::IsInterruptable() { return 1; }
@@ -1900,6 +1981,7 @@ float HeadingTo(const EVec2& a, const EVec2& b) { return -std::atan2(b.y - a.y, 
 // slowly, long routes run: StartAutoRun), the start at the person's location).
 // Follow modes used: 1 turning toward the first leg, 3 walking, 5 turning to the end facing.
 void SAnimator2::BeginRoute(const std::vector<EVec2>& points, float endDir) {
+  m_follow = 0;
   if (m_pendingAnim != 0) {
     _animman.DelRef(static_cast<unsigned int>(m_pendingAnim), EResourceManager__DelRefMode{1});
     m_pendingAnim = 0;
@@ -1941,7 +2023,7 @@ void SAnimator2::moveAnimation() {
   const float dt = ScaledDt();
   cXPersonImpl* impl = Impl(m_person);
   auto finish = [&] {
-    m_routing = 0;
+    m_routing = m_follow ? 2 : 0;  // a follow stays "done" until FollowOneStep places the person
     m_followMode = 0;
     m_routeResult = 1;
     m_route.clear();
@@ -1952,6 +2034,9 @@ void SAnimator2::moveAnimation() {
     impl->m_location[1] = static_cast<int>(m_pos[0] + 0.5f);
     impl->m_location[0] = static_cast<int>(m_pos[1] + 0.5f);
     UpdateObjectRoomID(impl);  // GC: cXObjectImpl::SetLocation
+    // PC: the tile map follows the moved location (GC: the location and the person's tile map entry
+    // stay at the last Place, FollowOneStep's), so a tile's object is where it names.
+    if (Globs_pObjectModule && impl->m_data[2] == 0) Globs_pObjectModule->SetSiteTile(impl);
   };
   if (m_followMode == 1) {
     const float desired = HeadingTo(EVec2{m_pos[0], m_pos[1]}, m_route[m_routeNode]);

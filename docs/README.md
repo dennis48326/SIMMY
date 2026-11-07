@@ -65,7 +65,7 @@ ported since (e.g. [`person.hpp`](../include/simmy/classes/person.hpp), [`livemo
 | Term | Meaning |
 |---|---|
 | GC | The GameCube original (`u2_ngc_release_dvd.elf`, The Sims 2 GC, build 1.mainline_SKU1.0.63). "GC behaviour" = what the original does |
-| PC stand-in / PC deviation | Code marked `PC:` that replaces or changes an original function (e.g. the build tools' glue, the A* router) |
+| PC stand-in / PC deviation | Code marked `PC:` that replaces or changes an original function (e.g. the build tools' glue, the route walker) |
 | aurora | The library that implements the Dolphin SDK (GX, PAD, CARD, VI, THP, OS) on SDL3 + Dawn (WebGPU). Pinned by `SIMMY_AURORA_TAG` |
 | Frame | One `EApp::SystemUpdate` (802E24B8): pads, UI, game state machines, draw. Paced to 60 Hz ("retraces") |
 | Retrace | 1/60 s; the game measures frame time in whole retraces (`EEngine::RetraceUpdate`) |

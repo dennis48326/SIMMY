@@ -10,12 +10,20 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 NeighborhoodImpl* Globs_pNeighborhood = nullptr;  // 804FDC10 Globs::pNeighborhood
 int Globs_iSaveFileVersion = 0x61;               // 804FDBF8 Globs::iSaveFileVersion
 int gMoneyForNewFamily = 20000;                  // NeighborhoodConstants "money for new family"
 float gArchValueMultiplier = 0.7f;               // NeighborhoodConstants "architecture value multiplier"
+// The other NeighborhoodConstants (the neighbourhood's family score, which this build never computes).
+int gNewFamilyStartHour = 7;
+float gPerfectFriendCount = 15.0f;
+float gHouseSizeWeight = 3.0f;
+float gYardScoreMultiplier = 0.33f;
+int gScorePerDirtyObject = 6;
+int gScorePerBrokenObject = 15;
 
 extern int g_loadedGameSlot;   // DAT_80476214 (game/memcardscreens.cpp)
 extern int g_loadedGameSlot2;  // DAT_80476218
@@ -42,15 +50,30 @@ struct NeighborListStream {
   void DoStream(ReconBuffer* b, int version) { DoPtrVectorStream(*m_list, b, version); }
 };
 
-// NeighborhoodConstants::UpdateConstants (800CC740): from the behaviour constants (FloatConstants, not
-// ported); PC: their defaults.
+// NeighborhoodConstants::UpdateConstants' values (group 4 of the global object file's float constants;
+// see the member below).
 bool sConstantsLoaded = false;
 void UpdateConstants() {
-  SIMMY_STUB("NeighborhoodConstants::UpdateConstants: FloatConstants (the defaults are used)", 0x800CC740);
-  gMoneyForNewFamily = 20000;
-  gArchValueMultiplier = 0.7f;
+  gArchValueMultiplier = GlobalFloatConstant(4, "architecture value multiplier", 0.7f);
+  gNewFamilyStartHour = static_cast<int>(GlobalFloatConstant(4, "new family start hour", 7.0f));
+  gPerfectFriendCount = GlobalFloatConstant(4, "perfect family friend count", 15.0f);
+  gHouseSizeWeight = GlobalFloatConstant(4, "weight of house size in overall score", 3.0f);
+  gMoneyForNewFamily = static_cast<int>(GlobalFloatConstant(4, "money for new family", 20000.0f));
+  gYardScoreMultiplier = GlobalFloatConstant(4, "yard score multiplier", 0.33f);
+  gScorePerDirtyObject = static_cast<int>(GlobalFloatConstant(4, "upkeep penalty per dirty object", 6.0f));
+  gScorePerBrokenObject = static_cast<int>(GlobalFloatConstant(4, "upkeep penalty per broken object", 15.0f));
+  if (std::getenv("SIMMY_SIM_TRACE"))
+    std::printf("[hood] constants: arch x%.2f, start hour %d, friends %.0f, house size weight %.1f, new family $%d, "
+                "yard x%.2f, dirty %d, broken %d\n", gArchValueMultiplier, gNewFamilyStartHour, gPerfectFriendCount,
+                gHouseSizeWeight, gMoneyForNewFamily, gYardScoreMultiplier, gScorePerDirtyObject, gScorePerBrokenObject);
 }
 }  // namespace
+
+// 800CC740
+// The neighbourhood tuning from group 4 (GlobalConstantsClient(4), GetNeighborhoodConstantsClient) of
+// the global object file's float constants (FloatConstants::Load / Get), with the code's defaults. PC:
+// NeighborhoodImpl::Load runs the body directly (the client object is not made).
+void NeighborhoodConstants::UpdateConstants() { ::UpdateConstants(); }
 
 // ---------------------------------------------------------------------------------------------------
 // Neighborhood
@@ -207,14 +230,16 @@ void NeighborhoodImpl::UpdateFamilyNumbers() {
 }
 
 // 800CD930
-// Into the file (its neighbourhood resources replaced): 'NGBH' (in free play with the visited house as
-// loaded), 'NBRS', each family, 'TATT' and the CAS-made sims ('User'). GC: first the house number
-// into variable 2 when the simulator runs a lot, and the played family's house value from the
-// simulator (neither ported), each family's friend count.
+// Into the file (its neighbourhood resources replaced): the house number into variable 2 when the
+// simulator runs a lot (its global 0x1A), 'NGBH' (in free play with the visited house as loaded),
+// 'NBRS'; each family (the played house's family first gets its house value from the simulator:
+// objects + architecture x gArchValueMultiplier + the lot; every family's friend count is brought up
+// to date), 'TATT' and the CAS-made sims ('User').
 int NeighborhoodImpl::Save(NghResFile* file, int version) {
+  cSimulatorImpl* sim = Globs_pSimulator;
   file->FlushCharacterData(false);
   file->FlushNeighborData();
-  SIMMY_STUB("NeighborhoodImpl::Save: the simulator (variable 2, the house value, friend counts)", 0x800CD930);
+  if (sim && sim->GetGlobal(0x1a) != 0) m_vars[kVarHouse] = static_cast<short>(m_houseNumber);
   const short visiting = static_cast<short>(GetNeighborhoodVar(kVarVisiting));
   if (_gd.m_fieldE8) SetNeighborhoodVar(kVarVisiting, m_visiting);
   int r = ReconSaveObject(this, file, kNeighborhoodResType, 1, version);
@@ -223,7 +248,15 @@ int NeighborhoodImpl::Save(NghResFile* file, int version) {
     NeighborListStream list{&m_neighbors};
     r = ReconSaveObject(&list, file, kNeighborsResType, 1, version);
   }
-  for (FamilyImpl* f : m_families) f->SaveFamily(file, version);
+  for (FamilyImpl* f : m_families) {
+    if (sim && f->GetHouseNumber() != 0 && f->GetHouseNumber() == m_houseNumber) {
+      const int objects = sim->GetObjectsValue();
+      const float arch = static_cast<float>(sim->GetArchValue()) * gArchValueMultiplier;
+      f->SetHouseValue(objects + static_cast<int>(arch) + sim->GetLotValue());
+    }
+    GetFamilyFriendsCount(f);
+    f->SaveFamily(file, version);
+  }
   if (Globs_pObjectFolder) {
     Globs_pObjectFolder->Save(file);
     Globs_pObjectFolder->SaveUserData(file);
@@ -520,15 +553,21 @@ int NeighborhoodImpl::RemoveFamily(Family* family) {
 }
 
 // 800CF028
-// `n` joins the family (its family number set, the family's friend count to redo). GC: also the
-// person on the lot gets the family number (object data 0x3D) and GlobalDispatch(0xE4). 0: joined.
+// `n` joins the family: the visitor types of the people on the lot are redone; the person on the lot
+// (if any) and the neighbour get the family number (data 0x3D) and data 0x43 cleared (the person's
+// object data: SetPersonData, vtable 0x144), the family's friend count is to be redone, GlobalDispatch
+// 0xE4 (no listener in the port). 0: joined.
 int NeighborhoodImpl::AddToFamily(Neighbor* n, Family* family) {
   auto* f = static_cast<FamilyImpl*>(family);
   if (f->TestMember(n->GetGUID())) return -1;
   f->AddMember(n->GetGUID());
   UpdateInstanceVisitorTypes();
   if (!f->GetMemberByGUID(n->GetGUID())) return -1;
-  SIMMY_STUB("NeighborhoodImpl::AddToFamily: the person on the lot (object data 0x3D/0x43), GlobalDispatch", 0x800CF028);
+  if (cXPerson* p = Globs_pObjectModule ? Globs_pObjectModule->GetPersonByGUID(n->GetGUID()) : nullptr)
+    if (auto* impl = dynamic_cast<cXPersonImpl*>(p)) {
+      impl->SetPersonData(0x3d, static_cast<short>(f->GetNumber()));
+      impl->SetPersonData(0x43, 0);
+    }
   n->m_pers[0x3d] = static_cast<short>(f->GetNumber());
   n->m_pers[0x43] = 0;
   f->m_friendCountDirty = 1;
@@ -536,11 +575,14 @@ int NeighborhoodImpl::AddToFamily(Neighbor* n, Family* family) {
 }
 
 // 800CF1CC
+// `n` leaves its family: the person on the lot (if any) and the neighbour lose the family number (data
+// 0x3D), the visitor types are redone, the friend count is to be redone, GlobalDispatch 0xE4.
 int NeighborhoodImpl::RemoveFromFamily(Neighbor* n) {
   if (n->m_pers[0x3d] == 0) return -1;
   FamilyImpl* f = GetFamily(n->m_pers[0x3d]);
   if (!f || !f->GetMemberByGUID(n->GetGUID())) return -1;
-  SIMMY_STUB("NeighborhoodImpl::RemoveFromFamily: the person on the lot (object data 0x3D), GlobalDispatch", 0x800CF1CC);
+  if (cXPerson* p = Globs_pObjectModule ? Globs_pObjectModule->GetPersonByGUID(n->GetGUID()) : nullptr)
+    if (auto* impl = dynamic_cast<cXPersonImpl*>(p)) impl->SetPersonData(0x3d, 0);
   n->m_pers[0x3d] = 0;
   f->RemoveMember(n->GetGUID());
   UpdateInstanceVisitorTypes();
@@ -746,9 +788,44 @@ void NeighborhoodImpl::SetPlayerFamilyInHouse(int house) {
 }
 
 // 800D12E0
+// Each person on the lot gets its visitor type (person data 0x20): a resident of the house (HouseImpl::
+// IsResident) 0, anyone else keeps theirs (none: 1, a visitor). GC: the module's people list; PC: the
+// people by id.
 RET_UNKNOWN NeighborhoodImpl::UpdateInstanceVisitorTypes() {
-  SIMMY_STUB("NeighborhoodImpl::UpdateInstanceVisitorTypes (the people on the lot)", 0x800D12E0);
+  ObjectModuleImpl* module = Globs_pObjectModule;
+  const int count = module ? module->GetNumObjects() : 0;
+  for (int i = 1; i <= count; ++i) {
+    cXObject* o = module->GetObjectFromID(i);
+    cXObjectImpl* impl = o ? o->GetObjectImplementation() : nullptr;
+    cXPersonImpl* p = impl && impl->GetType() == 2 ? dynamic_cast<cXPersonImpl*>(impl) : nullptr;
+    if (!p) continue;
+    short type = static_cast<short>(p->GetPersonData(0x20));
+    if (type == 0) type = 1;
+    if (IsResidentOfHouse(p)) type = 0;
+    p->SetPersonData(0x20, type);
+  }
   return 0;
+}
+
+// HouseImpl::IsResident (800BC00C; house.cpp is a PC stand-in): a member of the house's family, or
+// outside free play (DAT_80475C6C) of family 1 (the player family).
+bool NeighborhoodImpl::IsResidentOfHouse(cXPersonImpl* p) {
+  // PC: a player's selected sim lives here. On GC it is always a family member (player 2's sim is the
+  // roommate PreGameState::InsertPlayer2Roommate moved in); the port's fallback for a game started
+  // without one (MoveFamilyOntoLot: a new neighbour in no family) would otherwise be a visitor whose
+  // trees send it home.
+  for (int player = 0; p && player < 2; ++player)
+    if (cXPerson* s = _globals.GetSelectedPerson(player))
+      if (s->AsObject() == p) return true;
+  Neighbor* n = p ? FindNeighborByID(p->GetPersonData(0x1f)) : nullptr;
+  if (!n) return false;
+  FamilyImpl* house = GetFamilyInHouse(GetHouseNumber());
+  if (house && house->TestMember(n->GetGUID())) return true;
+  if (_gd.m_fieldE8 == 0) {
+    FamilyImpl* player = GetFamily(1);
+    if (player && player->TestMember(n->GetGUID())) return true;
+  }
+  return false;
 }
 
 // 800D13D4

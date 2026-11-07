@@ -1,6 +1,6 @@
 // Port of game/interaction.cpp and the ActionQueue part of game/person.cpp: interactions (an object's
-// tree table entry chosen for a person) and a person's queue of them. Not ported: names (BString2,
-// SetName), streaming, text colours, the HUD's queue icons (AddActionToHUD / RemoveActionFromHUD).
+// tree table entry chosen for a person, with its name) and a person's queue of them. Not ported: text
+// colours. The HUD's queue icons (AddActionToHUD / RemoveActionFromHUD) are in acttarget.cpp.
 #include "simmy/types_gen.hpp"
 #include "simmy/unported_globals.hpp"
 
@@ -33,6 +33,7 @@ Interaction& Interaction::operator=(const Interaction& other) {
   m_priority = other.m_priority;
   m_tree = other.m_tree;
   m_attenuation = other.m_attenuation;
+  m_name = other.m_name;
   m_id = other.m_id;
   m_flags = other.m_flags;
   return *this;
@@ -162,6 +163,37 @@ void Interaction::DoStream(ReconBuffer* b, int) {
 // 800C1FF0 Interaction::GetFlags (inline)
 // 800C1FF8 Interaction::SetFlags (inline)
 
+// 800C18B0
+const std::u16string& Interaction::GetName() const {
+  if (m_name.empty())
+    if (const unsigned char* e = GetEntry()) {
+      if (ERQuickdata::U32(e, 0x10) & 0x80) m_name = u"*";  // TreeTableEntryQuickData::GetDebugOnly
+      for (const unsigned short* c = ERQuickdata::LocString(e, 0x1c); c && *c; ++c) m_name += static_cast<char16_t>(*c);
+    }
+  m_flags &= ~static_cast<unsigned int>(kNameChanged);
+  return m_name;
+}
+
+// 800C1960
+void Interaction::SetName(const std::u16string& name) {
+  m_name = name;
+  m_flags |= kNameChanged;
+}
+
+// 800C199C
+void Interaction::SetName(int guid, int index) {
+  ObjSelector* selector = Globs_pObjectFolder ? Globs_pObjectFolder->GetSelectorByGUID(guid) : nullptr;
+  const unsigned char* file = selector ? SelectorTreeTabResFile(selector) : nullptr;
+  const auto* tables = file ? static_cast<const unsigned char*>(ERQuickdata::Ptr(file, 0x24)) : nullptr;
+  if (!tables || ERQuickdata::U32(tables - 4, 0) == 0) return;
+  const auto* entries = static_cast<const unsigned char*>(ERQuickdata::Ptr(tables, 0));
+  const unsigned int n = entries ? ERQuickdata::U32(entries - 4, 0) : 0;
+  if (index < 0 || static_cast<unsigned int>(index) >= n) return;
+  std::u16string name;
+  for (const unsigned short* c = ERQuickdata::LocString(entries + index * 0x24, 0x1c); c && *c; ++c) name += static_cast<char16_t>(*c);
+  SetName(name);
+}
+
 const unsigned short* Interaction::NameText() const {
   const unsigned char* e = GetEntry();
   return e ? ERQuickdata::LocString(e, 0x1c) : nullptr;
@@ -185,6 +217,25 @@ int ActionQueue::CountVisible() const {
     }
   }
   return count;
+}
+
+// 8011A0E8
+bool ActionQueue::SetActionText(const std::u16string& text, unsigned int index) {
+  if (index >= Count()) return false;
+  At(index).SetName(text);
+  return true;
+}
+
+// 8011A150
+bool ActionQueue::SetIconObject(cXObject* object, unsigned int index) {
+  if (index >= Count()) return false;
+  Interaction& a = At(index);
+  if (a.GetIconObject() != object) {
+    a.SetIconObject(object);
+    if (!IsVisibleAction(a)) RemoveActionFromHUD(static_cast<int>(index));
+    else AddActionToHUD(static_cast<int>(index));
+  }
+  return true;
 }
 
 // 8011A210

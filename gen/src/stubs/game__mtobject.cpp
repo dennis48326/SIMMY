@@ -19,7 +19,6 @@ void cXMTObjectImpl::RemoveFromDynamic() { SIMMY_STUB("cXMTObjectImpl::RemoveFro
 void cXMTObjectImpl::UpdateAllAdjacecy() { SIMMY_STUB("cXMTObjectImpl::UpdateAllAdjacecy(void)", 0x800C7364); }
 void cXMTObjectImpl::UpdateDynAdjacency() { SIMMY_STUB("cXMTObjectImpl::UpdateDynAdjacency(void)", 0x800C7434); }
 void cXMTObjectImpl::MergeInPlace() { SIMMY_STUB("cXMTObjectImpl::MergeInPlace(void)", 0x800C7690); }
-RET_UNKNOWN cXMTObjectImpl::GetAverageLocation() const { SIMMY_STUB("cXMTObjectImpl::GetAverageLocation(void) const", 0x800C7884); return {}; }
 cXMTObject::cXMTObject(int) { SIMMY_STUB("cXMTObject::cXMTObject(int)", 0x800C7A4C); }
 void cXMTObject::setMTObjectImpl(cXMTObjectImpl *) { SIMMY_STUB("cXMTObject::setMTObjectImpl(cXMTObjectImpl *)", 0x800C7CB0); }
 void cXMTObject::setPortalImpl(cXPortalImpl *) { SIMMY_STUB("cXMTObject::setPortalImpl(cXPortalImpl *)", 0x800C7CC0); }

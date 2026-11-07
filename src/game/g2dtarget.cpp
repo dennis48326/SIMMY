@@ -188,7 +188,17 @@ bool UIScreenManager::IsUIScreenUnloaded(int id) { return FindRecordIndexByID(id
 // 801E6F2C
 UIDialog::UIDialog() = default;
 // 801B7100
-UIDialog::~UIDialog() = default;
+// Its icon and the icon's backdrop are let go.
+UIDialog::~UIDialog() {
+  if (m_icon) {
+    m_icon->DelRef();
+    m_icon = nullptr;
+  }
+  if (m_iconBg) {
+    m_iconBg->DelRef();
+    m_iconBg = nullptr;
+  }
+}
 // 801B71B4
 void UIDialog::SpawnDialog() {
   if (G2DTarget* g = TheG2D()) g->SpawnDialog(this);

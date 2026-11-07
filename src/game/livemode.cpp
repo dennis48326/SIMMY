@@ -1615,7 +1615,7 @@ void LiveModeInitState::Update(float) {
         gbUpdateUI = 1;
         LoadingScreenStateMachine::LoadFinishing();
       }
-      SIMMY_STUB("LiveModeInitState::Update: Globs::pHouse vtable 0x68", 0x8008BD2C);
+      if (Globs_pHouse) Globs_pHouse->EnterLiveMode();  // vtable 0x6C
       m_stage = 28;
       [[fallthrough]];
     case 28:

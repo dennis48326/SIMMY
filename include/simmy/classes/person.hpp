@@ -2,10 +2,10 @@
 // @class cXPersonImpl
 // A sim in the simulation (game/person.cpp): cXPerson, the interface the 3D side (ESim) and the camera
 // ask, and cXPersonImpl, the person object. GC: cXPersonImpl is also the behaviour (motives, wants and
-// fears, interactions, routing) and owns the sim's animator (SAnimator2, +0x3F4). Ported: motives,
-// the behaviour stack's person primitives (animate, go to a routing slot or relative spot, motive
-// deltas, idle for input); not: wants and fears, the action queue, autonomy, social mode. PC: its
-// description comes from whoever made it (see PlayerSimDescription in person.cpp).
+// fears, interactions, routing) and owns the sim's animator (SAnimator2, +0x3F4). Ported: motives and
+// the mood, the action queue, the behaviour stack's person primitives, autonomy (autonomy.cpp), social
+// mode (socialmode.cpp), service NPC records; the wants and fears are its neighbour's (wantfear.cpp).
+// PC: its description comes from whoever made it (see PlayerSimDescription in person.cpp).
 #pragma once
 #include <vector>
 
@@ -20,7 +20,8 @@ struct cXPerson {
   RET_UNKNOWN CAST_IMPL();  // 8012C698
   virtual int GetPersonData(int) const { return 0; }                       // 0x13C
   virtual CasSimDescriptionS2C* GetSimDescription() { return nullptr; }     // 0x154
-  virtual int GetServiceNPC() { return 0; }                                // 0x164
+  // The service NPC's "Sim::NPC" row (see ObjSelector::m_npc); null for other people.
+  virtual const unsigned char* GetServiceNPC() { return nullptr; }         // 0x164
   virtual SAnimator2* GetSAnimator() const { return nullptr; }             // 0x18C
   virtual int IsGhost() { return 0; }                                      // 0x21C
   virtual int IsInvisible() { return 0; }                                  // 0x23C
@@ -39,7 +40,7 @@ struct cXPersonImpl : public cXObjectImpl, public cXPerson {
   int GetPersonData(int index) const override;  // 8012C758
   SAnimator2* GetSAnimator() const override;  // 8012C7EC
   CasSimDescriptionS2C* GetSimDescription() override;  // 8012C8C0
-  int GetServiceNPC() override;  // 8012C8D0
+  const unsigned char* GetServiceNPC() override;  // 8012C8D0
   int IsInvisible() override;  // 8012C8E0
   int IsGreen() override;  // 8012C8EC
   int IsGhost() override;  // 8012C8F8
@@ -50,6 +51,7 @@ struct cXPersonImpl : public cXObjectImpl, public cXPerson {
   void GetNextQueueStr(int);  // 8011AD9C
   void Reset(bool);  // 8011EB78
   void PostLoad(int, bool);  // 8011EC7C
+  // Its motive effects' curves: the defaults (803DCC3C), or a string set file (definition +0x66).
   void LoadMotiveEffects();  // 8011EF40
   void PreSave();  // 8011F06C
   int TrySetMotiveDelta(StackElem* frame, const unsigned char* params);  // 8011F0BC
@@ -62,16 +64,23 @@ struct cXPersonImpl : public cXObjectImpl, public cXPerson {
   // Routes to `slot` of the frame's stack object over several ticks (the frame's primitive state):
   // 1 there, 0 failed, 2 on its way.
   int TryGotoRoutingSlot(StackElem* frame, RoutingSlot* slot);  // 80120640
-  RET_UNKNOWN AskOthersToMove(XRoute *);  // 80122120
-  bool MoveOutOfWay(int);  // 80122AAC
-  RET_UNKNOWN MoveOutOfWay(XRoute *, TileList &);  // 80122E00
+  // A person in the way of `route` (not one a player steers) is asked to move out of it (MoveOutOfWay).
+  int AskOthersToMove(XRoute* route);  // 80122120
+  // Pushes the "move out of the way" interaction (an object of GUID 0x7C4 here, its slot a ring of 1..5
+  // tiles) at `priority`.
+  bool MoveOutOfWay(int priority);  // 80122AAC
+  // Asked to step off `path` (another's route): the same, to either side of where the path crosses it.
+  int MoveOutOfWay(XRoute* route, TileList& path);  // 80122E00
   XRoute* GetCurrentRoute();  // 80123704
-  RET_UNKNOWN InitRoute(XRoute *);  // 8012373C
+  // The path to `route`'s best reachable goal into m_path with the facing point: 2 walk it, 1 there (in
+  // the goal's seat), 3 the seat's sit tree was pushed, 0 none (the route's failure says why).
+  int InitRoute(XRoute* route);  // 8012373C
   // The go-relative primitive (0x1B): to a spot next to the stack object, operand +2 the side
   // (-1/7..: any, -2 on top, 0..7 a direction, 1/3/5/7 the two beside it), +3 the facing (-1 any, -2
   // toward it, 0..7), +6 flags (2 clear: failure feedback, 4 different altitudes).
   int TryGotoRelative(StackElem* frame, const unsigned char* params);  // 80124370
-  RET_UNKNOWN TryRoomRouting(XRoute *);  // 80124698
+  // To another room: the best portal's tree (entry 0xF) is pushed (1), or none (0).
+  int TryRoomRouting(XRoute* route);  // 80124698
   RET_UNKNOWN TryGetReachInfo(StackElem *, XPrimParam *, cXObject **, cXObject **, int *, float *);  // 8012479C
   RET_UNKNOWN TryReach(StackElem *, XPrimParam *);  // 801249F4
   RET_UNKNOWN NetTrySnapTo(StackElem *, XPrimParam *);  // 80124A4C
@@ -98,7 +107,8 @@ struct cXPersonImpl : public cXObjectImpl, public cXPerson {
   // trees give up), a queued one skipped. 1: found.
   int RemoveAction(int id);  // 80125E64
   RET_UNKNOWN HasQueuedActionOfPri(int) const;  // 80125FE8
-  RET_UNKNOWN CancelLastAction();  // 8012606C
+  // B: the last queued action (or the running one) is cancelled. 1: removed.
+  int CancelLastAction();  // 8012606C
   int CancelAllActions();  // 80126194
   int CancelAllButLastActions();  // 801262B0
   Interaction* GetIndAction(int index, bool includeCurrent);  // 80126360
@@ -131,6 +141,8 @@ struct cXPersonImpl : public cXObjectImpl, public cXPerson {
   void AttachToHUD(bool);  // 80129804
   RET_UNKNOWN IsPersonInFamily(int) const;  // 80129878
   void ForceLocation();  // 801298E8
+  // cXPersonImpl::Place (80128294, vtable 0x13C) at `pos` (FTilePt) on its level, out of any container.
+  void PlacePerson(const int pos[2]);
   int GosubObjectTree(cXObject* object, const short* params, short tree, bool setIcon) override;  // 80129934
   // An object tree the person runs (GosubObjectTree) returned: the object's user count (data 0x3E) drops.
   void StackJustPopped();  // 80129C40
@@ -142,13 +154,14 @@ struct cXPersonImpl : public cXObjectImpl, public cXPerson {
   void DeleteTopAction();  // 8012AD28
   void ActionSkipped(Interaction &);  // 8012AD98
   void DumpDestList(char *);  // 8012AE88
+  // Its sleep state (motive 0xB) below -30.
   bool IsSleeping();  // 8012B1B8
   bool IsDog();  // 8012B1D4
   bool IsCat();  // 8012B254
   bool IsMonkey();  // 8012B2D4
-  RET_UNKNOWN IsPet();  // 8012B354
+  int IsPet();  // 8012B354
   bool IsChild();  // 8012B42C
-  RET_UNKNOWN IsMale();  // 8012B4AC
+  int IsMale();  // 8012B4AC
   RET_UNKNOWN IsFemale();  // 8012B528
   RET_UNKNOWN IsAdult();  // 8012B564
   void InvalidateRoutes();  // 8012B5A0
@@ -163,7 +176,8 @@ struct cXPersonImpl : public cXObjectImpl, public cXPerson {
   static void Turn(int);  // 8012B6D8
   RET_UNKNOWN IsModelLoaded();  // 8012B754
   RET_UNKNOWN IsPersonDying();  // 8012B784
-  void SetCurrentActionText(BString2 &);  // 8012B804
+  // The current action's name (the head of the queue).
+  void SetCurrentActionText(const std::u16string& text);  // 8012B804
   void SetFirstPlayerInSocialMode(bool);  // 8012B82C
   void SetSecondPlayerInSocialMode(bool);  // 8012B834
   void SetWaitingForSocialMode(bool);  // 8012B8C4
@@ -204,7 +218,7 @@ struct cXPersonImpl : public cXObjectImpl, public cXPerson {
   void SetIsAlien(bool);  // 8012C950
   RET_UNKNOWN GetVisibility();  // 8012C978
   Motives* GetMotives() { return &m_motives; }  // 8012C980
-  RET_UNKNOWN GetMotiveEffects();  // 8012C988
+  MotiveEffects* GetMotiveEffects() { return m_motiveEffects; }  // 8012C988
   RET_UNKNOWN GetRecording();  // 8012C990
   RET_UNKNOWN GetRecordDuration();  // 8012C998
   void SetRecordDuration(int);  // 8012C9A0
@@ -214,11 +228,11 @@ struct cXPersonImpl : public cXObjectImpl, public cXPerson {
   RET_UNKNOWN GetRecordCurTicks();  // 8012C9C0
   RET_UNKNOWN GetRecordTicksElapsed();  // 8012C9C8
   RET_UNKNOWN GetRecordSkill();  // 8012C9D0
-  RET_UNKNOWN GetRouteStackSize();  // 8012C9D8
+  int GetRouteStackSize() { return static_cast<int>(m_routes.size()); }  // 8012C9D8
   void SetChangingOutfitMode(bool);  // 8012C9F8
   int GetLastMotiveUpdateTick() const { return m_lastMotiveTick; }  // 8012CA00
   void SetLastMotiveUpdateTick(int tick) { m_lastMotiveTick = tick; }  // 8012CA08
-  RET_UNKNOWN IgnoringObject();  // 8012CA10
+  cXObject* IgnoringObject() { return m_ignoringObject; }  // 8012CA10
   void SetIgnoringObject(cXObject *);  // 8012CA18
   void ClearIgnoringObject();  // 8012CA20
   RET_UNKNOWN IsInSocialMode();  // 8012CA2C
@@ -258,8 +272,14 @@ struct cXPersonImpl : public cXObjectImpl, public cXPerson {
   std::vector<GosubObject> m_gosubObjects;
   ActionQueue m_actionQueue;                  // +0x130 (head +0x3D8, tail +0x3DC)
   int m_hasCurrentAction = 0;                 // +0x534 the queue's head is running
+  cXObject* m_ignoringObject = nullptr;       // +0x53C the object it routes through (SetIgnoringObject)
   short m_idleAnimateCount = -0x8000;         // +0x540 TryIdleAnimate's count (0x8000: none)
+  int m_firstInSocialMode = 0;                // +0x544 SetFirstPlayerInSocialMode
+  int m_secondInSocialMode = 0;               // +0x548 SetSecondPlayerInSocialMode
+  int m_waitingForSocialMode = 0;             // +0x54C SetWaitingForSocialMode
   SAnimator2* m_animator = nullptr;           // +0x3F4
+  TileList m_path;                            // +0x3F8 the way being walked (InitRoute; the animator follows it)
+  MotiveEffects* m_motiveEffects = nullptr;   // +0x408 (made by Initialize; autonomy's curves)
   std::vector<XRoute> m_routes;               // +0x40C the routes being walked (GC: a stack of them)
   CasSimDescriptionS2C* m_desc = nullptr;     // GC: the selector's (+0x8C) neighbour description (+0x8C)
   float m_pos[2] = {};                        // PC: where it stands (tiles, x and y)
@@ -284,3 +304,5 @@ int PushInteraction(cXPersonImpl* person, cXObjectImpl* object, const char* pick
 float PlayerMotive(int player, int index);
 // PC development aid (SIMMY_SIM_TRACE): player `player`'s sim's motives and tree stack.
 void TraceSelectedPerson(int player);
+// A service NPC record's kind (+4: 0 adult, 1 child, 2 dog, 3 cat, 4 monkey); -1 for none.
+int ServiceNPCKind(const unsigned char* npc);

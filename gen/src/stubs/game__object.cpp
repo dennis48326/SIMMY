@@ -1,7 +1,6 @@
 // GENERATED stubs for unported functions of game/object.cpp. Do not edit.
 #include "simmy/types_gen.hpp"
 
-RET_UNKNOWN cXObject::GetPersonWidth() { SIMMY_STUB("cXObject::GetPersonWidth(void)", 0x800D95EC); return {}; }
 RET_UNKNOWN cXObject::GetFreeWill() { SIMMY_STUB("cXObject::GetFreeWill(void)", 0x800D95F4); return {}; }
 RET_UNKNOWN cXObject::GetAutoCenter() { SIMMY_STUB("cXObject::GetAutoCenter(void)", 0x800D95FC); return {}; }
 void cXObject::SetAutoCenter(bool) { SIMMY_STUB("cXObject::SetAutoCenter(bool)", 0x800D9604); }
@@ -17,7 +16,6 @@ void cXObjectImpl::SetHilite(int) { SIMMY_STUB("cXObjectImpl::SetHilite(int)", 0
 void cXObject::SetFreeWill(bool) { SIMMY_STUB("cXObject::SetFreeWill(bool)", 0x800DB954); }
 void cXObject::SetGlobalFreeWillOverride(bool) { SIMMY_STUB("cXObject::SetGlobalFreeWillOverride(bool)", 0x800DB9A0); }
 void cXObjectImpl::UpdateAge() { SIMMY_STUB("cXObjectImpl::UpdateAge(void)", 0x800DBB18); }
-RET_UNKNOWN cXObjectImpl::GetObstacleAtLocation(FTilePt &, int, bool) { SIMMY_STUB("cXObjectImpl::GetObstacleAtLocation(FTilePt &, int, bool)", 0x800DC968); return {}; }
 RET_UNKNOWN cXObjectImpl::GetRootObject(FTilePt &, int) { SIMMY_STUB("cXObjectImpl::GetRootObject(FTilePt &, int)", 0x800DCA2C); return {}; }
 RET_UNKNOWN cXObjectImpl::GetPlacementInfo(FTilePt *, int *, cXObject **, short *, bool *) { SIMMY_STUB("cXObjectImpl::GetPlacementInfo(FTilePt *, int *, cXObject **, short *, bool *)", 0x800DCACC); return {}; }
 void cXObjectImpl::GetPlacementSpec(PlacementSpec *) { SIMMY_STUB("cXObjectImpl::GetPlacementSpec(PlacementSpec *)", 0x800DCB78); }
@@ -46,7 +44,6 @@ void cXObjectImpl::ForceLocation() { SIMMY_STUB("cXObjectImpl::ForceLocation(voi
 double cXObjectImpl::GetSlotHeight(int) { SIMMY_STUB("cXObjectImpl::GetSlotHeight(int)", 0x800DFBFC); return {}; }
 void cXObjectImpl::GetTypeName(BString &) { SIMMY_STUB("cXObjectImpl::GetTypeName(BString &)", 0x800DFCEC); }
 double ApproxSqrt(float) { SIMMY_STUB("ApproxSqrt(float)", 0x800DFDE8); return {}; }
-double cXObjectImpl::CalcDistanceWithPentalties(cXObject *) { SIMMY_STUB("cXObjectImpl::CalcDistanceWithPentalties(cXObject *)", 0x800E0080); return {}; }
 void cXObjectImpl::CalcShortDistance(FTilePt *) { SIMMY_STUB("cXObjectImpl::CalcShortDistance(FTilePt *)", 0x800E03A8); }
 void cXObjectImpl::CalcDistance(cXObject *) { SIMMY_STUB("cXObjectImpl::CalcDistance(cXObject *)", 0x800E041C); }
 RET_UNKNOWN cXObjectImpl::ReconType() { SIMMY_STUB("cXObjectImpl::ReconType(void)", 0x800E0F34); return {}; }
@@ -58,8 +55,6 @@ RET_UNKNOWN cXObjectImpl::IsDeletedByEvict() { SIMMY_STUB("cXObjectImpl::IsDelet
 RET_UNKNOWN cXObjectImpl::IsFromCatalog() { SIMMY_STUB("cXObjectImpl::IsFromCatalog(void)", 0x800E225C); return {}; }
 RET_UNKNOWN cXObjectImpl::ShouldAutoRotate() { SIMMY_STUB("cXObjectImpl::ShouldAutoRotate(void)", 0x800E2364); return {}; }
 void cXObjectImpl::UpdateSimFlags() { SIMMY_STUB("cXObjectImpl::UpdateSimFlags(void)", 0x800E2748); }
-RET_UNKNOWN cXObjectImpl::GetWallBlockFlags() { SIMMY_STUB("cXObjectImpl::GetWallBlockFlags(void)", 0x800E2848); return {}; }
-RET_UNKNOWN cXObjectImpl::GetAverageLocation() const { SIMMY_STUB("cXObjectImpl::GetAverageLocation(void) const", 0x800E2A68); return {}; }
 RET_UNKNOWN cXObjectImpl::IsSpriteVisible(short) { SIMMY_STUB("cXObjectImpl::IsSpriteVisible(short)", 0x800E2B18); return {}; }
 RET_UNKNOWN cXObjectImpl::SyncObjectIsReady(signed char) { SIMMY_STUB("cXObjectImpl::SyncObjectIsReady(signed char)", 0x800E2B70); return {}; }
 RET_UNKNOWN cXObjectImpl::SetSyncObject(signed char) { SIMMY_STUB("cXObjectImpl::SetSyncObject(signed char)", 0x800E2D34); return {}; }
@@ -110,8 +105,6 @@ void cXObjectImpl::GetFnTable() { SIMMY_STUB("cXObjectImpl::GetFnTable(void)", 0
 RET_UNKNOWN cXObjectImpl::IsOccupied() { SIMMY_STUB("cXObjectImpl::IsOccupied(void)", 0x800EACE8); return {}; }
 RET_UNKNOWN cXObjectImpl::IsPortal() { SIMMY_STUB("cXObjectImpl::IsPortal(void)", 0x800EAD18); return {}; }
 RET_UNKNOWN cXObjectImpl::IsWindow() { SIMMY_STUB("cXObjectImpl::IsWindow(void)", 0x800EAD98); return {}; }
-RET_UNKNOWN cXObjectImpl::IsDoor() { SIMMY_STUB("cXObjectImpl::IsDoor(void)", 0x800EAE40); return {}; }
-void cXObjectImpl::SetData(int, short) { SIMMY_STUB("cXObjectImpl::SetData(int, short)", 0x800EAEE8); }
 void cXObjectImpl::SetTemp(int, short) { SIMMY_STUB("cXObjectImpl::SetTemp(int, short)", 0x800EAF0C); }
 void cXObjectImpl::SetAttr(int, short) { SIMMY_STUB("cXObjectImpl::SetAttr(int, short)", 0x800EAF1C); }
 RET_UNKNOWN cXObjectImpl::GetObjectProbe() { SIMMY_STUB("cXObjectImpl::GetObjectProbe(void)", 0x800EAF2C); return {}; }
@@ -126,7 +119,6 @@ void cXObjectImpl::GetAdultAnimTable() { SIMMY_STUB("cXObjectImpl::GetAdultAnimT
 void cXObjectImpl::GetChildAnimTable() { SIMMY_STUB("cXObjectImpl::GetChildAnimTable(void)", 0x800EB138); }
 RET_UNKNOWN cXObjectImpl::HideForCutaway() { SIMMY_STUB("cXObjectImpl::HideForCutaway(void)", 0x800EB15C); return {}; }
 RET_UNKNOWN cXObjectImpl::CountObjectSlots() { SIMMY_STUB("cXObjectImpl::CountObjectSlots(void)", 0x800EB218); return {}; }
-RET_UNKNOWN cXObjectImpl::GetRoom() { SIMMY_STUB("cXObjectImpl::GetRoom(void)", 0x800EB2A0); return {}; }
 void cXObjectImpl::GetLocation(FTilePt *) const { SIMMY_STUB("cXObjectImpl::GetLocation(FTilePt *) const", 0x800EB2E8); }
 RET_UNKNOWN cXObjectImpl::GetLocation() { SIMMY_STUB("cXObjectImpl::GetLocation(void)", 0x800EB2FC); return {}; }
 void cXObjectImpl::GetTreeTab() { SIMMY_STUB("cXObjectImpl::GetTreeTab(void)", 0x800EB304); }

@@ -31,3 +31,16 @@ PiecewiseFn* HouseImpl::GetSizeScoreCurve() { return m_sizeScoreCurve; }
 PiecewiseFn* HouseImpl::GetFurnishingsScoreCurve() { return m_furnishingsScoreCurve; }
 // 800BC99C
 void HouseImpl::SetFamilyToNull() { m_family = nullptr; }
+
+// 800BC0E0
+// The router starts afresh: the rooms' partitions go, their statistics are recomputed, every route is
+// planned again and the portals forget their scores; then the lot data is stored.
+void HouseImpl::EnterLiveMode() {
+  if (Globs_pRoomManager) {
+    Globs_pRoomManager->ClearRoomPartitions();
+    Globs_pRoomManager->AllRoomsScoreChanged();
+    Globs_pRoomManager->ComputeRooms();
+  }
+  if (Globs_pObjectModule) Globs_pObjectModule->InvalidateAllRoutes();
+  ComputeAndStoreLotData();
+}

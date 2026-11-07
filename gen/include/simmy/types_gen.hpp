@@ -1317,9 +1317,8 @@ struct ECTRL_CMD {
 struct ARAMBlock {
     ARAMBlock() = default;  // generated: lets derived stubs construct the base
 };
-struct ASTNode {
-    ASTNode() = default;  // generated: lets derived stubs construct the base
-};
+#include "simmy/classes/spacepartition.hpp"  // hand-written
+#include "simmy/classes/spacepartition.hpp"  // hand-written
 #include "simmy/classes/actionmenu.hpp"  // hand-written
 #include "simmy/classes/actionmenu.hpp"  // hand-written
 #include "simmy/classes/interaction.hpp"  // hand-written
@@ -2433,6 +2432,8 @@ struct BehPrintParams {
 };
 #include "simmy/classes/eredithtreeset.hpp"  // hand-written
 #include "simmy/classes/tilewalls.hpp"  // hand-written
+#include "simmy/classes/spacepartition.hpp"  // hand-written
+#include "simmy/classes/spacepartition.hpp"  // hand-written
 #include "simmy/classes/rooms.hpp"  // hand-written
 #include "simmy/classes/world.hpp"  // hand-written
 #include "simmy/classes/erquickdata.hpp"  // hand-written
@@ -5222,14 +5223,6 @@ struct INVTarget : public HUDTarget {
 struct INVTarget__eInteractorMode {
     INVTarget__eInteractorMode() = default;  // generated: lets derived stubs construct the base
 };
-struct IPoint {
-    IPoint() = default;  // generated: lets derived stubs construct the base
-};
-struct IRect {
-    IRect() = default;  // generated: lets derived stubs construct the base
-    RET_UNKNOWN IsContained(IRect *) const;  // 800A5A98
-    RET_UNKNOWN Intersect(IRect *, IRect *);  // 800A5AE4
-};
 #include "simmy/classes/isimsobjectmodel.hpp"  // hand-written
 struct IShrubObject : public ISimsObjectModel {
     IShrubObject();  // 800525E4
@@ -6207,20 +6200,9 @@ struct ParticleManager : public EResourceManager {
 #include "simmy/classes/passiveinfluence.hpp"  // hand-written
 #include "simmy/classes/passiveinfluence.hpp"  // hand-written
 #include "simmy/classes/passiveinfluence.hpp"  // hand-written
-struct Path {
-    Path() = default;  // generated: lets derived stubs construct the base
-    RET_UNKNOWN InitAST();  // 8013ACAC
-    RET_UNKNOWN OpenANode();  // 8013AE78
-    bool DoOneSmooth();  // 8013BC20
-    void InitPath(RoutingParams *);  // 8013D6AC
-    RET_UNKNOWN FindSmallestOpenNode();  // 8013D750
-    static void DeallocateAllPathData();  // 8013D7FC
-};
-struct PenaltyRect {
-    PenaltyRect() = default;  // generated: lets derived stubs construct the base
-    PenaltyRect(IRect *, int);  // 8013896C
-    PenaltyRect(int, int, int, int, int);  // 80138998
-};
+#include "simmy/classes/spacepartition.hpp"  // hand-written
+#include "simmy/classes/spacepartition.hpp"  // hand-written
+#include "simmy/classes/spacepartition.hpp"  // hand-written
 struct PersDataPair {
     PersDataPair() = default;  // generated: lets derived stubs construct the base
 };
@@ -6532,9 +6514,6 @@ struct RotationAxis {
     RotationAxis() = default;  // generated: lets derived stubs construct the base
 };
 #include "simmy/classes/routing.hpp"  // hand-written
-struct RoutingParams {
-    RoutingParams() = default;  // generated: lets derived stubs construct the base
-};
 #include "simmy/classes/routing.hpp"  // hand-written
 #include "simmy/classes/routing.hpp"  // hand-written
 struct RumbleDataElement {
@@ -6751,27 +6730,6 @@ struct SmartDataFactory {
 struct SoundMembersIndex {
     SoundMembersIndex() = default;  // generated: lets derived stubs construct the base
     static RET_UNKNOWN in_word_set(char *, unsigned int);  // 802AB740
-};
-struct SpacePartition {
-    void FindInterfaceRect(int, int, IRect *);  // 80138A3C
-    RET_UNKNOWN FindInterfaceRect(ASTNode *, ASTNode *, IRect *);  // 80138ABC
-    void FindInterfacePoint(ASTNode *, ASTNode *);  // 80138B98
-    SpacePartition();  // 80138C20
-    RET_UNKNOWN GetIntersectingFreeRect(IRect *);  // 80138C94
-    RET_UNKNOWN GetIntersectingPartitionRect(IRect *);  // 80138D18
-    RET_UNKNOWN GetNode(int);  // 80138E30
-    RET_UNKNOWN GetNodeRectangle(int, IRect *);  // 80138E70
-    bool IsSpatialNode(int);  // 80138F1C
-    double EstimateDistanceToGoal(int);  // 80138F30
-    double MeasureDistance(int, int, IPoint *);  // 80139070
-    void GetTerminals(int *, int *);  // 80139250
-    RET_UNKNOWN CountSuccessors(int);  // 80139264
-    RET_UNKNOWN GetNthSuccessor(int, int);  // 801397D0
-    void Clear();  // 80139844
-    void Deallocate();  // 801398BC
-    RET_UNKNOWN ExpandRect(PenaltyRect *);  // 80139C60
-    void BuildSpatialSuccessorList(int);  // 8013A130
-    void Init(RoutingParams *);  // 8013C0EC
 };
 struct SpriteMembersIndex {
     SpriteMembersIndex() = default;  // generated: lets derived stubs construct the base
@@ -7901,15 +7859,15 @@ RET_UNKNOWN GetJobHUDName(short);  // 8010EE64
 RET_UNKNOWN GetJobHUDControlName(short);  // 8010EE70
 RET_UNKNOWN GetNpcShaderId(int, bool);  // 80110C20
 RET_UNKNOWN GetAutonomyConstantsClient();  // 8011A9E0
-bool IsMoveOutOfWay(Interaction *);  // 80122998
-RET_UNKNOWN IsAskedToMove(cXPersonImpl *);  // 80122A14
+bool IsMoveOutOfWay(Interaction* a);  // 80122998
+bool IsAskedToMove(cXPersonImpl* p);  // 80122A14
 RET_UNKNOWN IsPermittedToRunCheckTreeForAds(int, int);  // 801270E0
 void SetReconDumpFile(char *);  // 80132D3C
 RET_UNKNOWN GetRoomScoreConstantsClient();  // 801358C8
 RET_UNKNOWN IsScoredStyle(WallStyle);  // 80137B58
 RET_UNKNOWN GetLightRoomID(unsigned short);  // 80138854
-RET_UNKNOWN FindIntersectingRect(IRect *, vector<PenaltyRect, allocator<PenaltyRect>> *);  // 801389B4
-RET_UNKNOWN IsRectInside(IRect *, IRect *);  // 80139C04
+int FindIntersectingRect(IRect* r, std::vector<PenaltyRect>* rects);  // 801389B4
+int IsRectInside(IRect* inner, IRect* outer);  // 80139C04
 bool EvalPoint(IPoint, IPoint, IPoint, IPoint *, float *);  // 8013BA9C
 bool TryCatExtension(StackString<260> &, SeqResFile__OpenSpec *);  // 8013D8D0
 RET_UNKNOWN GetIndividualMemory(int, int);  // 8013FCC8
@@ -7945,10 +7903,10 @@ void SetLotBorders(int, int, int, int);  // 801517C0
 void CreateTheWorld();  // 8015228C
 void DestroyTheWorld();  // 801522C0
 void ValidateTheWorld();  // 8015230C
-void TransformToWorldCoords(FTilePt *, float, float, int, FTilePt *);  // 80152A78
+void TransformToWorldCoords(float x, float y, const int origin[2], int dir, int out[2]);  // 80152A78
 void BuildRoomPartition(unsigned short, vector<PenaltyRect, allocator<PenaltyRect>> *, bool);  // 80153500
 void BuildRoomPartition(unsigned short, vector<PenaltyRect, allocator<PenaltyRect>> *);  // 801558D0
-RET_UNKNOWN Stuck(vector<PenaltyRect, allocator<PenaltyRect>> *, IPoint *);  // 801558F4
+int Stuck(std::vector<PenaltyRect>* rects, IPoint* p);  // 801558F4
 void SetDirectionForGoalSearch(cXObject *, short, short, RoutingSlot *);  // 80157FB8
 void CollapsePenaltyRects(vector<PenaltyRect, allocator<PenaltyRect>> &);  // 80159738
 RET_UNKNOWN GetSmartDataFactory();  // 8015CA44

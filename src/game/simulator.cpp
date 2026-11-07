@@ -458,7 +458,8 @@ int cSimulatorImpl::GetFunds(cSimulator__tFundsPlayerNumber) { return m_funds + 
 
 // 801413EC
 // The new balance takes effect at the next tick (pending); the globals 0xD/0xE show it in tens of
-// thousands. GC: a rise also tells the neighbourhood's wants (kEventFamilyFundsOfX, ...Plat).
+// thousands. A rise tells every person's wants (NotifyAllPersons): kEventFamilyFundsOfX and
+// kEventFamilyFundsPlat, the count the new balance in hundreds.
 void cSimulatorImpl::SetFunds(int funds, cSimulator__tFundsPlayerNumber) {
   const int balance = m_funds, pending = m_pendingFunds;
   if (funds == balance + pending) return;
@@ -470,7 +471,16 @@ void cSimulatorImpl::SetFunds(int funds, cSimulator__tFundsPlayerNumber) {
   }
   m_globals[kFundsHigh] = static_cast<short>(funds / 10000);
   m_globals[kFundsLow] = static_cast<short>(funds % 10000);
-  if (delta - pending > 0) SIMMY_STUB("cSimulatorImpl::SetFunds: the wants' funds events (Neighborhood)", 0x801413EC);
+  if (delta - pending > 0 && Globs_pNeighborhood) {
+    WantFear__Notification n;
+    n.m_target = WantFearEvent::kGenericParam;
+    n.m_count = static_cast<short>(funds / 100);
+    n.m_event = WantFearEvent::kFamilyFundsOfX;
+    Globs_pNeighborhood->NotifyAllPersons(n, nullptr);
+    n.m_event = WantFearEvent::kFamilyFundsPlat;
+    n.m_count = static_cast<short>(funds / 100);
+    Globs_pNeighborhood->NotifyAllPersons(n, nullptr);
+  }
 }
 
 // 8014150C

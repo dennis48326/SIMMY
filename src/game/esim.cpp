@@ -131,7 +131,10 @@ ESim::~ESim() {
 }
 
 // 80031790
+// The person's (cXPerson vtable 0x204, cXPersonImpl::IsMale: its description, a service NPC by its
+// record).
 int ESim::IsMale() {
+  if (auto* impl = dynamic_cast<cXPersonImpl*>(m_person)) return impl->IsMale();
   CasSimDescriptionS2C* desc = m_person ? m_person->GetSimDescription() : nullptr;
   return desc && desc->m_male ? 1 : 0;
 }

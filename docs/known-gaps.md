@@ -8,21 +8,13 @@ unreachable in this build (PDA, EyeToy, Urbz leftovers, Xbox/PS2 code) or replac
 
 ## Possible bugs found while writing these docs (worth a look)
 
-- `SimInteractor::OnCommandPressed` ([`siminteractor.cpp`](../src/game/siminteractor.cpp)): B (command 4)
-  calls `impl->CancelLastAction()`, which is still the **generated stub** (8012606C is only referenced as
-  "GC 8012606C" in hudtarget.cpp's `PersonCancelLastAction`, so the generator keeps stubbing the member).
-  In classic control the HUD's B path may cover it; not verified.
-- Same function: after Y it logs a `SIMMY_STUB` for `CheckNewSimInSocialMode` (80213C60) although
-  `InteractorModule::CheckNewSimInSocialMode` is ported in [`familyselect.cpp`](../src/game/familyselect.cpp)
-  and `DirectInteractor` calls it.
-- Stale header comments (they say "not ported" for ported code): person.hpp/person.cpp, livemode.cpp,
-  hudtarget.hpp, aptviewer.cpp, objects.hpp, interaction.cpp/hpp, `thesims.cpp`'s NewState
-  comment, person.cpp's `PlayerSimDescription` comment (roommate insertion is ported in pregame.cpp).
+- Stale header comments (they say "not ported" for ported code): livemode.cpp, hudtarget.hpp,
+  aptviewer.cpp, `thesims.cpp`'s NewState comment.
 
 ## Simulation
 
 - Unported primitives (logged once, then **treated as true**), none used by a tree on the disc: 0x0A
-  tutorial, 0x15 show string, 0x22 UI effect, 0x3D particle effect, person 0x2F reach; 0x39-0x3C HUD
+  tutorial, 0x15 show string, 0x22 UI effect, 0x3D particle effect, person 0x2F reach (it should use the router); 0x39-0x3C HUD
   primitives (only the debug object `zz_move_a__tron`). `TrySetToNext` kinds other than 0-12 return
   false.
 - Passive influence: the person's reaction animation (`AwarenessManager::Start/StopPassiveInfluenceAnimation`)
@@ -31,18 +23,20 @@ unreachable in this build (PDA, EyeToy, Urbz leftovers, Xbox/PS2 code) or replac
   never waits (object data is read on demand).
 - Placement events (object trees on place/pick-up), slots in buy mode, the grid object (GUID 0x437).
 - `SAnimator2`: awareness, mood animations, skill idle animations, low-motive runs, rumble notes.
-- Routing is a PC A* (one try, no failure trees, no re-planning toward a moving target).
-- Social mode flags live in a PC map (not in the person, not hashed); `IsInSocialMode` = first||second
-  flag, GC = person data 0x28 != 0 (differs for the partner).
-- `cXPersonImpl` constructor/Initialize/PostLoad parts (dying persons, old-save relationship pruning),
-  service NPC records (`IsPet`, `IsMale` for NPCs), `CalcHappy` curves, `Interaction` names
-  (`GetName`/`SetName`).
-- `NeighborhoodImpl`: constants use defaults; `Save`'s simulator part, `AddToFamily`/`RemoveFromFamily`
-  for people on the lot, visitor types.
+- Routing: the walk animation is the PC walker (GC follow modes, side steps, awareness auto-run not
+  ported); portals are type-8 multi-tile parts without `cXPortalImpl` (scores in `m_portalValues`);
+  `TrySnap` still uses the PC `PersonCanStandAt`. The GC leaves a "move out of the way" object in the
+  world when it cannot be used (kept).
+- `cXPersonImpl`: `Reset` (8011EB78), the current room's overhead lights (`UpdateCurrentRoom`: its
+  listener, GlobalDispatch 0xED, is not ported either), motive curves from a string set file (no
+  definition on the disc names one). The room motive (0xD) stays 0 (the room score is not computed), so
+  the mood (`CalcHappy`, ported) is lower than on GC.
+- `HouseImpl::IsResident` is a PC helper on the neighbourhood (`IsResidentOfHouse`); GlobalDispatch is a
+  no-op, so its listeners are called directly where the port needs them (new people -> visitor types).
 - `HouseImpl` is a stand-in (house.cpp + lotsave.cpp); objects placed on an occupied tile are not linked
   into the tile chain (a window bought onto a lamp's tile misses its wall cut).
 - `MoveFamilyOntoLot`, `MenuObjectsNear`, the interactor manager, input manager and `SocialModeInteractor`
-  are PC stand-ins.
+  are PC stand-ins (the interactors are tied to the PC keyboard/mouse and co-op layers).
 
 ## UI
 
@@ -51,7 +45,6 @@ unreachable in this build (PDA, EyeToy, Urbz leftovers, Xbox/PS2 code) or replac
   reset is ported, `SIMMY_PRISTINE_SAVE`).
 - `HUDTarget`: `ActionQueueHUD` (the PC queue widget is `ACTTarget` via H2D: same behaviour) and
   `AttachControllers` (a filter for commands nothing reads on PC).
-- Want/fear dialog (`Neighbor::SpawnWantFearDialog`), want/fear events on purchases and wall building.
 - `O2TTarget`: the screen-position wizard (`UseOptionsScreenAdjustXY`; the PC scales the picture itself).
 - CAS: representation shaders (EyeToy), the generating sound, saved grandparents (dev-tool data only).
 - Mouse: no clicking on individual buttons (the game has no pointer); build/buy cursors are stick-driven.
@@ -66,8 +59,7 @@ unreachable in this build (PDA, EyeToy, Urbz leftovers, Xbox/PS2 code) or replac
 - Text placed in screen space from 3D positions would be in the 4:3 mapping.
 - Camera: ported; left are paths the release build never reaches (unsmoothed follow, object animation
   modes, `ENCamera` cuts) and the camera's room opacity (`ERoom::IsRoomWallsOpaque/IsRoomRoofOpaque`,
-  written but never read) ([camera.md](camera.md)). `cXPersonImpl::IsSleeping` is a stub, so the intro
-  camera's "a family member is awake" wait treats sleepers as awake. CAS morph/portrait paths depend on
+  written but never read) ([camera.md](camera.md)). CAS morph/portrait paths depend on
   aurora readback (headless: blank).
 - ESim: the model cache / family info in `initModel`, costume skin-change flushing, the green ghost light.
 - Walls: `ERoom::InitRoomLookupTab` (wallpaper preview/cost; the camera's opaque-room flag has no reader), deleting a wall
@@ -76,8 +68,7 @@ unreachable in this build (PDA, EyeToy, Urbz leftovers, Xbox/PS2 code) or replac
 
 ## Audio
 
-`AmbientScorePlayer::SetPause` pauses only the first valid sound (GC quirk kept); `IsChild` false for
-service NPCs; rumble notes.
+`AmbientScorePlayer::SetPause` pauses only the first valid sound (GC quirk kept); rumble notes.
 
 ## GameCube behaviour deliberately kept
 

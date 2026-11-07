@@ -55,7 +55,9 @@ struct SAnimator2 {
   void BeginRoute(const std::vector<EVec2>& points, float endDir);
   // PC: the walk stops where it is (m_routeResult -1).
   void AbortRoute();
-  virtual RET_UNKNOWN FollowOneStep();  // 8005EAB8
+  // Each simulator tick of a route: 2 still walking, 1 arrived (the person placed at the nearest point
+  // of its path where it fits), 0 not following or it did not fit (put back where it stands).
+  virtual int FollowOneStep();  // 8005EAB8
   virtual bool EndFollow();  // 8005EC74
   virtual int IsFollowing();  // 8005ED9C
   virtual RET_UNKNOWN IsInterruptable();  // 8005EDB4
@@ -367,6 +369,7 @@ struct SAnimator2 {
   size_t m_routeNode = 0;                // the one walked to
   float m_routeEndDir = kNoDir;          // the facing at the end (kNoDir: as it arrives)
   int m_routeResult = 0;                 // 0 walking, 1 arrived, -1 blocked
+  int m_follow = 0;                      // PC: BeginFollow's walk (it ends in m_routing 2, done)
   unsigned char m_carryType = 0;         // +0x5F8
   unsigned char m_lowMotive = 0;         // +0x5F9 the low-motive walk (5 energy, 9 bladder)
   unsigned char m_lowMotiveIdle = 0;     // +0x5FA the motive whose low-motive idle plays (shouldUseLowMotiveIdle)

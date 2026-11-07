@@ -310,6 +310,8 @@ struct NeighborhoodImpl : public Neighborhood {
   virtual void DoStream(ReconBuffer* buffer, int version);  // 800CDC2C
   virtual int GetHouseNumberForLevel(int);  // 800CDD38
   virtual Neighbor* FindNeighborByID(int id);  // 800CDD40
+  // PC: HouseImpl::IsResident (800BC00C) for the port's house stand-in.
+  bool IsResidentOfHouse(cXPersonImpl* p);
   virtual Neighbor* FindNeighborByGUID(int guid);  // 800CDD78
   virtual bool FindFamilyAndIndexByGUID(int guid, int& family, int& index);  // 800CDE00
   Neighbor* FindNeighborByType(ObjSelector* selector);  // 800CDEE0

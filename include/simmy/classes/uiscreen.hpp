@@ -217,7 +217,9 @@ struct UIDialog {
   std::vector<unsigned short> m_body;     // +0x28 BString2
   std::vector<unsigned short> m_title;    // +0x2C
   std::vector<unsigned short> m_sel[3];   // +0x30
-  ERShader* m_icon = nullptr;   // +0x3C
+  ERShader* m_icon = nullptr;   // +0x3C (released with the dialog)
+  unsigned int m_iconId = 0;    // +0x40 else the icon by its shader id
+  ERShader* m_iconBg = nullptr; // +0x44 the icon's backdrop (released with the dialog)
   short m_iconW = 0;            // +0x48
   short m_iconH = 0;            // +0x4A
   int m_players = 3;            // +0x4C 1 player 1, 2 player 2, 3 both

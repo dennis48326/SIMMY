@@ -27,7 +27,6 @@ void ObjectModuleImpl::EnqueueObjectDialog(ObjSelector *, DialogParam *) { SIMMY
 void ObjectModuleImpl::BroadcastMessage(char *, int) { SIMMY_STUB("ObjectModuleImpl::BroadcastMessage(char *, int)", 0x800F82C8); }
 void ObjectModuleImpl::SendMessage(cXObject *, char *, int) { SIMMY_STUB("ObjectModuleImpl::SendMessage(cXObject *, char *, int)", 0x800F837C); }
 RET_UNKNOWN ObjectModuleImpl::UpdateWallAdjacencies() { SIMMY_STUB("ObjectModuleImpl::UpdateWallAdjacencies(void)", 0x800F8444); return {}; }
-void ObjectModuleImpl::InvalidateAllRoutes() { SIMMY_STUB("ObjectModuleImpl::InvalidateAllRoutes(void)", 0x800F84D8); }
 RET_UNKNOWN ObjectModuleImpl::OffsetObjectMap(CTilePt &) { SIMMY_STUB("ObjectModuleImpl::OffsetObjectMap(CTilePt &)", 0x800F85D8); return {}; }
 void ObjectModuleImpl::OffsetWorld(CTilePt &) { SIMMY_STUB("ObjectModuleImpl::OffsetWorld(CTilePt &)", 0x800F86F8); }
 RET_UNKNOWN ObjectModuleImpl::GetTutorialObject() { SIMMY_STUB("ObjectModuleImpl::GetTutorialObject(void)", 0x800F8C54); return {}; }
@@ -47,9 +46,5 @@ RET_UNKNOWN ObjectModuleImpl::GetFolder() { SIMMY_STUB("ObjectModuleImpl::GetFol
 void ObjectModuleImpl::AddObject(cXObject *, short) { SIMMY_STUB("ObjectModuleImpl::AddObject(cXObject *, short)", 0x800F9930); }
 RET_UNKNOWN ObjectModuleImpl::GetFirst() { SIMMY_STUB("ObjectModuleImpl::GetFirst(void)", 0x800F9968); return {}; }
 RET_UNKNOWN ObjectModuleImpl::GetSim() { SIMMY_STUB("ObjectModuleImpl::GetSim(void)", 0x800F9980); return {}; }
-RET_UNKNOWN ObjectModuleImpl::GetPeople(int) { SIMMY_STUB("ObjectModuleImpl::GetPeople(int)", 0x800F9988); return {}; }
-RET_UNKNOWN ObjectModuleImpl::GetNumPeople() { SIMMY_STUB("ObjectModuleImpl::GetNumPeople(void)", 0x800F99A8); return {}; }
-RET_UNKNOWN ObjectModuleImpl::GetPortal(int) { SIMMY_STUB("ObjectModuleImpl::GetPortal(int)", 0x800F99BC); return {}; }
-RET_UNKNOWN ObjectModuleImpl::GetNumPortals() { SIMMY_STUB("ObjectModuleImpl::GetNumPortals(void)", 0x800F99CC); return {}; }
 RET_UNKNOWN ObjectModuleImpl::GetGlobalRoutingSlot(int) { SIMMY_STUB("ObjectModuleImpl::GetGlobalRoutingSlot(int)", 0x800F99E0); return {}; }
 RET_UNKNOWN ObjectModuleImpl::GetNumGlobalRoutingSlots() { SIMMY_STUB("ObjectModuleImpl::GetNumGlobalRoutingSlots(void)", 0x800F99F0); return {}; }

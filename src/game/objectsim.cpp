@@ -372,8 +372,7 @@ std::u16string ActionStringText(StackElem* frame, int set, int index, cXObjectIm
 // (ParseUIString: $Me, $Object, ...). Built while a menu is being made (ObjTestSim::IsMenuInProgress:
 // a new menu item with the interaction's stack vars, MakeNewMenuItem) or in the main simulation (the
 // person's current action's text, SetCurrentActionText, for the queue in the HUD); never in other check
-// trees. True. PC: the menu is made from the tree tables without running its trees as a menu build, and
-// the queue's action names are the UI side's: both are stubs.
+// trees. True.
 int cXObjectImpl::TryMakeActionString(StackElem* frame, const unsigned char* params) {
   // A menu being built (ObjTestSim::IsMenuInProgress): a new menu item (ObjTestSim::MakeNewMenuItem) with
   // the text and stack vars {the frame's stack object, 0, 0, 0} (ParseUIString may set them; PC: not).
@@ -386,9 +385,8 @@ int cXObjectImpl::TryMakeActionString(StackElem* frame, const unsigned char* par
     return 1;
   }
   if (!TreeSimImpl::sInMainSim) return 1;
-  if (GetType() == 2)
-    SIMMY_STUB("primitive 0x32 TryMakeActionString: the current action's text (StringSet, ParseUIString, "
-               "cXPersonImpl::SetCurrentActionText)", 0x800FD890);
+  // In the main simulation, a person's current action takes the text as its name.
+  if (auto* person = dynamic_cast<cXPersonImpl*>(this)) person->SetCurrentActionText(ActionStringText(frame, Be16(params, 0), params[4], this));
   return 1;
 }
 
@@ -1694,20 +1692,14 @@ void StepToward(int pos[2], int dir) {
 // place. GC: the slot's position and height, the tile's object chain, the room's impact and lighting.
 void PlaceObject(cXObjectImpl* object, const int pos[2], int level, cXObjectImpl* container) {
   ObjectModuleImpl* module = Globs_pObjectModule;
-  if (module && object->m_location[0] >= 0 && object->m_location[1] >= 0) {
-    CTilePt old = object->GetCTilePt();
-    if (module->GetTileObjectID(old) == object->m_id) module->SetTileObjectID(old, 0);
-  }
+  if (module) module->SeverTile(object);
   const int was[2] = {object->m_location[0], object->m_location[1]};
   object->m_location[0] = pos[0];
   object->m_location[1] = pos[1];
   object->m_level = level;
   object->m_data.WriteVar(2, static_cast<short>(container ? container->m_id : 0));
   object->m_data.WriteVar(3, 0);
-  if (!container && module && pos[0] >= 0 && pos[1] >= 0) {
-    CTilePt tile = object->GetCTilePt();
-    if (!module->GetTileObjectID(tile)) module->SetTileObjectID(tile, object->m_id);
-  }
+  if (!container && module && pos[0] >= 0 && pos[1] >= 0) module->SetSiteTile(object);
   UpdateObjectRoomID(object);  // GC Place -> SetLocation: ResolveRoomID, data 0x1D
   PassiveInfluenceLocationChanged(object, was[0], was[1]);
   if (object->GetType() == 2) {

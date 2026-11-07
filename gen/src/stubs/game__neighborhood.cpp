@@ -2,7 +2,6 @@
 #include "simmy/types_gen.hpp"
 
 RET_UNKNOWN GetNeighborhoodConstantsClient() { SIMMY_STUB("GetNeighborhoodConstantsClient(void)", 0x800CC738); return {}; }
-void NeighborhoodConstants::UpdateConstants() { SIMMY_STUB("NeighborhoodConstants::UpdateConstants(void)", 0x800CC740); }
 void NeighborList::DeleteAll() { SIMMY_STUB("NeighborList::DeleteAll(void)", 0x800CC9E8); }
 RET_UNKNOWN SortFamilyByCreation(Family *&, Family *&) { SIMMY_STUB("SortFamilyByCreation(Family *&, Family *&)", 0x800CCD54); return {}; }
 RET_UNKNOWN NeighborhoodImpl::MoveOut(NghResFile *, int, bool) { SIMMY_STUB("NeighborhoodImpl::MoveOut(NghResFile *, int, bool)", 0x800CFA4C); return {}; }

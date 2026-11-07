@@ -173,7 +173,8 @@ Development only: the launcher removes all of them except `SIMMY_INI` from the g
 | `SIMMY_AUTO_TRACE=1\|ads` | Autonomy choices / advertisements |
 | `SIMMY_AUTONOMY_IDLE=<s>` | Idle time before autonomy takes a player's sim |
 | `SIMMY_AUTONOMOUS_JOB=1`, `SIMMY_PLAYER_WORK=1`, `SIMMY_CAREER_MOOD=<v>` | Career test harnesses |
-| `SIMMY_WANTS_TRACE=1`, `SIMMY_WANTS_NOTIFY=<tick>\|story:<event>@<tick>[#house]` | Wants and fears trace / forced notifications |
+| `SIMMY_WANTS_TRACE=1`, `SIMMY_WANTS_NOTIFY=<tick>\|story:<event>@<tick>[#house]` | Wants and fears trace (also the HUD's icons, the want/fear dialog and the MDI box) / forced notifications (a numeric tick fulfils player 1's first shown want: the new want flips in and its dialog follows once the lot intro is over, e.g. `SIMMY_DET=1 SIMMY_WANTS_NOTIFY=500`) |
+| `SIMMY_NPC_TRACE=1` | Each service NPC record as the object folder loads it (gender, kind, name) |
 | `SIMMY_FUNDS=<n>`, `SIMMY_BUY_FUNDS=<n>` | Family funds on the lot / when the catalogue opens |
 | `SIMMY_SIM_START=x,y` | Put the sims on a tile at each house load |
 | `SIMMY_INTERACT_PICK=<name>`, `SIMMY_INTERACT_PICK_PLAYER=1\|2`, `SIMMY_INTERACT_NEAR=x,y;...\|#id`, `SIMMY_MENU_ITEM=<n>` | A starts the nearest object's named interaction at once (instead of the menu); limit to a player; objects near a place; which menu item a check tree gives |

@@ -4,7 +4,7 @@
 // object's tree table (TTAB) chosen for a person (from the action menu, an object's push primitive, or
 // autonomy) with its priority and flags; the ActionQueue is the person's ring of ten of them (GC
 // cXPersonImpl +0x130), the running one first. The HUD's action queue icons (AddActionToHUD,
-// RemoveActionFromHUD) belong to the HUD and stay unported here.
+// RemoveActionFromHUD) are in acttarget.cpp.
 #pragma once
 #include <string>
 #include <vector>
@@ -34,9 +34,13 @@ struct Interaction {
   // +0x1C name) or null.
   const unsigned char* GetEntry() const;  // 800C182C
   void SetUniqueID();  // 800C189C
-  RET_UNKNOWN GetName() const;  // 800C18B0
-  static void SetName(BString2 &);  // 800C1960
-  void SetName(int, int);  // 800C199C
+  // Its name: one given to it (SetName), else its tree table entry's ("*" first for a debug entry),
+  // kept from then on. The "name changed" flag (0x80) is cleared.
+  const std::u16string& GetName() const;  // 800C18B0
+  // A name of its own (flag 0x80: changed).
+  void SetName(const std::u16string& name);  // 800C1960
+  // The name of the tree table entry `index` of the object definition with GUID `guid`.
+  void SetName(int guid, int index);  // 800C199C
   // Its type, id, person, stack and icon objects (by id), entry, stack vars, priority, tree, attenuation
   // and flags. Read: the unique id counter moves past it.
   void DoStream(ReconBuffer* buffer, int version);  // 800C1A68
@@ -102,8 +106,9 @@ struct Interaction {
   int m_priority = 0;                // +0x28 100 the player's, 0x32 pushed, 2 autonomous (person data 0x21)
   short m_tree = 0;                  // +0x2C the action tree
   float m_attenuation = 0.0f;        // +0x30
+  mutable std::u16string m_name;     // +0x34 BString2 (GetName fills it from the entry)
   int m_id = 0;                      // +0x38 unique (SetUniqueID)
-  unsigned int m_flags = 0;          // +0x3C
+  mutable unsigned int m_flags = 0;  // +0x3C
 };
 
 // PC: the items a check tree makes while a menu is built (ObjTestSim::IsMenuInProgress / MakeNewMenuItem:
@@ -123,8 +128,11 @@ struct ActionQueue {
   int CountVisible() const;  // 80119EB0
   void AddActionToHUD(int);  // 80119F60
   void RemoveActionFromHUD(int);  // 8011A06C
-  bool SetActionText(BString2 &, unsigned int);  // 8011A0E8
-  RET_UNKNOWN SetIconObject(cXObject *, unsigned int);  // 8011A150
+  // The name of the action `index` from the head.
+  bool SetActionText(const std::u16string& text, unsigned int index);  // 8011A0E8
+  // The action `index` from the head shows `object` in the queue (added to / removed from the HUD by
+  // whether it is visible then). False: no such action.
+  bool SetIconObject(cXObject* object, unsigned int index);  // 8011A150
   // Shown in the queue: it has an icon object and is not hidden; a continuation only at the head.
   int IsVisibleAction(const Interaction& action) const;  // 8011A210
   RET_UNKNOWN FindVisualInsertGUID(unsigned int) const;  // 8011A2BC

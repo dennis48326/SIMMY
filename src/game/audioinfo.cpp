@@ -6,13 +6,19 @@
 namespace {
 cXObject* Object(int id) { return Globs_pObjectModule ? Globs_pObjectModule->GetObjectFromID(id) : nullptr; }
 
-// GC cXPersonImpl::IsChild (8012B42C) / IsMale (8012B4AC): from the sim's description; PC: a person without
-// one (a service NPC: GetServiceNPC's record, not ported) counts as an adult male.
+// cXPersonImpl::IsChild (8012B42C) / IsMale (8012B4AC), GC person vtable calls: a sim by its description,
+// a service NPC by its record.
+cXPersonImpl* Impl(cXPerson* p) {
+  cXObject* o = p ? p->AsObject() : nullptr;
+  return o ? dynamic_cast<cXPersonImpl*>(o->GetObjectImplementation()) : nullptr;
+}
 bool IsChild(cXPerson* p) {
-  (void)p;
-  return false;
+  cXPersonImpl* impl = Impl(p);
+  return impl && impl->IsChild();
 }
 bool IsMale(cXPerson* p) {
+  cXPersonImpl* impl = Impl(p);
+  if (impl) return impl->IsMale() != 0;
   if (CasSimDescriptionS2C* d = p->GetSimDescription()) return d->m_male != 0;
   return true;
 }

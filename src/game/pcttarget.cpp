@@ -1343,7 +1343,7 @@ int PCTTarget::enter_wall_mode(PCTTarget__cCellInfo* cell, bool placed) {
 
 // 801D7A50
 // 3: the tool left (no interactor), the catalogue back, the cancel sound. 0: walls bought (placing: the
-// value from the funds, the purchase sound; GC: the want/fear event kEventBuildWalls) or sold (the tool:
+// value from the funds, the purchase sound, the want/fear event kEventBuildWalls) or sold (the tool:
 // the value back, the sale sound); the HUD's price cleared. 4: on to the wallpaper tool. 5: the
 // selection's value on the HUD (the selling pig when it has one).
 int PCTTarget::WallManipulatorCallback(InteractorModule__Interactor__CallbackData* data) {
@@ -1364,7 +1364,14 @@ int PCTTarget::WallManipulatorCallback(InteractorModule__Interactor__CallbackDat
       } else {
         SetSimFunds(0, static_cast<int>(GetSimFunds(0)) - value);
         play_sound(0x87fa0f12);
-        SIMMY_STUB("PCTTarget::WallManipulatorCallback: the want/fear event kEventBuildWalls (Neighborhood vtable 0x1A4)", 0x801D7A50);
+        // The residents' wants: kEventBuildWalls (NotifyAllResidents, vtable 0x1A4).
+        if (Globs_pNeighborhood) {
+          WantFear__Notification n;
+          n.m_event = WantFearEvent::kBuildWalls;
+          n.m_target = WantFearEvent::kGenericParam;
+          n.m_count = WantFearEvent::kGenericParam;
+          Globs_pNeighborhood->NotifyAllResidents(n, nullptr);
+        }
       }
       std::printf("[build] walls %s for %d: funds %d\n", m_placeMode ? "bought" : "sold", value, static_cast<int>(GetSimFunds(0)));
       m_canAfford = can_afford_selection();

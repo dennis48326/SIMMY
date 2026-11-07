@@ -20,7 +20,8 @@
 //  - the objects themselves (game/object.cpp: cXObject, the interface; cXObjectImpl): location,
 //    attributes and the 72 object data variables (EdithVariableSet);
 //  - their 3D instances in the house (game/iobjectman.cpp, EIObjectMan: ISimsObjectModel and kin).
-// The behaviour side (trees, the simulator, interactions, slots, routing) is not ported.
+// The behaviour side (the trees and primitives, the simulator, interactions) is in objectsim.cpp,
+// treesim.cpp, person.cpp and their kin (see docs/simulation.md).
 #pragma once
 #include <map>
 #include <string>
@@ -120,6 +121,9 @@ struct ObjSelector {
   std::u16string m_userName;               // +0x84 BString2*
   std::u16string m_userLastName;           // +0x88 BString2*
   CasSimDescriptionS2C* m_simDesc = nullptr;  // +0x8C a CAS-made sim's look (owned)
+  // A service NPC's record (+0x90; cXPersonImpl::GetServiceNPC): its "Sim::NPC" row of the CAS quickdata
+  // (big-endian: +0 gender, 0 male; +4 kind: 0 adult, 1 child, 2 dog, 3 cat, 4 monkey; +0x10 its name).
+  const unsigned char* m_npc = nullptr;
   ERShader* m_thumbnail = nullptr;         // +0x94 the sim's thumbnail (GetThumbnail; held)
   ObjectFolderImpl* m_folder = nullptr;    // +0x50
   const void* m_resFile = nullptr;         // +0x54 its "ResFile" row
@@ -309,6 +313,10 @@ struct ObjectModuleImpl {
   virtual cXObject* GetObjectFromID(int id);  // 800F9620
   virtual int GetTileObjectID(CTilePt& tile);  // 800F9668
   virtual void SetTileObjectID(CTilePt& tile, short id);  // 800F96E4
+  // PC: cXObjectImpl::HierSever / HierSetSite (800DD268 / 800DCFB8) for an object's tile: it gives up
+  // the tile map entry it holds (the tile it was placed on, m_siteTile), or takes its current tile's.
+  void SeverTile(cXObjectImpl* object);
+  void SetSiteTile(cXObjectImpl* object);
   virtual RET_UNKNOWN CreateNeighbor(Neighbor *);  // 800F974C
   virtual RET_UNKNOWN GetObject(int);  // 800F97CC
   // The highest object id (GC: the object list's size and the people's slots).
@@ -718,6 +726,7 @@ struct cXObjectImpl : public cXObject {
   TreeSimImpl* m_treeSim = nullptr;       // GC: the TreeSimImpl base (+0x00 points at it)
   int m_errorRepeats = 0;                 // PC: tree errors in a row (see HandleError)
   int m_lastErrorTick = 0;                // PC: the simulator tick of the last one
+  int m_siteTile = -1;                    // PC: the tile map entry it holds (x + 64 y; GC: its HierarchySite)
 };
 
 // The house's 3D object instances (0x14 bytes), by handle (GC: an ERedBlackTree).
