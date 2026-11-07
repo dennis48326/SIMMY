@@ -54,7 +54,7 @@ extern unsigned int _evenodd;           // 804FF060 (engine/e_engine.cpp)
 extern int _framecount;                 // 804FF064
 extern float _rendtime, _rendtime_m1;   // 804FF08C, render seconds of the last two frames
 extern ELevelManager _levelman;          // 80487E4C, game/e_levelman.cpp
-extern EClock g_playerCheats;            // 8046E1E0
+extern PlayerCheats g_playerCheats;      // 8046E1E0 (game/appmain.cpp)
 extern EGlobal _globals;                 // 80475DCC, game/eglobal.cpp
 extern int g_quickdatamanLanguage;       // _quickdataman + 0xD20
 extern NghResFile* Globs_pNghResFile;    // 804FDBE8 Globs::pNghResFile

@@ -1027,7 +1027,20 @@ int cXObjectImpl::TryExpression(const unsigned char* params) {
       if (*fref < -100.0f) *fref = -100.0f;
       if (*fref > 100.0f) *fref = 100.0f;
     }
-    SIMMY_STUB("cXObjectImpl::TryExpression: EdithVariableSet::s_bTaggedGraphicField (TagGraphicsField)", 0x80109F54);
+    // Object data 0 (the graphic) was written (EdithVariableSet::WriteVar): my model (lhs scope 3) or the
+    // stack object's (scope 4) restarts its animation. GC quirk kept: the flag is global (any data-0
+    // write since the last assigning expression, e.g. by another primitive, counts).
+    if (EdithVariableSet::s_bTaggedGraphicField == 1) {
+      if (lhsScope == 4) {
+        StackElem* frame = m_treeSim ? m_treeSim->GetCurElem() : nullptr;
+        cXObject* so = frame ? GetObjectFromID(frame->m_stackObject) : nullptr;
+        cXObjectImpl* o = so ? so->GetObjectImplementation() : nullptr;
+        if (o) o->TagGraphicsField();  // PC: GC does not check
+      } else if (lhsScope == 3) {
+        TagGraphicsField();
+      }
+      EdithVariableSet::s_bTaggedGraphicField = 0;
+    }
   }
   // PC dev trace (SIMMY_VM_TRACE): the values compared or written.
   if (TraceVM(m_id))
@@ -1681,8 +1694,8 @@ int cXObjectImpl::TryCheckObject(StackElem* frame, const unsigned char* params) 
 
 // 8010816C
 // Wakes the stack object: if its current node idles (primitive 0, its ticks in the param operand +0
-// names) or waits for input (0x11), the wait ends (and an idle's skipped ticks: SetIdleStatus 0).
-// GC: a person in an idle-animate (0x40) is told through its animator (not ported).
+// names) or waits for input (0x11), the wait ends (and an idle's skipped ticks: SetIdleStatus 0); a
+// person's idle-animate (0x40) count goes to 0.
 int cXObjectImpl::TryNotifyStackObject(StackElem* frame, const unsigned char*) {
   cXObject* o = GetObjectFromID(frame->m_stackObject);
   cXObjectImpl* target = o ? o->GetObjectImplementation() : nullptr;
@@ -1706,7 +1719,20 @@ int cXObjectImpl::TryNotifyStackObject(StackElem* frame, const unsigned char*) {
     cur->GetParams()[index] = 0;
     if (op == 0) target->SetIdleStatus(0);
   } else if (op == 0x40) {
-    SIMMY_STUB("cXObjectImpl::TryNotifyStackObject: a person's idle-animate", 0x8010816C);
+    // An idle-animate (TryIdleAnimate): its count ends (the next tick finishes it); not a person:
+    // error 0x1C.
+    cXPersonImpl* person = target->GetType() == 2 ? dynamic_cast<cXPersonImpl*>(target) : nullptr;
+    if (!person) {
+      m_treeSim->SetError(0x1c);
+      Error(0x1c);
+      return -1;
+    }
+    static int logged = 0;
+    if (logged++ < 10) {
+      const std::string me = DebugName();
+      std::printf("[vm] %s ends %s's idle-animate (count %d)\n", me.c_str(), person->DebugName(), person->m_idleAnimateCount);
+    }
+    person->m_idleAnimateCount = 0;
   }
   return 1;
 }
@@ -1958,14 +1984,18 @@ int cXObjectImpl::TryDrop() {
   return 1;
 }
 
+namespace {
+short TreeIDByName(Behavior* b, const char* name);
+}  // namespace
+
 // 800FFF24
 // Operands: +0 the GUID (flag 4 of +5: a person for the neighbour in the frame's stack object instead),
 // +4 where: 0 in front of me, 1 / 2 in me (my slot 0), 5 where I am, 3 in front of the stack object, 4 in the stack
 // object (its container), 6 out of the world, 7 / 8 next to the object in param 0 / local +6, 9 next
 // to me in the direction local +6 says; +5 flags: 1 fail if one is there already, 2 / 0x10 pass my id
 // to its main / init tree, 8 only on an empty tile, 0x20 face as the stack object. True: made, and the
-// frame's stack object is it. GC: the place is checked (CanPlace; people find a safe spot), multi-tile
-// objects are made whole and visitors run their "init visitor" tree.
+// frame's stack object is it; a visitor (flag 4) runs its "init visitor" tree. GC: the place is checked
+// (CanPlace; people find a safe spot) and multi-tile objects are made whole.
 int cXObjectImpl::TryCreateObject(StackElem* frame, const unsigned char* params) {
   ObjectModuleImpl* module = Globs_pObjectModule;
   const unsigned int guid = simmy::be32(params);
@@ -2049,8 +2079,7 @@ int cXObjectImpl::TryCreateObject(StackElem* frame, const unsigned char* params)
   }
   short id = 0;
   if (neighbor) {
-    // GC: MakeNewOutOfWorldObject (a cXPersonImpl for the type-2 selector); visitors then run their
-    // "init visitor" tree (not ported).
+    // GC: MakeNewOutOfWorldObject (a cXPersonImpl for the type-2 selector).
     cXPersonImpl* person = MakeNeighborPerson(neighbor, selector);
     id = person ? person->m_id : 0;
   } else if (!module->MakeNewOutOfWorldObject(selector, &id)) {
@@ -2064,6 +2093,18 @@ int cXObjectImpl::TryCreateObject(StackElem* frame, const unsigned char* params)
   if (neighbor)
     if (auto* p = dynamic_cast<cXPersonImpl*>(made))
       if (p->m_animator) p->m_animator->m_resetPos = 1;  // PC: the animator takes the new place
+  // Flag 4: a visitor runs its "init visitor" tree at once (RunOneTickTree, itself the stack object).
+  if (params[5] & 4)
+    if (auto* p = made->GetType() == 2 ? dynamic_cast<cXPersonImpl*>(made) : nullptr)
+      if (p->IsVisitor() && p->m_treeSim) {
+        Behavior* b = p->GetBehavior();
+        const short tree = TreeIDByName(b, "init visitor");
+        if (tree) {
+          const int r = p->m_treeSim->RunOneTickTree(b, tree, static_cast<short>(p->m_id), nullptr);
+          static int logged = 0;
+          if (logged++ < 10) std::printf("[vm] %s runs \"init visitor\" (%04x): %d\n", p->DebugName(), static_cast<unsigned short>(tree), r);
+        }
+      }
   // Its main tree's frame (its init tree has run): flag 2 gets my id as param 0 and my stack object as
   // its stack object, flag 0x10 my temp 0 as param 0 (both: error 0x37).
   if ((params[5] & 2) && (params[5] & 0x10)) {
@@ -2750,29 +2791,20 @@ int cXObjectImpl::TryCallNamedTree(StackElem* frame, const unsigned char* params
   const short tree = TreeIDByName(tb, name);
   if (TraceVM(m_id)) std::printf("[vm] %s calls \"%s\" (%04x) of %s, mode %d\n", DebugName(), name, static_cast<unsigned short>(tree), target->DebugName(), mode);
   if (!tree) return 0;
-  if (!TreeSimImpl::sInMainSim) {
-    // PC: inside a check tree the called tree should run to its end (GC), but some primitives those
-    // trees reach (sounds, animation) wait a tick on the PC, which a check tree cannot: "true" without
-    // running it, as before this primitive was ported.
-    SIMMY_STUB("cXObjectImpl::TryCallNamedTree: calls from a check tree (primitives that wait)", 0x800FBF14);
-    return 1;
-  }
   if (mode < 2) {
-    // 0: on my stack; 1: on the stack object's own.
+    // 0: on my stack; 1: on the stack object's own. Run at once to its end (RunOneTickTree:
+    // RunCheckTree), also from inside a check tree. No params (GC: 0): the tree sim's default ones.
     TreeSimImpl* sim = mode == 1 ? target->m_treeSim : m_treeSim;
-    if (!sim) return 0;
-    // No params (GC: 0): the tree sim's default ones, its object's temps (the caller's temp 0.. for mode 0).
-    const int r = sim->RunCheckTree(tb, tree, static_cast<short>(target->m_id), nullptr);
+    if (!sim) return 0;  // PC: GC does not check
+    const int r = sim->RunOneTickTree(tb, tree, static_cast<short>(target->m_id), nullptr);
+    // PC diagnostic: a named tree that did not finish in one go (GC: error 0x44F, the object's tree
+    // assert) - a primitive that waits where the GC's did not.
     if (sim->GetError() == 0x44f) {
-      // PC: the named tree did not finish in one go (a check tree may not wait; on the PC some of the
-      // primitives these trees reach wait or loop where the GC's did not). The error is dropped and the
-      // call counts as done, as before this primitive was ported.
-      SIMMY_STUB("cXObjectImpl::TryCallNamedTree: a named check tree that waits", 0x800FBF14);
-      sim->ClearError();
-      cXObjectImpl* owner = mode == 1 ? target : this;
-      owner->SetMiscFlag(0x100, false);
-      if (Globs_pObjectModule) Globs_pObjectModule->SetSimFlag(owner->m_id, 4, false);
-      return 1;
+      StackElem* e = sim->GetCurElem();
+      const std::string me = DebugName();
+      std::printf("[vm] %s: named tree \"%s\" (%04x) of %s did not finish (%s, in tree %04x node %d)\n", me.c_str(), name,
+                  static_cast<unsigned short>(tree), target->DebugName(), TreeSimImpl::sInMainSim ? "main" : "check",
+                  e ? static_cast<unsigned short>(e->GetTreeID()) : 0xffff, e ? e->m_node : -1);
     }
     return r ? 1 : 0;
   }

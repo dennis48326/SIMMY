@@ -204,6 +204,99 @@ void ESimsApp::initContinue() {
 
 // ---- Per-frame update ----------------------------------------------------------------------------
 
+// 80005448
+// Player 1's pad: a frame with a new press goes to the cheat reader.
+void ESimsApp::UpdateCheats() {
+  if (!_pCtrlMan) return;
+  EController* pad = _pCtrlMan->GetController(static_cast<unsigned int>(_pCtrlMan->GetPlayerControllerIndex(0)));
+  if (pad && pad->GetBtnPressedMask(0xffffffffu) != 0) g_playerCheats.Capture(pad);
+}
+
+// ---- PlayerCheats (the button-code reader) -------------------------------------------------------
+
+// 80005D40
+// A press of one button that some code uses joins the ring (cleared first after a wrong button or
+// when a second has passed since the last press; the time is this stopwatch's, i.e. the game clock).
+// Then every code whose buttons are all in the ring is looked for, as a run starting at each older
+// slot; a whole run toggles that cheat (EGlobal::TogglePlayerCheat) and clears the ring. Returns 1 when
+// a code was entered.
+int PlayerCheats::Capture(EController* pad) {
+  bool entered = false;
+  const unsigned short pressed = static_cast<unsigned short>(pad->GetBtnPressedMask(0xffffffffu));
+  if (!IsSingleButton(pressed) || (pressed & _globals.m_cheatButtons) == 0) {
+    m_purge = 1;
+    return 0;
+  }
+  const float nowMs = static_cast<float>(_pClockMan->GetSec(this) * 1000.0);
+  const float last = m_lastPressMs;
+  m_lastPressMs = nowMs;
+  if (last + 1000.0f <= nowMs) m_purge = 1;
+  if (m_purge) PurgeBtnMemory();
+  m_buttons[m_index] = pressed;
+  const unsigned short held = CreateBtnMask();
+  for (int code = 0; code < 11; ++code) {
+    const unsigned short mask = _globals.m_cheatCodeMask[code];
+    if ((held & mask) != mask) continue;
+    int start = m_index;
+    while (GetNextIndex(start) != m_index) {
+      if (m_buttons[start] == 0 || _globals.m_cheatCodes[code][0] == 0) continue;
+      int at = start;
+      bool match = false;
+      for (int i = 0; i < 7; ++i) {
+        // GC read code[i] before the i == 6 test (the next code's first button); the result is the same.
+        if (i == 6 || _globals.m_cheatCodes[code][i] == 0) {
+          match = true;
+          break;
+        }
+        if (_globals.m_cheatCodes[code][i] != m_buttons[at]) break;
+        GetNextIndex(at);
+      }
+      if (match) {
+        entered = true;
+        _globals.TogglePlayerCheat(code);
+      }
+    }
+  }
+  if (entered) {
+    PurgeBtnMemory();
+    return 1;
+  }
+  GetNextIndex(m_index);
+  return 0;
+}
+
+// 80005F60
+int PlayerCheats::GetNextIndex(int& index) {
+  if (++index > 5) index = 0;
+  return index;
+}
+
+// 80005F84
+// Exactly one of the 16 low bits is set.
+int PlayerCheats::IsSingleButton(unsigned short buttons) {
+  int seen = 0;
+  for (int bit = 0; bit < 16; ++bit) {
+    if (!(buttons >> bit & 1)) continue;
+    if (seen) return 0;
+    seen = 1;
+  }
+  return seen;
+}
+
+// 80005FD4
+void PlayerCheats::PurgeBtnMemory() {
+  m_index = 0;
+  m_purge = 0;
+  for (unsigned short& b : m_buttons) b = 0;
+}
+
+// 80005FFC
+unsigned short PlayerCheats::CreateBtnMask() {
+  unsigned short mask = 0;
+  for (unsigned short b : m_buttons) mask = static_cast<unsigned short>(mask | b);
+  return mask;
+}
+
 // 800054BC
 // The pads are read for Apt, then the Flash UI is updated.
 void ESimsApp::UpdateApt() {

@@ -107,6 +107,78 @@ targets made by the flows above.
 out after 60 s (`g_g2dDialogTimeout` 804FE284); help pages use `HelpDialog`; trees' dialogs come through
 `EdithDialogPrimitive` ([`edithdialogprim.cpp`](../src/game/edithdialogprim.cpp)).
 
+**Dialog icons** (`EdithDialogPrimitive::SetDialog` 800B56DC): bits 1-3 of the primitive's byte 7 pick an
+icon, byte 1 its argument: 2 the portrait of the neighbour whose id is in that local of the tree
+(`FindNeighborByID` -> its selector -> `ObjSelector::GetBigThumbnail`: a story sim's big portrait from the
+"RelationshipTable", else the sim's thumbnail), 3 the thumbnail of the object whose id is in that local, 4
+an entry of the UI strings' `DialogIconTable` (shader id, then two sizes; only the debug object uses it).
+Icons are 64 x 64 unless the table says otherwise; G2D (modal) and MDI (modeless) show them. 164 disc
+dialogs use kind 2 (phone calls, visitors, move-in, the story's reminders and villains), 54 kind 3.
+
+**The lot name** (`HUD_lot_name`, `HUDTarget::GetPlayerLocalizable` 80187744): the current house's
+"HouseData" text (`EHouse::GetHouseName` -> `EGlobal::HouseNameText`), or, while a family is just moving in
+(DAT_80475F24), that of the house being entered (DAT_80476230). No disc movie was seen asking for it (lot
+loads, pause, story and free play), like the reputation texts next to it (Urbz left-overs).
+
+**Family names** (`FamilyImpl::DoStream` 800B6548): a family name read from the neighbourhood that is a key
+("#...") is cleaned up: free-play houses 13-16 just lose the "#" (`EGlobal::GetNghFamilyName` 8004032C),
+other houses take the "HouseData" row of that name, else lose the "#" (`GetNghHouseName` 80040414). The
+disc's keys are "#house06" and "#freeplay1"; "HouseData" rows are named "house 06", so on GC too they
+become "house06" / "freeplay1".
+
+## Text effects ([`aptstring.cpp`](../src/game/aptstring.cpp), [`e_rfont.cpp`](../src/engine/e_rfont.cpp))
+
+Text drawn through `AptParagraph` (dialog boxes, hints, HUD texts with embedded codes) turns codes such
+as `<COLOR_..>`, `<FONT_..>`, `<PULSE_..>`, `<BLINK_..>`, `<PARTICLE_..>` into formats (`AptFormat`). The
+per-letter effects are a 4-byte command (kind + 3 arguments) that `AptFormat::Draw` animates from the
+system clock (`_sysclock`, the wall clock or SIMMY_DET's virtual clock; UI only, outside the sim hash) and
+`ERFont::ProcessFontFX` (8031702C) applies to each glyph's matrix while drawing (on a copy of the command
+per draw, so rumble and tipsy change it glyph by glyph):
+
+| Code | Kind | Effect |
+|---|---|---|
+| `<RUMBLE_rrAA>` | 1 | jitter of up to AA/25600 and +-pi/32 turn from a rand stream seeded by byte 1 (re-seeded rr times a second); one glyph in ten 1.3x. PC: the GC C-library rand on a local state |
+| `<WAVE_aabb>` | 2 | glyphs move up and down along the word |
+| `<BULGE_aabb>` | 3 | the glyphs near a moving index grow |
+| `<TIPSY>` | 4 | each glyph turned 45 degrees about a turning flat axis |
+| `<REVEAL_aabb>` | 5 | glyphs from a moving index on are hidden |
+| `<OUTLINE_RRGGBB>` | 6 | the word drawn twice in the colour, 1.4x, 2.5 px apart, behind the text |
+| `<ROCK_L_ssaa>` / `<ROCK_W_ssaa>` | 7 / 8 | glyphs (L) or the word (W) rock by +-aa degrees at speed ss |
+
+On the disc: `<ROCK_` in 96 strings (job menu entries and party/district texts that look like left-overs,
+the development and author menu titles), `<OUTLINE_` and `<RUMBLE_` only in a DEBUG string, `<REVEAL_`
+in two Japanese CAS prompts. `SIMMY_TEXT_FX_TEST=<code>:<word>` puts a code before a word to see them.
+
+## Button-code cheats ([`appmain.cpp`](../src/game/appmain.cpp), [`global.cpp`](../src/game/global.cpp))
+
+Every frame `ESimsApp::UpdateCheats` (80005448) gives a press on **player 1's pad** to
+`PlayerCheats::Capture` (80005D40, `g_playerCheats`): a single button that some code uses joins a ring of
+the last six presses (a wrong button, or a second since the last press, clears it first); a run of a
+code's buttons toggles that cheat (`EGlobal::TogglePlayerCheat` 80042388: bit n of EGlobal +0x9C, with
+the UI sound 0xCE619E32 on / 0x1C99B71C off while a game is loaded) and clears the ring. The codes are
+`EGlobal::InitPlayerCheats` (8004246C, run by `SetDefaults`); the bits are cleared when the main menu
+starts (`TheSimsMainMenuState::Startup`). Trees read them as simulator globals 0x2E and 0x2F
+(`GetPlayerCheats` 80042338: both the same, every bit with the config's all-cheats switch +0x400).
+With `p1_input=keyboard_mouse` the keyboard is pad 1, so the default keys enter them too (L q, R e, Z c,
+X f, Y tab, A space, B backspace, d-pad the arrow keys). `[cheat] code n on/off` is logged.
+
+| # | Buttons (GC pad) | Effect (tree / reader) |
+|---|---|---|
+| 0 | L, R, Up, A, Z | the **cheat gnome** (`zz_move_a_tron`, on every lot, hidden: data 0x22) appears ("Cheat Code - Show Gnome": any of cheats 0-2) |
+| 1 | R, L, Z, Right, Left | gnome; its money interactions ("Cheat - Money", "Cheat Code - Give Money") |
+| 2 | Up, X, Up, Right, Z | gnome; motives (fill, lower, alter all motives) |
+| 3 | Z, X, Down, Left, Up | unlock all objects, give skill objects |
+| 4 | X, Z, Left, X, Up, X | unlock / lock all lots |
+| 5 | B, Z, Down, Right, B | unlock / re-lock all socials, unlock clothing |
+| 6 | X, B, L, Up, Down | time (set the hour, advance) |
+| 7 | Y, X, B, Z, Left | change skills |
+| 8 | Z, B, Up, Down, Right, A | add aspiration, unlock recipes |
+| 9 | Right, Down, Right, Down, Right | the credits' photo (`CRDTarget::Update`: slides across while on the credits screen) |
+| 10 | R, L, R, L, Y | only a sound (0x3EA0941F); no bit (GC). The gnome's power-social items (flag 11) and reputation/relationship entries (flag 12) have no code |
+
+Cheats 3-8 are offered through the gnome, so they need cheat 0, 1 or 2 too. Det replays contain no code,
+so the det hash is unchanged.
+
 ## Widescreen HUD placement ([`pc_hud.cpp`](../src/platform/pc_hud.cpp), PC)
 
 `AptDisplayList::render` calls `simmy_apt_hud_enter`/`leave` around each instance; pc_hud decides an

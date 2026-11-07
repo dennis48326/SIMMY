@@ -2,9 +2,8 @@
 // family's members, house, money and flags, streamed as the neighbourhood file's 'FAMI' resources.
 // A player family's inventory (BBI::InventoryItems), goals and unlocks (GoalUnlock) and clothing
 // unlocks (CasClothingUnlocks) are kept as their streamed data; their classes are not ported.
-// Not ported: putting the family on the lot (CreateFamilyInLot: the object module's people), the
-// localised family and house names (EGlobal::GetNghFamilyName/GetNghHouseName: the names stay the
-// "#house06" keys the file holds), friend counts and net worth.
+// Not ported: putting the family on the lot (CreateFamilyInLot: the object module's people), friend
+// counts and net worth.
 #include "simmy/types_gen.hpp"
 #include "simmy/unported_globals.hpp"
 
@@ -111,8 +110,10 @@ void FamilyImpl::DoStream(ReconBuffer* b, int) {
   m_members.resize(static_cast<size_t>(n > 0 ? n : 0));
   for (int& m : m_members) b->Recon32(&m, 1);  // FamilyMember::DoStream (800B6A58)
   b->ReconString(m_name);
-  if (b->m_mode == ReconBuffer__Mode::kRead)
-    SIMMY_STUB("FamilyImpl::DoStream: the localised name (EGlobal::GetNghFamilyName / GetNghHouseName)", 0x800B6548);
+  if (b->m_mode == ReconBuffer__Mode::kRead) {
+    if (static_cast<unsigned int>(m_house - 0xd) < 4) _globals.GetNghFamilyName(m_name);
+    else _globals.GetNghHouseName(m_name);
+  }
 }
 
 // 800B6650

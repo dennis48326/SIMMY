@@ -7,7 +7,6 @@ RET_UNKNOWN cXObject::GetAutoReset() { SIMMY_STUB("cXObject::GetAutoReset(void)"
 void cXObject::SetAutoReset(bool) { SIMMY_STUB("cXObject::SetAutoReset(bool)", 0x800D9614); }
 RET_UNKNOWN cXObject::GetGlobalInitTreeID() { SIMMY_STUB("cXObject::GetGlobalInitTreeID(void)", 0x800D961C); return {}; }
 RET_UNKNOWN cXObject::GetGlobalMainTreeID() { SIMMY_STUB("cXObject::GetGlobalMainTreeID(void)", 0x800D9624); return {}; }
-void cXObjectImpl::Initialize() { SIMMY_STUB("cXObjectImpl::Initialize(void)", 0x800DA3D8); }
 void cXObjectImpl::Reset(bool) { SIMMY_STUB("cXObjectImpl::Reset(bool)", 0x800DA848); }
 void cXObjectImpl::Cleanup(cXObject *) { SIMMY_STUB("cXObjectImpl::Cleanup(cXObject *)", 0x800DB16C); }
 RET_UNKNOWN cXObjectImpl::GetHilite() { SIMMY_STUB("cXObjectImpl::GetHilite(void)", 0x800DB5C4); return {}; }
@@ -41,7 +40,6 @@ RET_UNKNOWN cXObjectImpl::UserCanDelete() { SIMMY_STUB("cXObjectImpl::UserCanDel
 RET_UNKNOWN cXObjectImpl::IsDeletedByEvict() { SIMMY_STUB("cXObjectImpl::IsDeletedByEvict(void)", 0x800E1D80); return {}; }
 RET_UNKNOWN cXObjectImpl::IsFromCatalog() { SIMMY_STUB("cXObjectImpl::IsFromCatalog(void)", 0x800E225C); return {}; }
 RET_UNKNOWN cXObjectImpl::ShouldAutoRotate() { SIMMY_STUB("cXObjectImpl::ShouldAutoRotate(void)", 0x800E2364); return {}; }
-void cXObjectImpl::UpdateSimFlags() { SIMMY_STUB("cXObjectImpl::UpdateSimFlags(void)", 0x800E2748); }
 RET_UNKNOWN cXObjectImpl::IsSpriteVisible(short) { SIMMY_STUB("cXObjectImpl::IsSpriteVisible(short)", 0x800E2B18); return {}; }
 RET_UNKNOWN cXObjectImpl::SyncObjectIsReady(signed char) { SIMMY_STUB("cXObjectImpl::SyncObjectIsReady(signed char)", 0x800E2B70); return {}; }
 RET_UNKNOWN cXObjectImpl::SetSyncObject(signed char) { SIMMY_STUB("cXObjectImpl::SetSyncObject(signed char)", 0x800E2D34); return {}; }
@@ -57,7 +55,6 @@ RET_UNKNOWN cXObjectImpl::SetColorIndex(unsigned char) { SIMMY_STUB("cXObjectImp
 void cXObjectImpl::GetNumTiles(int &, int &) { SIMMY_STUB("cXObjectImpl::GetNumTiles(int &, int &)", 0x800E324C); }
 void cXObjectImpl::ContainsData(int) { SIMMY_STUB("cXObjectImpl::ContainsData(int)", 0x800E325C); }
 EdithVariableSet::EdithVariableSet(EdithVariableSet &) { SIMMY_STUB("EdithVariableSet::EdithVariableSet(EdithVariableSet &)", 0x800E32EC); }
-void EdithVariableSet::Initialize(cXObjectImpl *) { SIMMY_STUB("EdithVariableSet::Initialize(cXObjectImpl *)", 0x800E33F4); }
 RET_UNKNOWN EdithVariableSet::Insert(pair<unsigned int, short> &) { SIMMY_STUB("EdithVariableSet::Insert(pair<unsigned int, short> &)", 0x800E5DBC); return {}; }
 RET_UNKNOWN EdithVariableSet::RemoveInstanceVariable(unsigned char) { SIMMY_STUB("EdithVariableSet::RemoveInstanceVariable(unsigned char)", 0x800E7778); return {}; }
 void EdithVariableSet::ShrinkToExactSize(byte_key_map<72, short, allocator<short>> &) { SIMMY_STUB("EdithVariableSet::ShrinkToExactSize(byte_key_map<72, short, allocator<short> > &)", 0x800E7A5C); }
@@ -94,7 +91,6 @@ RET_UNKNOWN cXObjectImpl::IsWindow() { SIMMY_STUB("cXObjectImpl::IsWindow(void)"
 RET_UNKNOWN cXObjectImpl::GetObjectProbe() { SIMMY_STUB("cXObjectImpl::GetObjectProbe(void)", 0x800EAF2C); return {}; }
 void cXObjectImpl::SetObjectProbe(ObjectProbe *) { SIMMY_STUB("cXObjectImpl::SetObjectProbe(ObjectProbe *)", 0x800EAF34); }
 RET_UNKNOWN cXObjectImpl::GetFolder() { SIMMY_STUB("cXObjectImpl::GetFolder(void)", 0x800EAF38); return {}; }
-bool cXObjectImpl::SimIndependent() { SIMMY_STUB("cXObjectImpl::SimIndependent(void)", 0x800EAF44); return {}; }
 RET_UNKNOWN cXObjectImpl::GetRect() { SIMMY_STUB("cXObjectImpl::GetRect(void)", 0x800EB0BC); return {}; }
 RET_UNKNOWN cXObjectImpl::GetModule() { SIMMY_STUB("cXObjectImpl::GetModule(void)", 0x800EB10C); return {}; }
 void cXObjectImpl::GetAdultAnimTable() { SIMMY_STUB("cXObjectImpl::GetAdultAnimTable(void)", 0x800EB114); }
@@ -122,6 +118,5 @@ RET_UNKNOWN cXObjectImpl::GetNext() { SIMMY_STUB("cXObjectImpl::GetNext(void)", 
 void cXObjectImpl::GetFirst() { SIMMY_STUB("cXObjectImpl::GetFirst(void)", 0x800EB80C); }
 RET_UNKNOWN cXObjectImpl::GetNextImpl() { SIMMY_STUB("cXObjectImpl::GetNextImpl(void)", 0x800EB844); return {}; }
 void cXObjectImpl::GetFirstImpl() { SIMMY_STUB("cXObjectImpl::GetFirstImpl(void)", 0x800EB84C); }
-void cXObjectImpl::TagGraphicsField() { SIMMY_STUB("cXObjectImpl::TagGraphicsField(void)", 0x800EB8C4); }
 RET_UNKNOWN cXObjectImpl::GetName() const { SIMMY_STUB("cXObjectImpl::GetName(void) const", 0x800EB8D0); return {}; }
 void cXObjectImpl::SetOverrideDialogReturnCode(TreeReturnCode) { SIMMY_STUB("cXObjectImpl::SetOverrideDialogReturnCode(TreeReturnCode)", 0x800EB8E0); }

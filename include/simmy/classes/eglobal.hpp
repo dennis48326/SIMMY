@@ -3,6 +3,7 @@
 // viewer, cheats, camera, the current house and selection. Most fields are still known only by offset.
 #pragma once
 #include <cstring>
+#include <string>
 
 struct ERQuickdata;
 
@@ -48,8 +49,10 @@ struct EGlobal {
     RET_UNKNOWN GetRepTitleTableRow(unsigned int);  // 800400B0
     void GetGoalsLegendRow(unsigned int);  // 80040168
     const unsigned short* const* GetMemCardString(const char* name);  // 800402BC
-    void GetNghFamilyName(BString2 &);  // 8004032C
-    void GetNghHouseName(BString2 &);  // 80040414
+    // A neighbourhood family name that is a key ("#...") loses its "#" (GetNghFamilyName); a house
+    // key becomes its "HouseData" row's name, or loses its "#" without a row (GetNghHouseName).
+    void GetNghFamilyName(std::u16string& name);  // 8004032C
+    void GetNghHouseName(std::u16string& name);  // 80040414
     void ConvertUnicodeToShiftJIS(unsigned short *, unsigned short *, unsigned int);  // 80040550
     RET_UNKNOWN GetFloorIndex(FloorTile *);  // 800406C4
     RET_UNKNOWN GetWallIndex(WallTile *);  // 8004070C
@@ -95,53 +98,20 @@ struct EGlobal {
     RET_UNKNOWN GetNameFromProp(PropRef *);  // 80042284
     static void UseOptionsScreenAdjustXY();  // 8004228C
     static bool InLevelState();  // 80042320
-    RET_UNKNOWN GetPlayerCheats() const;  // 80042338
+    unsigned short GetPlayerCheats() const;  // 80042338
     int IsPlayerCheatOn(int cheat) const;  // 80042358
     void TogglePlayerCheat(int);  // 80042388
     void InitPlayerCheats();  // 8004246C
     int TryAutoMapPlayer(int player);  // 80042614
     static RET_UNKNOWN IsSaveGameEnabled();  // 80042718
 
-  int m_field00 = 0;  // +0x00
-  int m_field04 = 0;  // +0x04
-  int m_field08 = 0;  // +0x08
-  int m_field0C = 0;  // +0x0C
-  int m_field10 = 0;  // +0x10
-  int m_field14 = 0;  // +0x14
-  int m_field18 = 0;  // +0x18
-  int m_field1C = 0;  // +0x1C
-  int m_field20 = 0;  // +0x20
-  int m_field24 = 0;  // +0x24
-  int m_field28 = 0;  // +0x28
-  int m_field2C = 0;  // +0x2C
-  int m_field30 = 0;  // +0x30
-  int m_field34 = 0;  // +0x34
-  int m_field38 = 0;  // +0x38
-  int m_field3C = 0;  // +0x3C
-  int m_field40 = 0;  // +0x40
-  int m_field44 = 0;  // +0x44
-  int m_field48 = 0;  // +0x48
-  int m_field4C = 0;  // +0x4C
-  int m_field50 = 0;  // +0x50
-  int m_field54 = 0;  // +0x54
-  int m_field58 = 0;  // +0x58
-  int m_field5C = 0;  // +0x5C
-  int m_field60 = 0;  // +0x60
-  int m_field64 = 0;  // +0x64
-  int m_field68 = 0;  // +0x68
-  int m_field6C = 0;  // +0x6C
-  int m_field70 = 0;  // +0x70
-  int m_field74 = 0;  // +0x74
-  int m_field78 = 0;  // +0x78
-  int m_field7C = 0;  // +0x7C
-  int m_field80 = 0;  // +0x80
-  int m_field84 = 0;  // +0x84
-  int m_field88 = 0;  // +0x88
-  int m_field8C = 0;  // +0x8C
-  int m_field90 = 0;  // +0x90
-  int m_field94 = 0;  // +0x94
-  int m_field98 = 0;  // +0x98
-  int m_field9C = 0;  // +0x9C
+  // The button-code cheats (InitPlayerCheats 8004246C; PlayerCheats::Capture reads them).
+  unsigned short m_cheatButtons = 0;  // +0x00 every button any code uses (_globals)
+  unsigned short m_cheatCodes[11][6] = {};  // +0x02 the codes: up to six EA button bits, 0-terminated
+  unsigned short m_cheatCodeMask[11] = {};  // +0x86 the buttons each code uses
+  unsigned short m_playerCheats = 0;  // +0x9C DAT_80475E68: bit n = cheat n is on (cleared by
+                                      // TheSimsMainMenuState::Startup; trees read it as globals 0x2E/0x2F)
+  unsigned short m_field9E = 0;  // +0x9E
   int m_fieldA0 = 0;  // +0xA0
   int m_fieldA4 = 0;  // +0xA4
   int m_fieldA8 = 0;  // +0xA8

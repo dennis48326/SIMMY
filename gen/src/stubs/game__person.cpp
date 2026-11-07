@@ -34,9 +34,6 @@ void cXPersonImpl::GetJobSuitTex(StringBuffer &, StringBuffer &, StringBuffer &)
 RET_UNKNOWN cXPersonImpl::UserCanPickup() { SIMMY_STUB("cXPersonImpl::UserCanPickup(void)", 0x8012B5F4); return {}; }
 void cXPersonImpl::Turn(int) { SIMMY_STUB("cXPersonImpl::Turn(int)", 0x8012B6D8); }
 RET_UNKNOWN cXPersonImpl::IsModelLoaded() { SIMMY_STUB("cXPersonImpl::IsModelLoaded(void)", 0x8012B754); return {}; }
-void cXPersonImpl::IncrementSimSocialInterest(float) { SIMMY_STUB("cXPersonImpl::IncrementSimSocialInterest(float)", 0x8012BB8C); }
-double cXPersonImpl::GetSimSocialInterestAsMotiveValue(cXPerson *) { SIMMY_STUB("cXPersonImpl::GetSimSocialInterestAsMotiveValue(cXPerson *)", 0x8012BDD8); return {}; }
-void cXPersonImpl::SetSimSocialIntrestFromMotiveValue(cXPerson *, float) { SIMMY_STUB("cXPersonImpl::SetSimSocialIntrestFromMotiveValue(cXPerson *, float)", 0x8012BF48); }
 cXPerson::cXPerson(int) { SIMMY_STUB("cXPerson::cXPerson(int)", 0x8012C4D0); }
 void cXPerson::setPersonImpl(cXPersonImpl *) { SIMMY_STUB("cXPerson::setPersonImpl(cXPersonImpl *)", 0x8012C684); }
 void cXPerson::CastToPerson() { SIMMY_STUB("cXPerson::CastToPerson(void)", 0x8012C694); }
@@ -48,7 +45,6 @@ RET_UNKNOWN cXPersonImpl::GetCurrentInteractionNC() { SIMMY_STUB("cXPersonImpl::
 RET_UNKNOWN cXPersonImpl::GetPersonDataArray() { SIMMY_STUB("cXPersonImpl::GetPersonDataArray(void)", 0x8012C778); return {}; }
 void cXPersonImpl::SetIdleLoopCount(short) { SIMMY_STUB("cXPersonImpl::SetIdleLoopCount(short)", 0x8012C7DC); }
 RET_UNKNOWN cXPersonImpl::GetDestList() { SIMMY_STUB("cXPersonImpl::GetDestList(void)", 0x8012C7E4); return {}; }
-RET_UNKNOWN cXPersonImpl::IsVisitor() { SIMMY_STUB("cXPersonImpl::IsVisitor(void)", 0x8012C8A8); return {}; }
 RET_UNKNOWN cXPersonImpl::GetRecording() { SIMMY_STUB("cXPersonImpl::GetRecording(void)", 0x8012C990); return {}; }
 RET_UNKNOWN cXPersonImpl::GetRecordDuration() { SIMMY_STUB("cXPersonImpl::GetRecordDuration(void)", 0x8012C998); return {}; }
 void cXPersonImpl::SetRecordDuration(int) { SIMMY_STUB("cXPersonImpl::SetRecordDuration(int)", 0x8012C9A0); }

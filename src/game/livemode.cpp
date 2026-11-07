@@ -1696,6 +1696,7 @@ ELiveMode* LiveModeForSound() { return s_liveMode; }
 // PC: changehouse.cpp's access to DAT_8047622C, DAT_80476230 and DAT_80475C54/58.
 void LiveModeSetChangingHouse(int on) { g_livemode8047622C = on; }
 void LiveModeSetNextHouse(int house) { s_houseNumber = house; }
+int LiveModeHouseNumber() { return s_houseNumber; }
 void LiveModeSetPlayerNeighbor(int player, int id) { s_playerNeighbor[player & 1] = id; }
 // PC: DAT_80475F24 and DAT_80475C54 / DAT_80475C58 for the in-game CAS (game/ingamecas.cpp).
 int& LiveModeFamilyJustMovedIn() { return s_familyJustMovedIn; }

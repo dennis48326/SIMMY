@@ -969,14 +969,31 @@ void cXPersonImpl::DeleteTopAction() {
   if (first < m_actionQueue.Count()) ActionSkipped(m_actionQueue.At(first));
 }
 
+// 8012C8A8
+// Person data 0x20 (GC +0x48) is set: a visitor.
+RET_UNKNOWN cXPersonImpl::IsVisitor() { return GetPersonData(0x20) != 0 ? 1 : 0; }
+
 // 8012AD98
-// Out of the queue; GC: its object is told (cXObject vtable 0x104, message 4 with my id; not ported).
+// Out of the queue; then its object runs its queue-skipped tree (function table entry 4, cXObject
+// vtable 0x104 RunTree) at once with me as the stack object, so it can release what it reserved.
 void cXPersonImpl::ActionSkipped(Interaction& action) {
+  cXObject* object = action.GetStackObject();
   for (unsigned int i = 0; i < m_actionQueue.Count(); ++i)
     if (&m_actionQueue.At(i) == &action) {
       m_actionQueue.Remove(i);
       break;
     }
+  if (object) {
+    cXObjectImpl* impl = object->GetObjectImplementation();
+    if (impl && impl->GetTreeID(4)) {
+      const int r = impl->RunTree(4, m_id, nullptr);
+      static int logged = 0;
+      if (logged++ < 10) {
+        const std::string me = DebugName();
+        std::printf("[vm] %s: %s runs its queue-skipped tree (%04x): %d\n", me.c_str(), impl->DebugName(), static_cast<unsigned short>(impl->GetTreeID(4)), r);
+      }
+    }
+  }
 }
 
 // 801266CC

@@ -11,6 +11,7 @@
 #include "simmy/types_gen.hpp"
 #include "simmy/unported_globals.hpp"
 
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -108,6 +109,86 @@ RET_UNKNOWN cXPersonImpl::GetSocialModeTarget() {
   if (GetPersonData(0x28) == 0) return 0;
   return reinterpret_cast<RET_UNKNOWN>(PersonFromID(GetPersonData(0x28)));
 }
+
+// Social interest: relationship variable 1 of my neighbour towards another, a fraction of 2^31 (2^31 =
+// 100). Motive 4 holds it (as -100..100) while the two sims are in social mode.
+namespace {
+// fctiwz: truncates, saturating.
+int SocialFctiwz(float v) {
+  if (!(v == v)) return static_cast<int>(0x80000000u);
+  if (v >= 2147483648.0f) return 0x7fffffff;
+  if (v < -2147483648.0f) return static_cast<int>(0x80000000u);
+  return static_cast<int>(v);
+}
+}  // namespace
+
+// 8012BB8C
+// Called by Motives::Sim each motive tick while the sim is not in social mode (person data 0x28 0) with
+// the tuning "interest increment": each relationship that has a variable 1 moves it by the step toward a
+// target from the daily relationship (variable 0): 0 below 20, (v - 20) / 50 * 0.35 up to 70, 0.35
+// above (x 2^31); within a step it takes the target. GC quirk kept: the step register is reused for the
+// new value, so after the first relationship the step is the previous relationship's new value (and a
+// relationship without variable 1 keeps the step).
+void cXPersonImpl::IncrementSimSocialInterest(float increment) {
+  Neighbor* n = Globs_pNeighborhood ? Globs_pNeighborhood->FindNeighborByID(GetNeighborID()) : nullptr;
+  if (!n) return;  // PC: GC does not check
+  RelMatrixImpl* rel = n->GetRelations();
+  if (!rel) return;
+  const int keys = rel->CountKeys();
+  int step = SocialFctiwz(increment / 100.0f * 2147483648.0f);
+  for (int i = 0; i < keys; ++i) {
+    const int key = rel->GetNthKey(i);
+    int value = step;
+    if (rel->GetArraySize(key) > 1) {
+      const int daily = rel->GetValue(key, 0);
+      int target;
+      if (daily < 0x14) target = 0;
+      else if (daily < 0x47) target = SocialFctiwz(std::fmaf(static_cast<float>(daily - 0x14) / 50.0f, 0.35f, 0.0f) * 2147483648.0f);
+      else target = 0x2cccccc0;
+      const int cur = rel->GetValue(key, 1);
+      int diff = cur - target;
+      if (diff < 0) diff = -diff;
+      if (diff < step) value = target;
+      else if (cur > target) value = cur - step;
+      else value = step + cur;
+      rel->SetValue(key, 1, value);
+    }
+    step = value;
+  }
+}
+
+// 8012BDD8
+// My social interest towards `other` as a motive value (variable 1 x 100 / 2^31); the variable is made
+// (0) if missing.
+double cXPersonImpl::GetSimSocialInterestAsMotiveValue(cXPerson* other) {
+  Neighbor* n = Globs_pNeighborhood ? Globs_pNeighborhood->FindNeighborByID(GetNeighborID()) : nullptr;
+  if (!n || !other || !n->GetRelations()) return 0.0;  // PC: GC does not check
+  RelMatrixImpl* rel = n->GetRelations();
+  const int key = other->GetPersonData(0x1f);  // GetNeighborID (vtable 0x1B4)
+  if (rel->GetArraySize(key) < 2) {
+    rel->SetArraySize(key, 2);
+    rel->GetArraySize(key);
+    rel->SetValue(key, 1, 0);
+  }
+  const int v = rel->GetValue(key, 1);
+  return static_cast<double>(static_cast<float>(v) * 100.0f * 4.656613e-10f);
+}
+
+// 8012BF48
+// Sets my social interest towards `other` from a motive value (value / 100 x 2^31); the variable is
+// made if missing.
+void cXPersonImpl::SetSimSocialIntrestFromMotiveValue(cXPerson* other, float value) {
+  Neighbor* n = Globs_pNeighborhood ? Globs_pNeighborhood->FindNeighborByID(GetNeighborID()) : nullptr;
+  if (!n || !other || !n->GetRelations()) return;  // PC: GC does not check
+  RelMatrixImpl* rel = n->GetRelations();
+  const int key = other->GetPersonData(0x1f);
+  const int v = SocialFctiwz(value / 100.0f * 2147483648.0f);
+  if (rel->GetArraySize(key) < 2) {
+    rel->SetArraySize(key, 2);
+    rel->GetArraySize(key);
+  }
+  rel->SetValue(key, 1, v);
+}
 // 8012CA2C
 // Person data 0x28 (the social partner's id) is set: true for both sims of a social mode.
 RET_UNKNOWN cXPersonImpl::IsInSocialMode() { return GetPersonData(0x28) != 0 ? 1 : 0; }
@@ -183,8 +264,12 @@ int cXPersonImpl::TrySocialMode(StackElem* frame, const unsigned char* params) {
         s_interactor[player].chosen = -1;
         s_autoPicks[player] = 0;
       }
+      // Both sims' motive 4 from their social interest towards each other.
+      p->SetMotive(4, static_cast<float>(p->GetSimSocialInterestAsMotiveValue(this)));
+      SetMotive(4, static_cast<float>(GetSimSocialInterestAsMotiveValue(p)));
       const std::string me = DebugName();
-      std::printf("[social] %s starts social mode with %s (player %d)\n", me.c_str(), p->DebugName(), player + 1);
+      std::printf("[social] %s starts social mode with %s (player %d; social interest %.1f / %.1f)\n", me.c_str(), p->DebugName(),
+                  player + 1, GetMotive(4), p->GetMotive(4));
       return 1;
     }
     case 4: {
@@ -216,7 +301,12 @@ int cXPersonImpl::TrySocialMode(StackElem* frame, const unsigned char* params) {
         s_interactor[player].active = false;
         if (_gd.m_hudTarget) _gd.m_hudTarget->CloseMenu(player);
       }
-      std::printf("[social] %s leaves social mode\n", DebugName());
+      // Both sims' social interest back from motive 4.
+      if (p) {
+        p->SetSimSocialIntrestFromMotiveValue(this, static_cast<float>(p->GetMotive(4)));
+        SetSimSocialIntrestFromMotiveValue(p, static_cast<float>(GetMotive(4)));
+      }
+      std::printf("[social] %s leaves social mode (social interest %.1f)\n", DebugName(), GetMotive(4));
       return 1;
     }
     case 2: {

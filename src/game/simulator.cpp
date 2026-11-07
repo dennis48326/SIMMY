@@ -585,9 +585,10 @@ void cSimulatorImpl::GetExpensesHistory(ExpenseReport* out) {
 }
 
 // 80141964
-// Globals 0x2E / 0x2F are the players' cheats (EGlobal::GetPlayerCheats; PC: none).
+// Globals 0x2E / 0x2F are the button-code cheats (EGlobal::GetPlayerCheats), refreshed on each read.
 int cSimulatorImpl::GetGlobal(short index) {
-  if (index == 0x2e || index == 0x2f) m_globals[index] = 0;
+  if (index == 0x2e) m_globals[0x2e] = static_cast<short>(_globals.GetPlayerCheats());
+  else if (index == 0x2f) m_globals[0x2f] = static_cast<short>(_globals.GetPlayerCheats());
   return index >= 0 && index < kCount ? m_globals[index] : 0;
 }
 

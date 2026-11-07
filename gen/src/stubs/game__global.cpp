@@ -18,8 +18,6 @@ RET_UNKNOWN EGlobal::GetMessagesTableRow(unsigned int) { SIMMY_STUB("EGlobal::Ge
 RET_UNKNOWN EGlobal::GetUrbzButtonsRow(unsigned int) { SIMMY_STUB("EGlobal::GetUrbzButtonsRow(unsigned int)", 0x80040030); return {}; }
 RET_UNKNOWN EGlobal::GetRepTitleTableRow(unsigned int) { SIMMY_STUB("EGlobal::GetRepTitleTableRow(unsigned int)", 0x800400B0); return {}; }
 void EGlobal::GetGoalsLegendRow(unsigned int) { SIMMY_STUB("EGlobal::GetGoalsLegendRow(unsigned int)", 0x80040168); }
-void EGlobal::GetNghFamilyName(BString2 &) { SIMMY_STUB("EGlobal::GetNghFamilyName(BString2 &)", 0x8004032C); }
-void EGlobal::GetNghHouseName(BString2 &) { SIMMY_STUB("EGlobal::GetNghHouseName(BString2 &)", 0x80040414); }
 void EGlobal::ConvertUnicodeToShiftJIS(unsigned short *, unsigned short *, unsigned int) { SIMMY_STUB("EGlobal::ConvertUnicodeToShiftJIS(unsigned wchar_t *, unsigned wchar_t *, unsigned int)", 0x80040550); }
 RET_UNKNOWN EGlobal::GetFenceIndex(FenceData *) { SIMMY_STUB("EGlobal::GetFenceIndex(FenceData *)", 0x80040754); return {}; }
 void EGlobal::PlaceObjectInHouse(cXObject *) { SIMMY_STUB("EGlobal::PlaceObjectInHouse(cXObject *)", 0x80041214); }
@@ -48,9 +46,6 @@ RET_UNKNOWN EGlobal::GetPropFromName(char *) { SIMMY_STUB("EGlobal::GetPropFromN
 RET_UNKNOWN EGlobal::GetNameFromProp(PropRef *) { SIMMY_STUB("EGlobal::GetNameFromProp(PropRef *)", 0x80042284); return {}; }
 void EGlobal::UseOptionsScreenAdjustXY() { SIMMY_STUB("EGlobal::UseOptionsScreenAdjustXY(void)", 0x8004228C); }
 bool EGlobal::InLevelState() { SIMMY_STUB("EGlobal::InLevelState(void)", 0x80042320); return {}; }
-RET_UNKNOWN EGlobal::GetPlayerCheats() const { SIMMY_STUB("EGlobal::GetPlayerCheats(void) const", 0x80042338); return {}; }
-void EGlobal::TogglePlayerCheat(int) { SIMMY_STUB("EGlobal::TogglePlayerCheat(int)", 0x80042388); }
-void EGlobal::InitPlayerCheats() { SIMMY_STUB("EGlobal::InitPlayerCheats(void)", 0x8004246C); }
 void SetUIStatusTextV(char *, va_list) { SIMMY_STUB("SetUIStatusTextV(char *, __va_list_tag *)", 0x800428D0); }
 void SetUIStatusText(char *,...) { SIMMY_STUB("SetUIStatusText(char *,...)", 0x800428D4); }
 RET_UNKNOWN GetUIStatusText() { SIMMY_STUB("GetUIStatusText(void)", 0x80042920); return {}; }

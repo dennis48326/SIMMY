@@ -476,7 +476,8 @@ void dev_pad_script(PADStatus* pads) {
   if (seq) {
     pads[0].err = PAD_ERR_NONE;
     dev_pad_seq(pads, seq);
-    return;
+    // With both, SIMMY_PAD_SCRIPT's presses are added at its frames (quick presses after a SEQ that
+    // reached the house, e.g. the button-code cheats, whose presses must come within a second).
   }
   if (!script) return;
   pads[0].err = PAD_ERR_NONE;  // the scripted pad stays plugged in between presses

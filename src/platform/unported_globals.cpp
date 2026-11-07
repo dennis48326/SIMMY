@@ -31,7 +31,7 @@ EResPrefetch _resPrefetch;
 EFrameAllocGroup _frag;
 ETweak _tweak;
 ELevelManager _levelman;
-EClock g_playerCheats;
+PlayerCheats g_playerCheats;
 EGlobal _globals;
 int g_quickdatamanLanguage = 0;
 NghResFile* Globs_pNghResFile = nullptr;

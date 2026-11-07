@@ -347,6 +347,18 @@ bool cXObjectImpl::CanChooseAutonomously() {
   return n != 0;
 }
 
+// 800E2748
+// The object module's sim flags of the object: 2 (runs while the simulation is paused: buy/build mode,
+// pause, dialogs) from SimIndependent (data 0x3C), 8 from CanChooseAutonomously. Called at the end of
+// Reset (the new object's init tree) and of PostLoad. (PC: TryFindBestAction asks
+// CanChooseAutonomously itself.)
+void cXObjectImpl::UpdateSimFlags() {
+  ObjectModuleImpl* module = Globs_pObjectModule;
+  if (!module) return;  // PC: GC does not check
+  module->SetSimFlag(m_id, 2, SimIndependent());
+  module->SetSimFlag(m_id, 8, CanChooseAutonomously());
+}
+
 // ---------------------------------------------------------------------------------------------------
 // The person
 

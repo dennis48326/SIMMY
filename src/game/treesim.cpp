@@ -705,7 +705,7 @@ void Motives::Sim() {
   if (m_values[kAspiration] > -80.0f) m_values[kAspiration] -= aspirationDec / 30.0f / 5.0f;
   Cleanup();
   if (p->GetPersonData(0x28) == 0)
-    SIMMY_STUB("Motives::Sim: the sim's social interest (vtable 0x39C IncrementSimSocialInterest)", 0x800C2898);
+    p->IncrementSimSocialInterest(interestInc);  // vtable 0x39C
   p->CalcHappy();
 }
 

@@ -39,6 +39,10 @@ summary and the deliberate GC behaviour.
 - Routing: portals are type-8 multi-tile parts without `cXPortalImpl` (scores in `m_portalValues`);
   `TrySnap` still uses the PC `PersonCanStandAt`. The GC leaves a "move out of the way" object in the
   world when it cannot be used (kept).
+- New objects: `cXObjectImpl::Reset` (800DA848) is not ported; its stand-in runs the init tree and
+  `UpdateSimFlags`, but not its data part (data 0x3A from the definition +0x62). A visitor made by
+  CreateObject runs "init visitor" before its init tree (the port pushes the person's init tree, GC runs it
+  at once).
 - `cXPersonImpl`: `Reset` (8011EB78), motive curves from a string set file (no definition on the disc
   names one).
 - GlobalDispatch has no listener list: the house's messages go to `HouseImpl::DoCommand` through
@@ -56,8 +60,9 @@ summary and the deliberate GC behaviour.
 ## UI
 
 - Unreachable in this build, not ported: the PDA (flows 0xB-0x14), OPT (flow 0x16; its movie is not on the
-  disc), E2E/EyeToy, slot-B import, HDTV layouts, MUWrapper/DlgWrapper, cheats/author mode (the pristine
-  reset is ported, `SIMMY_PRISTINE_SAVE`).
+  disc), E2E/EyeToy, slot-B import, HDTV layouts, MUWrapper/DlgWrapper, the dev cheat file and debug menu
+  (`ECheats`) and author mode (the pristine reset is ported, `SIMMY_PRISTINE_SAVE`). The players'
+  button-code cheats are ported ([ui.md](ui.md) "Button-code cheats").
 - `HUDTarget`: `ActionQueueHUD` (the PC queue widget is `ACTTarget` via H2D: same behaviour) and
   `AttachControllers` (a filter for commands nothing reads on PC).
 - `O2TTarget`: the screen-position wizard (`UseOptionsScreenAdjustXY`; the PC scales the picture itself).

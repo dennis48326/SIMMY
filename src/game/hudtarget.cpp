@@ -11,6 +11,9 @@
 #include <string>
 
 int PcPrivateScreenPlayer();  // uiscreens.cpp (PC co-op private screens)
+const char* GetHouseNameText(int house);  // 800236C8 (famtarget.cpp)
+int& LiveModeFamilyJustMovedIn();  // livemode.cpp: DAT_80475F24
+int LiveModeHouseNumber();  // livemode.cpp: DAT_80476230
 
 namespace {
 UIScreenManager* ScreenManager() { return static_cast<UIScreenManager*>(_globals.m_uiScreenManager); }
@@ -265,8 +268,26 @@ unsigned short* HUDTarget::GetPlayerLocalizable(int player, char* name) {
     Copy16(s, number);
     return FinishLocalizable(s, false);
   }
-  // HUD_modeless_dialog_*, HUD_rep_level_text, HUD_rep_title_text (RepTitleSupport) and HUD_lot_name
-  // (EHouse::GetHouseName, EGlobal::HouseNameText) are not ported: empty.
+  if (!std::strcmp("HUD_lot_name", name)) {
+    // The current house's name (DAT_80475F24 set: a family just moved in, the house being entered,
+    // DAT_80476230), as its "HouseData" row's text.
+    const char* house = nullptr;
+    if (LiveModeFamilyJustMovedIn() == 0) {
+      if (_globals.m_house) house = _globals.m_house->GetHouseName();
+    } else {
+      house = GetHouseNameText(LiveModeHouseNumber());
+    }
+    if (house) {
+      const unsigned short* const* text = _globals.HouseNameText(house);
+      if (text && *text) {
+        unsigned short* d = s;
+        for (const unsigned short* t = *text; (*d++ = *t++) != 0;) {}
+      }
+    }
+    return FinishLocalizable(s, true);
+  }
+  // HUD_modeless_dialog_*, HUD_rep_level_text and HUD_rep_title_text (RepTitleSupport) are not
+  // ported: empty.
   return FinishLocalizable(s, true);
 }
 

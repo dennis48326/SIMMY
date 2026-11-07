@@ -503,8 +503,10 @@ int ObjectModuleImpl::MakeNewOutOfWorldObject(ObjSelector* selector, short* id) 
     lead->AssignOffsets();
     lead->m_data.WriteVar(0x29, ERQuickdata::S16(selector->m_def, 0x24));
     // Reset(true) through the last part (cXMTObjectImpl::Reset: the lead resets the group).
-    for (cXMTObjectImpl* p = lead; p; p = p->m_nextPart)
+    for (cXMTObjectImpl* p = lead; p; p = p->m_nextPart) {
       if (p->m_treeSim && p->m_treeSim->HasMainTreeSim()) p->RunTree(0, 0, nullptr);
+      p->UpdateSimFlags();  // vtable 0x84
+    }
     if (id) *id = lead->m_id;
     return lead->m_id;
   }
@@ -514,11 +516,15 @@ int ObjectModuleImpl::MakeNewOutOfWorldObject(ObjSelector* selector, short* id) 
     delete object;
     return 0;
   }
+  // GC: Initialize through the interface; PC: the object part only (a person's own Initialize, the
+  // neighbour and its instance, is not run here).
+  impl->cXObjectImpl::Initialize();
   born(impl);
   impl->m_data.WriteVar(0x29, ERQuickdata::S16(selector->m_def, 0x24));
   // GC: Reset(true) (800DA848, through the cXObject interface) runs the init tree (entry 0) at once, so
   // what it sets (its attributes cleared, data) is in place before the creator's tree goes on.
   if (impl->m_treeSim && impl->m_treeSim->HasMainTreeSim()) impl->RunTree(0, 0, nullptr);
+  impl->UpdateSimFlags();  // Reset's end (vtable 0x84)
   if (id) *id = impl->m_id;
   // GlobalDispatch 0xDE: HouseImpl::DoCommand redoes the people's visitor types for a new person.
   HouseDispatch(0xde, impl->m_id);
@@ -529,8 +535,16 @@ int ObjectModuleImpl::MakeNewOutOfWorldObject(ObjSelector* selector, short* id) 
 // A new object starts its behaviour: the main tree (PC: GC's Reset resets the tree sim to it; its init
 // tree is run at once by MakeNewOutOfWorldObject, as GC's Reset(true)).
 void cXObjectImpl::JustBorn() {
-  SIMMY_STUB("cXObjectImpl::JustBorn: data 0x2D/0x2E/0x2F/0x18/0x15 from the object's model", 0x800DAC94);
-  StartBehavior();
+  // The purchase date and time from the simulator's clock (GetSim, vtable 0x3DC; GetGlobal): data 0x2D
+  // the year, 0x2E the month, 0x2F the day, 0x18 the hour, 0x15 the minute.
+  if (cSimulatorImpl* sim = Globs_pSimulator) {
+    m_data.WriteVar(0x2d, static_cast<short>(sim->GetGlobal(8)));
+    m_data.WriteVar(0x2e, static_cast<short>(sim->GetGlobal(7)));
+    m_data.WriteVar(0x2f, static_cast<short>(sim->GetGlobal(1)));
+    m_data.WriteVar(0x18, static_cast<short>(sim->GetGlobal(0)));
+    m_data.WriteVar(0x15, static_cast<short>(sim->GetGlobal(5)));
+  }
+  StartBehavior();  // PC
 }
 
 // 800F8214

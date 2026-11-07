@@ -1,5 +1,5 @@
-// Port of engine/e_rfont.cpp: font resources, text measuring and drawing. ProcessFontFX (per-glyph
-// text effects) is not ported yet.
+// Port of engine/e_rfont.cpp: font resources, text measuring and drawing, and the per-glyph text
+// effects (ProcessFontFX).
 #include "simmy/types_gen.hpp"
 #include "simmy/unported_globals.hpp"
 
@@ -137,7 +137,12 @@ void DrawString(ERFont* font, void* str, bool wide, bool snapX, bool snapY, EVec
       windowMat.m[3][1] = windowMat.m[3][1] * -0.5f + 0.5f;
     }
   }
-  const bool doFx = fx && *reinterpret_cast<unsigned char*>(fx) != 0;  // (the original passes a 4-byte copy)
+  // The draw works on a 4-byte copy of the effect command (GC: local_148): rumble and tipsy change
+  // it glyph by glyph, starting again from the caller's bytes on every draw.
+  unsigned char fxCopy[4] = {};
+  if (fx) std::memcpy(fxCopy, fx, 4);
+  const bool doFx = fx && fxCopy[0] != 0;
+  if (doFx) fx = reinterpret_cast<fontFXcommand*>(fxCopy);
 
   EVec2 pen{pos.x * sx, pos.y * sy};
   EMat4 rot;  // the matrix without its translation
@@ -296,6 +301,84 @@ void DrawString(ERFont* font, void* str, bool wide, bool snapX, bool snapY, EVec
   if (rc) rc->DisableRasterModes(0x8000, 0);
 }
 }  // namespace
+
+// 8031702C
+// One glyph's effect (bytes: kind, then three arguments; AptFormat::Draw animates them from the
+// system clock), applied to the glyph's matrix. `index` is the glyph's position (1 = the first).
+//   1 rumble: a jitter of up to byte 2 / 25600 and +-pi/32 of turn from a rand stream seeded by byte 1,
+//     one glyph in ten 1.3 times bigger; byte 1 becomes the next glyph's seed.
+//   2 wave: moved up/down by sin((byte 3 * 0.234375 * index + byte 1) * 1.40625 deg) * byte 2 / 12800.
+//   3 bulge: glyphs within byte 2 of glyph byte 3 grown by byte 1 (128 = none), less further out.
+//   4 tipsy: turned 45 degrees about a flat axis at byte 1 * 360/256 -+ 2 * frames (bytes 2-3);
+//     byte 1 is scrambled for the next glyph.
+//   5 reveal: glyphs from byte 3 on are hidden (scaled to nothing, moved off).
+//   6 outline: 1.4 times bigger.  7/8 rock/rotate: turned by the short in bytes 2-3 / 32767 radians.
+void ERFont::ProcessFontFX(fontFXcommand* command, EMat4* m, int index) {
+  unsigned char* fx = reinterpret_cast<unsigned char*>(command);
+  const unsigned char kind = fx[0];
+  if (kind == 4) {
+    float angle = static_cast<float>(fx[1]) * 0.00390625f * 360.0f;
+    const float frames = static_cast<float>(fx[3]) * 256.0f + static_cast<float>(fx[2]);
+    if ((fx[1] & 1) == 0) angle = angle - (frames + frames);
+    else angle = angle + frames + frames;
+    angle = std::fmod(angle, 360.0f);
+    EMat4 r;
+    r.RotateZ(angle * 0.017453292f);
+    EVec3 axis{r.m[0][0], r.m[0][1], r.m[0][2]};  // (1, 0, 0) turned by the angle
+    r.Rotate(axis, static_cast<float>(0.01745329238474369 * 45.0));
+    EMat4 out;
+    out.Mult4x4(r, *m);
+    *m = out;
+    const unsigned int u = ((static_cast<unsigned int>(fx[1]) >> 6) | static_cast<unsigned int>(fx[1]) << 2) ^ 0xa4u;
+    fx[1] = static_cast<unsigned char>(((u >> 7) & 1u) | (u << 1));
+  } else if (kind < 5) {
+    if (kind == 1) {
+      // GC: srand/rand of the C library (sn/libc rand 802432B0, one stream for the whole game). PC: the
+      // same generator on a local state, so the text does not disturb any other stream.
+      unsigned int seed = static_cast<unsigned int>(fx[1]) | (static_cast<unsigned int>(fx[1]) ^ 0xa6u) << 16;
+      auto rnd = [&seed] {
+        seed = seed * 0x41c64e6du + 0x3039u;
+        return static_cast<float>(static_cast<double>(static_cast<int>(seed & 0x7fffffffu)) * 4.656612873077393e-10);
+      };
+      const double amount = static_cast<double>(static_cast<float>(fx[2]) * 3.90625e-05f);
+      const double half = static_cast<float>(amount * 0.5);
+      m->m[3][0] = m->m[3][0] + static_cast<float>(static_cast<double>(rnd()) * amount - half);
+      m->m[3][1] = m->m[3][1] + static_cast<float>(static_cast<double>(rnd()) * amount - half);
+      const float turn = rnd();
+      m->PreRotateZ(((turn + turn) - 1.0f) * 0.09817477f);
+      if (rnd() < 0.1f) {
+        EVec3 s{1.3f, 1.3f, 1.3f};
+        m->PreScale(s);
+      }
+      fx[1] = static_cast<unsigned char>(static_cast<int>(rnd() * 255.0f));
+    } else if (kind == 2) {
+      const float a = (static_cast<float>(fx[3]) * 0.234375f * static_cast<float>(index) + static_cast<float>(fx[1])) *
+                      1.40625f * 0.017453292f;
+      m->m[3][1] = std::sin(a) * (static_cast<float>(fx[2]) / 12800.0f) + m->m[3][1];
+    } else if (kind == 3) {
+      const int reach = fx[2];
+      const int d = std::abs(static_cast<int>(static_cast<signed char>(fx[3])) - index);
+      if (d <= reach) {
+        const float grow = static_cast<float>((static_cast<int>(fx[1]) - 0x80) * (reach - (d - 1)));
+        float s = (grow * (1.0f / static_cast<float>(reach + 1)) + 128.0f) * 0.0078125f;
+        EVec3 v{s, s, s};
+        m->PreScale(v);
+      }
+    }
+  } else if (kind == 6) {
+    m->PreScale(1.4f);
+  } else if (kind < 6) {  // 5
+    if (static_cast<int>(static_cast<signed char>(fx[3])) - index - 1 < 0) {
+      m->PreScale(0.0f);
+      m->m[3][1] = -10.0f;
+      m->m[3][0] = -10.0f;
+    }
+  } else if (kind < 9) {  // 7, 8
+    short turn;
+    std::memcpy(&turn, fx + 2, 2);  // (written in host order by AptFormat::Draw)
+    m->PreRotateZ(static_cast<float>(turn) * 3.051851e-05f);
+  }
+}
 
 // 80314298
 // Selects page `page` of the current size: its shader, keeping the renderer's depth test as it was.

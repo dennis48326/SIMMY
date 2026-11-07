@@ -307,7 +307,6 @@ void EdithDialogPrimitive::ResetDialogParameters() {
 // GC: the strings come through the SmartDataFactory (STR# GUID 0x6BC37BC5, set 0x12D of the tree
 // file's namespace); the texts go through the object's ParseUIString (vtable 0x10C).
 int EdithDialogPrimitive::SetDialog(StackElem* frame, const unsigned char* param, cXObject* object, bool testing) {
-  (void)testing;
   Behavior* b = frame ? frame->m_behavior : nullptr;
   const unsigned char* file = b ? b->GetResFileID(static_cast<short>((param[7] & 0x80) ? 0x2000 : 0x1000)) : nullptr;
   const unsigned char* strings = FileStringSet(file, 0x12d);
@@ -322,11 +321,50 @@ int EdithDialogPrimitive::SetDialog(StackElem* frame, const unsigned char* param
   parse(m_body);
   AssignString(strings, m_title, static_cast<signed char>(param[6]), nullptr, true);
   parse(m_title);
+  // The icon (kind in bits 1-3 of byte 7, argument byte 1): 2 the portrait of the neighbour whose id is
+  // in that local, 3 the thumbnail of the object whose id is in that local (testing: id 1 for both), 4 row
+  // `byte 1` of the UI strings' "DialogIconTable" (a shader with its size). 64 x 64 unless the row says.
   const int iconKind = param[7] >> 1 & 7;
-  if (iconKind > 1) SIMMY_STUB("EdithDialogPrimitive::SetDialog: the icon (DialogIconTable, big thumbnails)", 0x800B56DC);
+  if (iconKind != 1 && iconKind != 0) {
+    ERShader* icon = nullptr;
+    short w = 0x40, h = 0x40;
+    const unsigned int arg = param[1];
+    if (iconKind == 4) {
+      // The table's one row points at the icons ({shader id, +4, +6}; the count before them).
+      const void* table = _globals.m_strings ? _globals.m_strings->getTable("DialogIconTable") : nullptr;
+      const unsigned char* first = table ? ERQuickdata::TableRows(table) : nullptr;
+      const unsigned char* rows = first ? static_cast<const unsigned char*>(ERQuickdata::Ptr(first, 0)) : nullptr;
+      const unsigned int count = rows ? ERQuickdata::U32(rows - 4, 0) : 0;
+      // GC: arg <= count (entry `count` is past the array); PC: only entries that exist.
+      if (rows && arg < count) {
+        icon = static_cast<ERShader*>(_shaderman.AddRef(ERQuickdata::U32(rows + arg * 8, 0), nullptr, 0));
+        h = ERQuickdata::S16(rows + arg * 8, 6);
+        w = ERQuickdata::S16(rows + arg * 8, 4);
+      }
+    } else {
+      ObjSelector* selector = nullptr;
+      if (frame && arg < frame->m_numLocals) {
+        int id = frame->GetLocals()[arg];
+        if (testing) id = 1;
+        if (iconKind == 2) {
+          Neighbor* n = Globs_pNeighborhood ? Globs_pNeighborhood->FindNeighborByID(id) : nullptr;
+          if (n) selector = n->m_selector;
+        } else if (iconKind == 3 && Globs_pObjectModule) {
+          if (cXObject* o = Globs_pObjectModule->GetObjectFromID(id)) selector = o->GetSelector();
+        }
+      }
+      if (selector) selector->GetBigThumbnail(&icon);
+    }
+    if (icon) {
+      m_icon = icon;
+      m_iconW = w;  // +0x48 (the row's +4)
+      m_iconH = h;  // +0x4A (the row's +6)
+    }
+  }
   const int kind = param[5] >> 4;
   if (std::getenv("SIMMY_DIALOG_TRACE") || true)
-    std::printf("[dialog] kind %d: \"%s\" %s\n", kind, Narrow(Str(m_body)).c_str(), Narrow(Str(m_title)).c_str());
+    std::printf("[dialog] kind %d: \"%s\" %s%s\n", kind, Narrow(Str(m_body)).c_str(), Narrow(Str(m_title)).c_str(),
+                iconKind > 1 ? (m_icon ? " (icon)" : " (no icon)") : "");
   // PC development aid: SIMMY_SHOT_ON_DIALOG=<text>: the --screenshot is taken 100 frames after the first
   // dialog whose text contains it (offscreen pictures of story moments).
   if (const char* shot = std::getenv("SIMMY_SHOT_ON_DIALOG")) {

@@ -511,6 +511,7 @@ TheSimsMainMenuState::~TheSimsMainMenuState() = default;
 void TheSimsMainMenuState::Startup() {
   SIMMY_STUB("TheSimsMainMenuState::Startup: HDDThread::SetPriorityHigh", 0x80098600);
   CompactAllHeaps();
+  _globals.m_playerCheats = 0;  // DAT_80475E68: the button-code cheats are off again at the main menu
 }
 
 // 800986A0

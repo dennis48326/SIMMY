@@ -5,6 +5,7 @@
 // hierarchy (containers and slots), routing, interactions and everything the simulator runs.
 #include "simmy/types_gen.hpp"
 #include "simmy/unported_globals.hpp"
+#include "simmy/classes/routing.hpp"
 
 #include <vector>
 
@@ -35,6 +36,16 @@ void cXObject::SetGlobalFreeWillOverride(bool on) { cXObjectImpl::sGlobalFreeWil
 // cXObjectImpl
 
 void LoadObjectSpriteSlots(cXObjectImpl* object);  // sprites.cpp
+
+// 800DA3D8
+// The object data's defaults (EdithVariableSet::Initialize) and its place out of the world (-16, -16,
+// level 1). PC: the tree sim's default params (the temps) are given by StartBehavior, the slots and
+// attributes by the constructor.
+void cXObjectImpl::Initialize() {
+  m_data.Initialize(this);
+  m_location[0] = m_location[1] = -16;  // GC: SetLocation (vtable 0x334)
+  m_level = 1;
+}
 
 // 800D962C
 // GC: also the TreeSim / TreeSimImpl bases (the behaviour stack), the default attribute and data sets
@@ -107,6 +118,9 @@ cXObjectImpl* cXObjectImpl::GetObjectImplementation() { return this; }
 bool cXObjectImpl::IsRoof() { return objdef::Type(GetDef()) == 0xe; }
 // 800E3050
 bool cXObjectImpl::IsVehicle() { return GetType() == 0xc; }
+// 800EB8C4
+// The model must restart its animation (HaveGraphicsBeenTagged, read by ISimsObjectModel::Update).
+void cXObjectImpl::TagGraphicsField() { m_graphicsTagged = 1; }
 // 800EB89C
 // Once: whether the simulation asked the model to restart its animation.
 int cXObjectImpl::HaveGraphicsBeenTagged() {
@@ -114,6 +128,9 @@ int cXObjectImpl::HaveGraphicsBeenTagged() {
   m_graphicsTagged = 0;
   return 1;
 }
+// 800EAF44
+// Object data 0x3C is set: it runs while the simulation is paused (sim flag 2, UpdateSimFlags).
+bool cXObjectImpl::SimIndependent() { return m_data[0x3c] != 0; }
 // 800EB378
 int cXObjectImpl::IsMultiTile() { return objdef::MasterID(m_def) != 0 ? 1 : 0; }
 
@@ -286,12 +303,53 @@ short& EdithVariableSet::operator[](int index) {
   return m_values[index];
 }
 
+int EdithVariableSet::s_serializing = 0;          // 804FDCAC
+int EdithVariableSet::s_bTaggedGraphicField = 0;  // 804FDCB0
+
 // 800E4558
 int EdithVariableSet::WriteVar(int index, short value) {
   if (index < 0 || index >= kCount) return 0;
+  if (s_serializing == 0 && index == 0) s_bTaggedGraphicField = 1;
   m_keys[index >> 5] |= 1u << (index & 31);
   m_values[index] = value;
   return 1;
+}
+
+namespace {
+// 803DAF1C EdithVariableSet::s_VariablesUsed: the object data variables in use (0x13, 0x16, 0x23, 0x2C,
+// 0x38, 0x39 and 0x44-0x47 are not).
+const unsigned char kVariablesUsed[EdithVariableSet::kCount] = {
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0,
+    1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0};
+}  // namespace
+
+// 800E33F4
+// The variables in use get their defaults: 3 and 0xE (no slot) -1, 0xB the object's id, 0x17 2, 0x18 7,
+// 0x2D/0x2E/0x2F 1997/6/17 (the purchase date), 0x31 0x32, 0x43 the object's slots - 1; the rest 0.
+// Written as while a save is read (s_serializing: data 0 does not tag the graphics). PC: GC keeps the
+// variables that are not per instance (the category's, s_IsForcedInstanceVariable 0) in one shared map
+// per object category; here every object has its own (same values), so they are all set (and saved).
+void EdithVariableSet::Initialize(cXObjectImpl* object) {
+  s_serializing = 1;
+  for (int i = 0; i < kCount; ++i) {
+    if (!kVariablesUsed[i]) continue;
+    short v = 0;
+    switch (i) {
+      case 3: case 0xe: v = -1; break;
+      case 0xb: v = object ? object->m_id : 0; break;
+      case 0x17: v = 2; break;
+      case 0x18: v = 7; break;
+      case 0x2d: v = 0x7cd; break;
+      case 0x2e: v = 6; break;
+      case 0x2f: v = 0x11; break;
+      case 0x31: v = 0x32; break;
+      // GC: the slot vector's size - 1 (Initialize's own slot and the definition's object slots).
+      case 0x43: v = static_cast<short>(object ? ObjectSlotCount(object) : 0); break;
+      default: break;
+    }
+    WriteVar(i, v);
+  }
+  s_serializing = 0;
 }
 
 // 800E583C
@@ -313,6 +371,13 @@ void EdithVariableSet::ReconStream(ReconBuffer* b, int version) {
   }
   for (unsigned int& k : m_keys) k = 0;
   for (short& v : m_values) v = 0;
+  // GC: s_serializing is set around the whole object read (cXObjectImpl::ReconStream); only the data
+  // variables' writes look at it.
+  struct Serializing {
+    int old = s_serializing;
+    Serializing() { s_serializing = 1; }
+    ~Serializing() { s_serializing = old; }
+  } serializing;
   if (version > 0x56) {
     // ReconKeyBitSet (800E7C14)
     unsigned int keys[3] = {};

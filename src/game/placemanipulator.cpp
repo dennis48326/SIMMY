@@ -46,18 +46,12 @@ cXObjectImpl* ObjectByID(short id) {
 
 namespace {
 // PC stand-in for what GC's ObjectModuleImpl::MakeNewOutOfWorldObject does to a new object and the
-// port's does not (game/objectmodule.cpp, the world side's): cXObjectImpl::Initialize's
-// EdithVariableSet::Initialize (800E33F4) gives the data their fixed defaults (3 and 0xE -1, 0x17 2
-// (a turn step of a quarter), 0x18 7, 0x2D 0x7CD, 0x2E 6, 0x2F 0x11, 0x31 0x32), and Reset(true)
-// (800DA848) runs the init tree at once (RunTree 0, TreeSim vtable 0xA4). The port's JustBorn has
-// pushed the init tree onto the object's stack; it is run here to its end (it would otherwise wait
-// for the simulator, which buy mode pauses), so the object's placement data (0x2A, 4, 0xD, ...) are set
-// before it is placed.
+// port's does not (game/objectmodule.cpp, the world side's): Reset(true) (800DA848) runs the init tree
+// at once (RunTree 0, TreeSim vtable 0xA4). The port's JustBorn has pushed the init tree onto the
+// object's stack; it is run here to its end (it would otherwise wait for the simulator, which buy mode
+// pauses), so the object's placement data (0x2A, 4, 0xD, ...) are set before it is placed. (The data
+// defaults come from cXObjectImpl::Initialize, called by MakeNewOutOfWorldObject.)
 void InitNewObject(cXObjectImpl* o) {
-  static const short kDefaults[][2] = {{3, -1}, {0xe, -1}, {0x17, 2}, {0x18, 7}, {0x2d, 0x7cd}, {0x2e, 6},
-                                       {0x2f, 0x11}, {0x31, 0x32}};
-  for (const auto& d : kDefaults)
-    if (o->m_data[d[0]] == 0) o->m_data.WriteVar(d[0], d[1]);
   TreeSimImpl* tree = o->m_treeSim;
   for (int i = 0; tree && i < 64 && tree->GetStackSize() > 1 && !o->TreeSimError(); ++i) o->Simulate(0);
 }

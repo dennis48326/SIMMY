@@ -52,6 +52,18 @@ following), so a tile's object is always where the map says; a stale entry made 
 (neighbours E/S/W/N) step round forever (TREEASSERT 1101 on tables). The lot's people are owned by a PC list in person.cpp (`g_lotPeople`); `KillAllObjects` calls
 `RemoveFamilyFromLot()` first, or they are freed twice.
 
+**A new object** (`ObjectModuleImpl::MakeNewOutOfWorldObject`: buy mode, CreateObject, multi-tile parts)
+gets `cXObjectImpl::Initialize` (800DA3D8: `EdithVariableSet::Initialize` 800E33F4, every used variable's
+default: 3 and 0xE -1, 0xB its id, 0x17 2, 0x31 0x32, 0x43 its slots - 1, the rest 0), `JustBorn`
+(800DAC94: the purchase date 0x2D/0x2E/0x2F and time 0x18/0x15 from the simulator clock), its init tree
+(the `Reset(true)` stand-in) and `UpdateSimFlags` (800E2748: sim flag 2 from data 0x3C `SimIndependent`,
+flag 8 from `CanChooseAutonomously`). PC: GC keeps the non-instance variables in one map per object
+category; the port gives every object its own copy (same values; they are saved with it). For a person
+only the object part of `Initialize` runs there. Writing object data 0 (`EdithVariableSet::WriteVar`,
+not while a save is read) sets `s_bTaggedGraphicField`; the next assigning Expression tags the model of
+the object it wrote (scope 3 mine, 4 the stack object's: `TagGraphicsField` 800EB8C4) and clears it, so
+`ISimsObjectModel::Update` restarts the state's animation when a tree sets the same state again.
+
 ## The behaviour VM
 
 Format (from [`treesim.hpp`](../include/simmy/classes/treesim.hpp)): a tree (`BHAV`, big-endian, read in
@@ -101,6 +113,14 @@ so it can change them, zeroes the social ad when the object is in another room, 
 
 The tree RNG is `GetNextRandomNumber` (800A64F8, in [`cassimstate.cpp`](../src/game/cassimstate.cpp)): the
 simulator's seed inside a tick, an outer seed for check trees run from menus.
+
+`TryCallNamedTree` (0x1C, 800FBF14) modes 0/1 run the named tree at once (`RunOneTickTree` =
+`RunCheckTree`), from check trees too, as GC; a named tree that does not finish is error 0x44F and logs
+`[vm] ... named tree "..." did not finish` with the tree and node it stopped at (none seen in the suite,
+the det replay or the soaks; the old PC workaround returned true without running it). Other GC calls
+ported here: `TryNotifyStackObject` 0x40 ends a person's idle-animate (count 0); a queued action that is
+skipped or cancelled (`ActionSkipped` 8012AD98) runs its object's queue-skipped tree (entry 4) with the
+person as the stack object; CreateObject flag 4 runs a visitor's "init visitor" tree at once.
 
 Check trees run on the person's own temps: `ObjTestSim` (objtestsim.cpp) saves the 8 temps before the
 first one and its destructor (801120A4) puts them back with `cXObjectImpl::SetTemp` (800EAF0C), so a menu
@@ -232,7 +252,11 @@ few is picked at random (sim RNG). `SIMMY_AUTO_TRACE=1` (`=ads` for the ads) tra
   every person on the lot; the event ids are `WantFearEvent::` in wantfear.hpp. `SIMMY_WANTS_TRACE=1`
   (also traces the dialog and the MDI box).
 - **Relationships**: `RelMatrixImpl` per neighbour ([`neighbor.cpp`](../src/game/neighbor.cpp)), primitives
-  0x18/0x1A, read by the relationships page (`R2LTarget`, `PlayerRelatedPeople`).
+  0x18/0x1A, read by the relationships page (`R2LTarget`, `PlayerRelatedPeople`). Variable 1 is the
+  social interest (a fraction of 2^31, 2^31 = 100): each motive tick a sim not in social mode moves it
+  toward a target from the daily relationship (variable 0: 0 below 20, up to 0.35 x 2^31 at 70) by the
+  tuning "interest increment" (`IncrementSimSocialInterest` 8012BB8C, socialmode.cpp; GC quirk kept: the
+  step register is reused, so after the first relationship the step is the previous one's new value).
 
 ## Routing
 
@@ -272,6 +296,9 @@ kinds in object order; `TrySnap` (primitive) still uses the PC `PersonCanStandAt
 `social_interactions_*` object whose trees run both sims. State as on GC: person data 0x28 is the partner's
 id (`IsInSocialMode` 8012CA2C: it is set, for both sims; `GetSocialModeTarget`: that person), and the
 person's first / second / waiting flags (+0x544 / +0x548 / +0x54C, hashed by `SIMMY_DET`). The player's
+Entering (step 0) sets both sims' motive 4 from their social interest towards each other
+(`GetSimSocialInterestAsMotiveValue` 8012BDD8); ending (step 1) writes motive 4 back
+(`SetSimSocialIntrestFromMotiveValue` 8012BF48); the `[social]` log lines show the values. The player's
 social menu is still a PC stand-in for `SocialModeInteractor` (interactor 7; the GC one lives in the
 `InteractorManager`, which is a PC stand-in too).
 

@@ -48,20 +48,25 @@ disc's movies use either exist in the PC runtime or are absent from the GC binar
 ## Medium priority: visible but rarer, or cosmetic
 
 **Simulation**
-- Relationships never drift between socials, and social mode does not load or save social interest
-  (`IncrementSimSocialInterest` 8012BB8C and its get/set pair). treesim.cpp:708, socialmode.cpp:141. M.
-- A tree setting the same object state again does not replay its animation (`TagGraphicsField`
-  800EB8C4 never defined) — second flush, doors, TVs. objectsim.cpp:1010. S.
-- `TryNotifyStackObject` 0x40 does not end a sim's idle-animate. objectsim.cpp:1687. S.
-- A cancelled queued action does not run the object's queue-skipped tree, so reservations may stay.
-  person.cpp:964 (comment only). S.
-- Visitors skip their "init visitor" tree on creation. objectsim.cpp:2029 (comment only). S.
-- `TryCallNamedTree` from a check tree returns true without running it (PC workaround), so some menu
-  and autonomy checks can differ. objectsim.cpp:2733. M.
-- Sim-independent objects stop while paused or in build/buy (`UpdateSimFlags` 800E2748 never sets
-  flag 2 for new objects). objectmodule.cpp:156. S.
-- Objects created by trees and multi-tile parts get no default object data (`Initialize` 800DA3D8).
-  S.
+- **Done** (mS): relationships drift between socials (`IncrementSimSocialInterest` 8012BB8C from
+  `Motives::Sim`); social mode loads motive 4 from the social interest on entry and writes it back on
+  exit (`GetSimSocialInterestAsMotiveValue` 8012BDD8, `SetSimSocialIntrestFromMotiveValue` 8012BF48).
+- **Done** (mS): an Expression writing object data 0 restarts the model's animation
+  (`TagGraphicsField` 800EB8C4, `EdithVariableSet::s_bTaggedGraphicField` set by `WriteVar`).
+- **Done** (mS): `TryNotifyStackObject` 0x40 ends a sim's idle-animate (count 0).
+- **Done** (mS): a skipped/cancelled queued action runs its object's queue-skipped tree (entry 4,
+  `ActionSkipped` 8012AD98).
+- **Done** (mS): visitors made by CreateObject flag 4 run "init visitor" (`IsVisitor` 8012C8A8). PC
+  order difference: the port's `MakeNeighborPerson` still pushes the person's init tree instead of running
+  it at once (GC `Reset(true)`), so "init visitor" runs before it.
+- **Done** (mS): `TryCallNamedTree` modes 0/1 run the named tree at once (RunOneTickTree) from check trees
+  too, and a tree that does not finish is GC's error 0x44F (PC workaround removed; a `[vm] ... did not
+  finish` line names the tree and node if it ever happens).
+- **Done** (mS): `UpdateSimFlags` (800E2748, with `SimIndependent` 800EAF44) at the end of a new object's
+  Reset (single objects and each multi-tile part) and of PostLoad: sim flag 2 (runs while paused), 8.
+- **Done** (mS): `cXObjectImpl::Initialize` (800DA3D8, `EdithVariableSet::Initialize` 800E33F4) for every
+  object `MakeNewOutOfWorldObject` makes (trees, buy mode, multi-tile parts) and `JustBorn`'s purchase date
+  (800DAC94). Left: the rest of `Reset(true)` (data 0x3A from the definition +0x62).
 
 **World, building and lighting**
 - Sinks set in counters draw on a solid top; shrubs and hedges don't vary with neighbours
@@ -91,13 +96,15 @@ disc's movies use either exist in the PC runtime or are absent from the GC binar
   (cas.cpp:370). S.
 
 **Interface**
-- The game's button-code cheats do nothing (`ESimsApp::UpdateCheats`, `PlayerCheats`, 11 codes). M.
-- Per-letter text effects missing (`ERFont::ProcessFontFX` 8031702C): 95 strings with `<ROCK_>` don't
-  rock, `<OUTLINE_>` outlines are hidden, `<RUMBLE_>` doesn't shake. S–M.
-- Dialog icon kinds 2–4 (neighbour portrait, object thumbnail, icon table) show nothing.
-  edithdialogprim.cpp:326. S–M.
-- Family and house names keep their "#" key (`GetNghFamilyName`, family.cpp:115); the HUD lot name is
-  empty (hudtarget.cpp:268). S.
+- **Done** (mI): the button-code cheats (`ESimsApp::UpdateCheats` 80005448, `PlayerCheats` 80005D40–80005FFC,
+  `EGlobal::InitPlayerCheats` 8004246C, `TogglePlayerCheat` 80042388, `GetPlayerCheats` 80042338,
+  simulator globals 0x2E/0x2F, the main menu's reset); the 11 codes are listed in [ui.md](ui.md).
+- **Done** (mI): per-letter text effects (`ERFont::ProcessFontFX` 8031702C). Note: the disc's `<ROCK_>`
+  strings are mostly on screens players do not reach; `<OUTLINE_>`/`<RUMBLE_>` only in a DEBUG string.
+- **Done** (mI): dialog icon kinds 2–4 (`EdithDialogPrimitive::SetDialog` 800B56DC).
+- **Done** (mI): family and house names (`GetNghFamilyName` 8004032C, `GetNghHouseName` 80040414; on GC
+  too "#house06" becomes "house06", no "HouseData" row has that name) and `HUD_lot_name` (no disc movie
+  was seen asking for it).
 
 ## Low priority
 

@@ -5,6 +5,7 @@
 #include "simmy/unported_globals.hpp"
 
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <vector>
 
@@ -506,6 +507,29 @@ void AptParagraph::AddLine(AptLine* line) {
 // first line.
 void AptParagraph::Build(EVec2& topLeft, EVec2& bottomRight, float fontSize, EVec4& color, int alignment,
                          const unsigned short* text) {
+  // PC development aid: SIMMY_TEXT_FX_TEST=<code>:<word> puts the embedded code "<code>" before every
+  // <word> in Apt text (e.g. ROCK_L_500A:Sims, OUTLINE_FFFF0000:Sims, RUMBLE_0A40:Sims): the disc's
+  // strings with these codes are on screens players rarely or never reach.
+  std::vector<unsigned short> fxTest;
+  static const char* const test = std::getenv("SIMMY_TEXT_FX_TEST");
+  if (test) {
+    const char* colon = std::strchr(test, ':');
+    const size_t wordLen = colon ? std::strlen(colon + 1) : 0;
+    if (colon && wordLen) {
+      for (const unsigned short* q = text; *q; ++q) {
+        size_t i = 0;
+        while (i < wordLen && q[i] == static_cast<unsigned char>(colon[1 + i])) ++i;
+        if (i == wordLen && (q == text || q[-1] == ' ')) {
+          fxTest.push_back('<');
+          for (const char* c = test; c < colon; ++c) fxTest.push_back(static_cast<unsigned char>(*c));
+          fxTest.push_back('>');
+        }
+        fxTest.push_back(*q);
+      }
+      fxTest.push_back(0);
+      text = fxTest.data();
+    }
+  }
   m_topLeft = topLeft;
   m_bottomRight = bottomRight;
   m_alignment = alignment;

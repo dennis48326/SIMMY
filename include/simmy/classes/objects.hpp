@@ -368,6 +368,11 @@ struct EdithVariableSet {
   static RET_UNKNOWN CreateCategoryVariableMap(unsigned short);  // 800E8794
 
   enum { kCount = 72 };
+  // 804FDCAC: set while a save is read (WriteVar then does not tag the graphics).
+  static int s_serializing;
+  // 804FDCB0: data 0 (the graphic) was written; TryExpression tags the model of the object written
+  // (TagGraphicsField) and clears it.
+  static int s_bTaggedGraphicField;
   unsigned int m_keys[3] = {};  // +0x00 which are set
   short m_values[kCount] = {};  // GC +0x0C: the set ones, in key order
 };

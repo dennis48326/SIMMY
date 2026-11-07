@@ -3,6 +3,7 @@
 #include "simmy/unported_globals.hpp"
 #include "simmy/platform.hpp"
 
+#include <cstdio>
 #include <cstring>
 
 namespace {
@@ -161,8 +162,9 @@ void EGlobal::SetDefaults() {
   m_vibrate->TurnOn(1);
   ESims3DHead::InitShaders();
   Globs::Startup();
-  SIMMY_STUB("EGlobal::SetDefaults: substitution strings, player cheats", 0x8003EE9C);
+  SIMMY_STUB("EGlobal::SetDefaults: substitution strings", 0x8003EE9C);
   GoalUnlock::SetupObjectUnlockInfo();
+  InitPlayerCheats();
   // the neighbourhood custom characters (CAS's family slots); a config flag (+0x418) makes slot 0 a default male
   if (!_gd.m_customChars) {
     _gd.m_customChars = new NeighborhoodCustomChars;
@@ -298,13 +300,99 @@ const unsigned short* const* EGlobal::HouseNameCapsText(const char* name) {
 }
 // 8003FCC4
 const unsigned short* const* EGlobal::GetHUDUIString(const char* name) { return TableString(m_strings, "HUDStrings", name); }
+namespace {
+// The name after its "#": up to 64 characters, ending at a character whose low byte is 0 (GC looked
+// at the low byte only); `key` gets the low bytes (the row name).
+std::u16string StripKey(const std::u16string& name, std::string* key) {
+  std::u16string out;
+  for (size_t i = 1; i < name.size() && out.size() < 0x40; ++i) {
+    if ((name[i] & 0xff) == 0) break;
+    out += name[i];
+    if (key) *key += static_cast<char>(name[i] & 0xff);
+  }
+  return out;
+}
+}  // namespace
+
+// 8004032C
+void EGlobal::GetNghFamilyName(std::u16string& name) {
+  if (name.empty() || name[0] != u'#') return;
+  name = StripKey(name, nullptr);
+}
+
+// 80040414
+void EGlobal::GetNghHouseName(std::u16string& name) {
+  if (name.empty() || name[0] != u'#') return;
+  const void* table = m_strings ? m_strings->getTable(const_cast<char*>("HouseData")) : nullptr;
+  std::string key;
+  const std::u16string stripped = StripKey(name, &key);
+  const void* row = table ? m_strings->getRow(table, const_cast<char*>(key.c_str())) : nullptr;
+  if (!row) {
+    name = stripped;
+    return;
+  }
+  const unsigned short* const* text = ERQuickdata::LocSlot(row, 0);
+  name.clear();
+  if (text && *text)
+    for (const unsigned short* t = *text; *t; ++t) name += static_cast<char16_t>(*t);
+}
+
+// 80042338
+// The cheat bits the trees see (simulator globals 0x2E/0x2F): every bit with the "all cheats" config
+// switch (+0x400).
+unsigned short EGlobal::GetPlayerCheats() const {
+  if (ConfigInt(0x400) == 0) return m_playerCheats;
+  return 0xffff;
+}
+
 // 80042358
-// Every cheat with the "all cheats" config switch (+0x400); else bit `cheat` of the halfword at
-// +0x9C (GC big-endian: the high half of m_field9C).
+// Every cheat with the "all cheats" config switch (+0x400); else bit `cheat` of +0x9C.
 int EGlobal::IsPlayerCheatOn(int cheat) const {
   if (ConfigInt(0x400) != 0) return 1;
-  const unsigned bits = static_cast<unsigned>(m_field9C) >> 16 & 0xffff;
-  return (bits >> (cheat & 0x3f) & 1u) ? 1 : 0;
+  return (static_cast<int>(m_playerCheats) >> (cheat & 0x3f) & 1) ? 1 : 0;
+}
+
+// 80042388
+// Code 10 only plays a sound (no bit; GC). The others flip their bit, with the "on" or "off" sound
+// while the game's sound player exists.
+void EGlobal::TogglePlayerCheat(int cheat) {
+  if (cheat == 10) {
+    UIAUDIO::Instance()->PlaySound(0x3ea0941fu);
+    return;
+  }
+  m_playerCheats = static_cast<unsigned short>(m_playerCheats ^ (1 << cheat));
+  const int on = IsPlayerCheatOn(cheat);
+  if (Globs_pSound) UIAUDIO::Instance()->PlaySound(on ? 0xce619e32u : 0x1c99b71cu);
+  std::printf("[cheat] code %d %s (bits %04x)\n", cheat, on ? "on" : "off", m_playerCheats);
+}
+
+// 8004246C
+// The eleven codes, as EA button bits (Z 2, L 4, R 8, Y 0x10, X 0x20, A 0x40, B 0x80, d-pad up 0x1000,
+// right 0x2000, down 0x4000, left 0x8000), each ending at a 0 or after six; then each code's button
+// mask and the mask of all of them.
+void EGlobal::InitPlayerCheats() {
+  static const unsigned short kCodes[11][6] = {
+      {0x0004, 0x0008, 0x1000, 0x0040, 0x0002, 0},       // 0  L R Up A Z
+      {0x0008, 0x0004, 0x0002, 0x2000, 0x8000, 0},       // 1  R L Z Right Left
+      {0x1000, 0x0020, 0x1000, 0x2000, 0x0002, 0},       // 2  Up X Up Right Z
+      {0x0002, 0x0020, 0x4000, 0x8000, 0x1000, 0},       // 3  Z X Down Left Up
+      {0x0020, 0x0002, 0x8000, 0x0020, 0x1000, 0x0020},  // 4  X Z Left X Up X
+      {0x0080, 0x0002, 0x4000, 0x2000, 0x0080, 0},       // 5  B Z Down Right B
+      {0x0020, 0x0080, 0x0004, 0x1000, 0x4000, 0},       // 6  X B L Up Down
+      {0x0010, 0x0020, 0x0080, 0x0002, 0x8000, 0},       // 7  Y X B Z Left
+      {0x0002, 0x0080, 0x1000, 0x4000, 0x2000, 0x0040},  // 8  Z B Up Down Right A
+      {0x2000, 0x4000, 0x2000, 0x4000, 0x2000, 0},       // 9  Right Down Right Down Right
+      {0x0008, 0x0004, 0x0008, 0x0004, 0x0010, 0},       // 10 R L R L Y
+  };
+  std::memcpy(m_cheatCodes, kCodes, sizeof(kCodes));
+  unsigned short all = 0;
+  for (int i = 0; i < 11; ++i) {
+    unsigned short mask = 0;
+    for (int j = 0; j < 6; ++j) mask = static_cast<unsigned short>(mask | m_cheatCodes[i][j]);
+    all = static_cast<unsigned short>(all | mask);
+    m_cheatCodeMask[i] = mask;
+  }
+  m_cheatButtons = all;
 }
 
 // 80042614

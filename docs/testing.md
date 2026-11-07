@@ -28,7 +28,7 @@ use `SIMMY_FIXED_DT=1` or `SIMMY_DET=1` for repeatable timing.
 
 | Switch | Syntax |
 |---|---|
-| `SIMMY_PAD_SCRIPT` | `"frame:names[/hold],..."` presses at fixed game frames (pad 1; `p2:` prefix for pad 2) |
+| `SIMMY_PAD_SCRIPT` | `"frame:names[/hold],..."` presses at fixed game frames (pad 1; `p2:` prefix for pad 2); with `SIMMY_PAD_SEQ` too, added to the sequence's presses (e.g. a button-code cheat once the house is up) |
 | `SIMMY_PAD_SEQ` | `"start,a,right,a,up,a,a,left,a,house,cdown/150"`: each step fires once the watched UI state (managed screens, main menu state, dialog box) has been stable 90 frames / 1.5 s and 60 frames after the previous press; a press with no reaction in 300 frames is repeated up to 3 times; `house` waits for a house + 120 frames; `name/N` holds N frames; unknown names (`none/N`, `wait/N`) press nothing. `SIMMY_PAD_SEQ_UI=1` also counts UI variable changes as reactions (CAS, free play) |
 | Names | `start a b x y z l r up down left right`, sticks `lup ldown lleft lright` / `cup cdown cleft cright` (full deflection), joined with `+`, `p2:` for pad 2 |
 | `SIMMY_PAD_HOLD` | default hold frames (6) |
@@ -130,6 +130,7 @@ Development only: the launcher removes all of them except `SIMMY_INI` from the g
 | `SIMMY_BONE_FX=<attachment>,...` | Attach effects to player 1's sim |
 | `SIMMY_GHOST_TEST=1` | Player 1's sim drawn as a ghost |
 | `SIMMY_TEXT_PARTICLE_TEST=<type>:<word>` | Tag a word with a text particle |
+| `SIMMY_TEXT_FX_TEST=<code>:<word>` | Put an embedded text code before every `<word>` in Apt text (e.g. `ROCK_L_500A:Welcome`, `OUTLINE_FF0000:Welcome`; [ui.md](ui.md) "Text effects") |
 | `SIMMY_CENSOR_TEST=<bits>` | Censor player 1's sim |
 | `SIMMY_SKILL_METER_TEST=<fill>[,repair]` | Skill/repair meter over player 1's sim |
 | `SIMMY_SPRITE_TRACE=1`, `SIMMY_SPRITE_HOLD=1` | Balloons: trace; keep up for shots |

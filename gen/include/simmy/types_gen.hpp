@@ -6121,14 +6121,7 @@ struct PlacementSpec {
 struct PlaySoundParam {
     PlaySoundParam() = default;  // generated: lets derived stubs construct the base
 };
-struct PlayerCheats {
-    PlayerCheats() = default;  // generated: lets derived stubs construct the base
-    RET_UNKNOWN Capture(EController *);  // 80005D40
-    RET_UNKNOWN GetNextIndex(int &);  // 80005F60
-    RET_UNKNOWN IsSingleButton(unsigned short);  // 80005F84
-    void PurgeBtnMemory();  // 80005FD4
-    RET_UNKNOWN CreateBtnMask();  // 80005FFC
-};
+#include "simmy/classes/playercheats.hpp"  // hand-written
 #include "simmy/classes/neighborhood.hpp"  // hand-written
 #include "simmy/classes/siminteractor.hpp"  // hand-written
 #include "simmy/classes/siminteractor.hpp"  // hand-written
