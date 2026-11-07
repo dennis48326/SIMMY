@@ -135,10 +135,20 @@ simulator's seed inside a tick, an outer seed for check trees run from menus.
 - **Animator** `SAnimator2` ([`sanimator2.cpp`](../src/game/sanimator2.cpp)): position in 1/16 tiles (tile
   centre at +8, already a world position: `positionCharacter` 80065094 must **not** add the house's
   0.5 offset; objects do add it in `SetObjOrient`), animation states, free-move walk/run for direct
-  control, route walking, animation events (sounds, footsteps, particles, censor), passive influence on
-  the motives (the awareness check's part). Stubbed: the rest of awareness (memory, head turning,
-  auto-carry, passive-influence reactions),
-  mood animations, skill idles, rumble.
+  control, route walking (GC follow modes), animation events (sounds, footsteps, particles, censor,
+  rumble notes), mood animations (`handleMoodAnimations`), skill idles (`handleSkillIdleAnimation`, state
+  7), low-motive walks/runs (`shouldUseLowMotiveWalk`, the "SM"/"DC" optional motion animations) and the
+  **awareness manager** (`AwarenessManager`, [`awarenessmanager.cpp`](../src/game/awarenessmanager.cpp),
+  GC +0x620): memory awareness (a remembered object or person in the room: the head turns to it and the
+  memory sprite shows), head turning to the aware-of object (procedural head/torso tracks), auto-carry of
+  an umbrella/newspaper in the rain, passive-influence reaction animations (loaded, played, faded), the
+  awareness walk (follow modes 6-8: stop, react, go on). A freed aware-of object is dropped (PC guard,
+  `ObjectModuleImpl::IsValidObject`). The awareness random choices use the sim RNG. `SIMMY_AWARE_TRACE=1`.
+- **Person flags** (data 0x4A): invisible 1, green 2, ghost 4, alien 8, motive failure 0x10, want/fear
+  shuffle 0x20 are now read from the person (they were stubbed to 0): a dead player sim's ghost gets
+  only ghost entries (TTAB flag 0x10) in autonomy and menus, ghost routing ignores rooms.
+  `cXPersonImpl::UpdateCurrentRoom` keeps `m_currentRoom` (GC +0x41C) from every placement; the room's
+  overhead lights (`Room::SetOverheadLights`, `GetPeopleCount`) are still stubs.
 - **Collision** (`CollisionMap`, [`collisionmap.cpp`](../src/game/collisionmap.cpp)): swept circle against
   walls and object footprints for direct control. `DoesCollideObject` uses GC's `CanIntersectPeople` (800EB6C4,
   objectplace.cpp): people pass zero-extent objects (flag 4) unless flag 2. Two steered people do not walk
@@ -217,9 +227,15 @@ All GC code: [`person.cpp`](../src/game/person.cpp) (the primitive), [`xrouting.
 | Failure | | A failed path: the sim retries if it moved; else `AskOthersToMove` (a person on the path, not player-steered, gets the "move out of the way" object GUID 0x7C4's entry 3, `MoveOutOfWay`) with the "sg_route ask to move" / "waiting" animations, retries once; then the target's "gl_route failure feedback" tree (slot flag 0x4000). Codes in person data 0x3E (2 no portal, 3 no path, 4 interrupted, 5 seat, 6 could not stand, 8 object, 9 seat taken, 0xB wall, 0xD person) |
 
 `HouseImpl::EnterLiveMode` (800BC0E0, from `LiveModeInitState`) clears the partitions and portal scores
-(`InvalidateAllRoutes`). **PC parts:** the walk itself is still the PC walker (`BeginRoute` /
-`moveAnimation`: turn, walk the points, turn to the facing point; GC follow modes, side steps and
-awareness auto-run are not ported); portals are the type-8 multi-tile parts (no `cXPortalImpl`), their
+(`InvalidateAllRoutes`). The walk is GC's: `BeginFollow` picks the first follow mode (1 turn on the
+spot, 2 side step for a short sideways leg, 3 walk), `followWalkUpdate` / `moveTowardsDestination` walk
+the destination list (`m_destList` = the person's `m_path`) with acceleration, the walk/run blend and
+fades (`getUseSpeed`, `EnableWalkFade`), side steps (`initSidestep`, `advanceAlongNode`), the end turn
+(mode 4) and the final facing (mode 5); NPCs auto-run long paths (`StartAutoRun`), the portal mode slows
+turns through doors (`UpdatePortalMode`). **Site-tile invariant (PC):** every change of the person's
+tile while walking goes through `CanPlace` / `PlacePerson` (cXPersonImpl::Place + `UpdateCurrentRoom`),
+so the tile chain stays exact; a tile that cannot be taken ends the step as blocked (routing 3).
+`SIMMY_WALK_TRACE=1` prints each follow start. Portals are the type-8 multi-tile parts (no `cXPortalImpl`), their
 scores in `cXMTObjectImpl::m_portalValues`; the module's people / portal lists are its objects of those
 kinds in object order; `TrySnap` (primitive) still uses the PC `PersonCanStandAt`. A slot rewritten by
 `MoveOutOfWay` is kept per object in xrouting.cpp (GC: the object's own slot vector).

@@ -33,7 +33,9 @@ struct ESim : public ISimInstance {
   int GetIsModelLoaded();  // 8003536C
   void SetXOb(cXObject* xob);  // 80035308
   static void DeletePlayerCachedModel();  // 800312C8
-  RET_UNKNOWN ReadModelFromCache();  // 80031360
+  // A player's sim takes its cached model (from the last house) when it wears its own clothes. 1: taken.
+  int ReadModelFromCache();  // 80031360
+  // A player's sim's model goes to the cache for the next house (else it is freed).
   void TransferModelToCache();  // 8003154C
   void flushQueuedCostumeModels();  // 8003176C
   int IsAdult();  // 800317EC
@@ -123,6 +125,7 @@ struct ESim : public ISimInstance {
   int m_modelReady = 0;                   // +0x638 initModel has run
   SimModel* m_simModel = nullptr;         // +0x63C
   int m_wasGhost = 0;                     // +0x640
+  int m_cachePlayer = 0;                  // +0x644 the player (1, 2) whose sim this is, for the model cache
   // The cursor highlight and the changing curtain (DrawSimAndNpcCommonItems). m_field420 (+0x420) is
   // the highlight pulse's other scale index.
   ERModel* m_hlModels[3] = {};            // +0x408 the highlight's rings (0xc1a394fd, 0x528d93c8), 0x68de8ae2

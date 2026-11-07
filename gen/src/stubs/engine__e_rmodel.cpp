@@ -5,7 +5,6 @@ void CalcShadowBounds(ESubModelShader &, EBound3 &) { SIMMY_STUB("CalcShadowBoun
 void CalcShadowBounds(TArray<ESubModel, TArrayERModelAllocator> &, EBound3 &) { SIMMY_STUB("CalcShadowBounds(TArray<ESubModel, TArrayERModelAllocator> &, EBound3 &)", 0x80317CC4); }
 RET_UNKNOWN operator>>(EStream &, ERModel *&) { SIMMY_STUB("operator>>(EStream &, ERModel *&)", 0x80317D6C); return {}; }
 RET_UNKNOWN operator>>(EFile &, ERModel *&) { SIMMY_STUB("operator>>(EFile &, ERModel *&)", 0x80317DAC); return {}; }
-void ERModel::DrawHierarchical(ERC *, EMat4 *, EACNodeState *, int) { SIMMY_STUB("ERModel::DrawHierarchical(ERC *, EMat4 *, EACNodeState *, int)", 0x80318FB0); }
 void ERModel::GetWeldPos(EWeldVert *) { SIMMY_STUB("ERModel::GetWeldPos(EWeldVert *)", 0x80319214); }
 void ERModel::SetWeldPos(EWeldVert *, EVec3 &) { SIMMY_STUB("ERModel::SetWeldPos(EWeldVert *, EVec3 &)", 0x803192C0); }
 void ERModel::WeldSharedVerts(ERModel *, float) { SIMMY_STUB("ERModel::WeldSharedVerts(ERModel *, float)", 0x80319350); }

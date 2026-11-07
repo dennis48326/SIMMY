@@ -1,8 +1,8 @@
-// Port of game/esim.cpp (partial): a sim's 3D instance in the house. Ported: construction, the model
-// set-up (initModel), the per-frame update, animation, lighting and drawing of the body. Not ported:
-// the model cache, outfit changes, the plumb bob and skill meter (models 0x6d1f0956, 0xc1a394fd,
-// 0x528d93c8, 0x68de8ae2, 0x3887fccd), the shadow (ESimShadow), carried props, ghosts, the censor blur,
-// pets, the cursor highlight and the depth-of-field foreground list.
+// Port of game/esim.cpp: a sim's 3D instance in the house. Construction, the model set-up (initModel:
+// the player's model cache, service NPC models), the per-frame update, animation, lighting (the green
+// ghost light) and drawing of the body, outfit changes (the queued skin change flushed), the plumb bob
+// and skill meter, the shadow, props, the censor and the cursor highlight. What is left is logged
+// with SIMMY_STUB where it is reached (none in this file at the time of writing).
 #include "simmy/types_gen.hpp"
 #include "simmy/unported_globals.hpp"
 #include "simmy/classes/siminteractor.hpp"
@@ -14,10 +14,66 @@
 #include <utility>
 
 // The players' sims' models kept between lots (ESim::m_pP1Model / m_pP2Model; guarded by
-// g_playerCacheMutex). PC: the cache is not filled yet (ESim::initModel's model cache, not ported), so
-// these stay null and DeletePlayerCachedModel has nothing to free.
+// g_playerCacheMutex on GC, whose data manager ran on its own thread): TransferModelToCache fills
+// them when a player's sim goes, ReadModelFromCache gives them back to it on the next house.
 SimModel* ESim_m_pP1Model = nullptr;
 SimModel* ESim_m_pP2Model = nullptr;
+
+// 80031360
+// The person a player's primary neighbour (1 player 1, 2 player 2): unless in an outfit (person data 8),
+// the cached model of that player (if any) replaces this sim's own, with the person's description.
+int ESim::ReadModelFromCache() {
+  const int id = m_person ? m_person->GetPersonData(0x1f) : -1;  // GetNeighborID (vtable 0x1B4)
+  m_cachePlayer = 0;
+  Neighbor* n0 = _gd.m_players[0].GetPrimaryNeighbor();
+  if (n0 && n0->m_id == id) m_cachePlayer = 1;
+  Neighbor* n1 = _gd.m_players[1].GetPrimaryNeighbor();
+  if (n1 && n1->m_id == id) m_cachePlayer = 2;
+  if (!m_person || m_person->GetPersonData(8) != 0) return 0;
+  SimModel* cached = nullptr;
+  if (m_cachePlayer == 1 && ESim_m_pP1Model) cached = ESim_m_pP1Model;
+  else if (m_cachePlayer == 2 && ESim_m_pP2Model) cached = ESim_m_pP2Model;
+  if (!cached) return 0;
+  if (m_simModel && m_simModel != cached) delete m_simModel;
+  m_simModel = cached;
+  m_simModel->SetSimDescription(m_person->GetSimDescription());
+  return 1;
+}
+
+// 8003154C
+// The sim of a player wearing its own clothes, not changing: its model becomes that player's cached
+// one (another sim still using the cached model keeps it: this sim's own is freed instead); anyone
+// else's is freed.
+void ESim::TransferModelToCache() {
+  SimModel** slot = m_cachePlayer == 1 ? &ESim_m_pP1Model : m_cachePlayer == 2 ? &ESim_m_pP2Model : nullptr;
+  if (!slot) {
+    delete m_simModel;
+    m_simModel = nullptr;
+    return;
+  }
+  if (*slot && Globs_pObjectModule) {
+    for (int i = 0; i < Globs_pObjectModule->GetNumPeople(); ++i) {  // GC: vtable 0x104 / 0xFC
+      auto* p = reinterpret_cast<cXPersonImpl*>(Globs_pObjectModule->GetPeople(i));
+      ESim* other = p ? static_cast<ESim*>(p->m_instance) : nullptr;
+      if (other && other != this && other->m_simModel == *slot) {
+        if (m_simModel != *slot) delete m_simModel;
+        m_simModel = nullptr;
+        return;
+      }
+    }
+  }
+  if (*slot != m_simModel) {
+    delete *slot;
+    *slot = nullptr;
+  }
+  if ((!m_person || m_person->GetPersonData(8) == 0) && m_changingOutfit == 0 && m_skinChange == -1) {
+    *slot = m_simModel;
+  } else {
+    *slot = nullptr;
+    delete m_simModel;
+  }
+  m_simModel = nullptr;
+}
 
 // 800312C8
 // The cached player models go (before the ending movie and Create-a-Sim). GC: under g_playerCacheMutex.
@@ -126,8 +182,7 @@ ESim::~ESim() {
   m_head = nullptr;
   if (m_curtainModel) m_curtainModel->DelRef();
   m_curtainModel = nullptr;
-  delete m_simModel;
-  m_simModel = nullptr;
+  TransferModelToCache();
 }
 
 // 80031790
@@ -144,50 +199,76 @@ int ESim::IsFemale() { return IsMale() ? 0 : 1; }
 int ESim::IsAdult() { return m_person ? static_cast<int>(static_cast<cXPersonImpl*>(m_person)->IsAdult()) : 1; }
 
 // 8003193C
-// The skeleton of the sim's gender with the standing idle; then the body: the parts of its description
-// (low resolution), the skin composited under the sim's name ("first_last"; NPCs with precomposited
-// skins "<guid>_npc"), welded. GC: first waits for the person to be ready, takes the family's
-// information, the "sim_<guid>" dataset, a cached model when there is one, and the plumb bob models;
-// pets (the service NPC's model) are not ported. Drawn unless the house is loaded from a save
-// (DAT_80475C74); PC: always.
+// The skeleton of the sim's gender with the standing idle; the neighbour's family is asked its number
+// (unused), the "sim_<guid>" dataset touched (loaded and released). A person without a service NPC
+// record: its body (a player's sim: the cached model of the last house; else the parts of its
+// description, the skin composited under the sim's name, "first_last", NPC-like precomposited skins
+// "<guid>_npc", welded) drawn by SimOrderTableCallback. A service NPC (or pet): its record's own model
+// (+8) posed by the controller, drawn by ServiceNpcOrderTableCallback. Then the highlight's and the
+// changing curtain's models. GC: first waits for the person's object to be ready (misc flag 0x80; the
+// data manager ran on its own thread); drawn unless the house is loaded from a save (DAT_80475C74;
+// PC: always).
 void ESim::initModel() {
   m_field3D4 = 0;
   const bool male = IsMale() != 0;
   m_anim.Init(male ? kMaleSkeleton : kFemaleSkeleton, eAnimatedObjectType{0}, 0);
   m_anim.SetTrackAnim(eTrackFlags{1}, kStandIdle, -1, -1.0f, nullptr);
   m_anim.m_speed = 1.0f;
-  SIMMY_STUB("ESim::initModel: the family's information, the sim_<guid> dataset, the model cache", 0x8003193C);
-  if (!m_curtainModel) m_curtainModel = static_cast<ERModel*>(_modelman.AddRef(0x3887fccdu, nullptr, 0));  // +0x42C
+  const unsigned char* npc = m_person ? m_person->GetServiceNPC() : nullptr;
+  if (m_person && Globs_pNeighborhood)
+    if (Neighbor* n = Globs_pNeighborhood->FindNeighborByID(m_person->GetPersonData(0x1f)))
+      if (FamilyImpl* family = n->GetFamily()) family->GetNumber();
+  cXObjectImpl* obj = m_xob ? m_xob->GetObjectImplementation() : nullptr;
+  const unsigned int guid = obj && obj->m_selector ? obj->m_selector->GetGUID() : 0u;
+  {
+    char name[32];
+    std::snprintf(name, sizeof name, "sim_%08X", guid);
+    EResource* res = _datasetman.AddRef(name, nullptr, 0);
+    if (res && res != reinterpret_cast<EResource*>(1)) _datasetman.DelRef(res, EResourceManager__DelRefMode{0});
+  }
   CasSimDescriptionS2C* desc = m_person ? m_person->GetSimDescription() : nullptr;
-  if (desc && !m_person->GetServiceNPC()) {
-    char first[32], last[32];
-    for (int i = 0; i < 32; ++i) {
-      first[i] = static_cast<char>(desc->m_firstName[i]);
-      last[i] = static_cast<char>(desc->m_lastName[i]);
-    }
-    first[31] = last[31] = 0;
+  if (!npc) {
     m_changingOutfit = 0;
     m_freeMorphs = 1;
-    m_simModel->Init(desc, false);
-    char name[80];
-    if (!desc->m_precomposited) {
-      std::snprintf(name, sizeof name, "%s_%s", first, last);
-      for (char* c = name; *c; ++c)  // EString::MakeLegalSymbolName
-        if (!((*c >= '0' && *c <= '9') || (*c >= 'a' && *c <= 'z') || (*c >= 'A' && *c <= 'Z') || *c == '_')) *c = '_';
-    } else {
-      std::snprintf(name, sizeof name, "%08x_npc", 0u);
+    if (!ReadModelFromCache() && desc) {
+      char first[32], last[32];
+      for (int i = 0; i < 32; ++i) {
+        first[i] = static_cast<char>(desc->m_firstName[i]);
+        last[i] = static_cast<char>(desc->m_lastName[i]);
+      }
+      first[31] = last[31] = 0;
+      m_simModel->Init(desc, false);
+      char name[80];
+      if (!desc->m_precomposited) {
+        std::snprintf(name, sizeof name, "%s_%s", first, last);
+        for (char* c = name; *c; ++c)  // EString::MakeLegalSymbolName
+          if (!((*c >= '0' && *c <= '9') || (*c >= 'a' && *c <= 'z') || (*c >= 'A' && *c <= 'Z') || *c == '_')) *c = '_';
+      } else {
+        std::snprintf(name, sizeof name, "%08x_npc", guid);
+      }
+      m_simModel->CreateSkin(name);
+      m_simModel->SetAllModels();
+      m_simModel->VerifyRequiredModels();
+      m_simModel->ApplyAllLatticeMorphing();
+      m_simModel->ApplyAllMorphTargets();
+      m_simModel->UpdateReweld(true);
+      CompositeSkin();
+      m_simModel->ApplySkinToModels();
     }
-    m_simModel->CreateSkin(name);
-    m_simModel->SetAllModels();
-    m_simModel->VerifyRequiredModels();
-    m_simModel->ApplyAllLatticeMorphing();
-    m_simModel->ApplyAllMorphTargets();
-    m_simModel->UpdateReweld(true);
-    CompositeSkin();
-    m_simModel->ApplySkinToModels();
     m_otd.m_instance = this;
     m_otd.m_pos = m_sphere;
     m_otd.m_callback = SimOrderTableCallback;
+    m_propOtd.m_pos = m_sphere;
+    InitCensorOtd(this, m_censorOtd);
+  } else if (const unsigned int model = ERQuickdata::U32(npc, 8)) {
+    if (m_model) {
+      m_model->DelRef();
+      m_model = nullptr;
+    }
+    m_model = static_cast<ERModel*>(_modelman.AddRef(model, nullptr, 0));
+    m_otd.m_instance = this;
+    m_otd.m_pos = m_sphere;
+    m_otd.m_callback = ServiceNpcOrderTableCallback;
     m_propOtd.m_pos = m_sphere;
     InitCensorOtd(this, m_censorOtd);
   }
@@ -205,6 +286,7 @@ void ESim::initModel() {
   m_changingOutfit = 0;
   if (m_curtainModel) m_curtainModel->DelRef();
   m_curtainModel = static_cast<ERModel*>(_modelman.AddRef(0x3887fccdu, nullptr, 0));
+  m_skinChange = -1;
   m_firstDraw = 1;
   DrawSim(true);
   m_modelReady = 1;
@@ -242,7 +324,15 @@ void ESim::UpdateShowerCurtain() {
   m_curtainAlpha = 1.0f;
 }
 
+// 8003176C
+// The costume parts still loading are given up (SimModel::FlushLoadingModels).
+void ESim::flushQueuedCostumeModels() { m_simModel->FlushLoadingModels(); }
+
 // 80034464
+// The outfit change (CreateSkinAsync's request, 0): once the changing curtain is closed (or the person
+// came from a save in costume, +0x424) and no other sim is changing, the queued work and costume
+// parts still loading are flushed and the new skin made (1); when it is done (2), once the curtain
+// opens, the change is over (-1).
 void ESim::UpdateSkinChange() {
   switch (m_skinChange) {
     case -1: return;
@@ -252,7 +342,10 @@ void ESim::UpdateSkinChange() {
       if (m_person && m_person->GetServiceNPC()) break;
       s_changingSim = this;
       m_skinChange = 1;
-      SIMMY_STUB("ESim::UpdateSkinChange: flushing queued data-manager commands and costume models", 0x80034464);
+      // GC: ESimsDataManager::FlushCommands (the loader thread finishes what is queued); PC: queued
+      // operations run at once.
+      if (HasQueuedOperation()) UpdateQueuedOperation();
+      if (m_simModel && m_simModel->IsLoadingModels()) flushQueuedCostumeModels();
       m_changingSkin = 1;
       // GC: ESimsDataManager::QueueCommand(this, 1) -> tProcessCommand(1) on its thread; PC: at once.
       tProcessCommand(1);
@@ -615,7 +708,6 @@ void ESim::Update() {
     initModel();  // PC: ESimsDataManager's job (see the constructor)
     if (!m_modelReady) return;
   }
-  m_otd.m_callback = SimOrderTableCallback;  // GC: ServiceNpcOrderTableCallback for service NPCs (pets)
   // PC development aid: SIMMY_SKILL_METER_TEST=<fill 0..1>[,repair] shows the skill (or repair) meter over
   // player 1's sim, as TrySetBalloon's group 9 icons do.
   static const char* meterTest = std::getenv("SIMMY_SKILL_METER_TEST");
@@ -727,57 +819,68 @@ bool IsPartOfDOFForeground(ESim* sim) {
 // camera (fade mode 0) it fades out.
 void ESim::Draw(ELevelDrawData& data) {
   if (!m_modelReady || !m_xob || m_xob->GetData(0x22)) return;
-  if (m_person->IsGreen()) {
-    SIMMY_STUB("ESim::Draw: the green ghost light (_ESim_GreenLight)", 0x800334FC);
-    return;
-  }
-  const float* tuning = ERLevel::s_levelLightingTuning.m_field00;
-  CalcLights(*reinterpret_cast<EVec3*>(m_sphere), m_lights, false);
-  m_simLights = m_lights;
   const bool ghost = IsGhostSim();
-  float lightColor;
-  if (!ghost) {
-    float r = m_lights.m_ambient[0] * tuning[0], g = m_lights.m_ambient[1] * tuning[0], b = m_lights.m_ambient[2] * tuning[0];
-    const float lum = b * 0.11f + r * 0.3f + g * 0.59f;
-    if (lum < tuning[3]) {
-      if (lum >= 1e-06f) {
-        const float k = tuning[3] / lum;
-        r *= k, g *= k, b *= k;
-      } else {
-        r = g = b = tuning[3];
-      }
-    }
-    m_lights.m_ambient[0] = r, m_lights.m_ambient[1] = g, m_lights.m_ambient[2] = b;
-    for (unsigned int i = 0; i < m_lights.m_numDir; ++i)
-      for (float& c : m_lights.m_dir[i].m_color) c *= tuning[1];
-    for (unsigned int i = 0; i < m_lights.m_numPoint; ++i)
-      for (float& c : m_lights.m_point[i].m_color) c *= tuning[1];
-    lightColor = tuning[2];
+  // PC test aid: SIMMY_GREEN_TEST lights player 1's sim as a green person.
+  static const bool greenTest = std::getenv("SIMMY_GREEN_TEST") != nullptr;
+  if (m_person->IsGreen() || (greenTest && GetPlayerIndex() == 0)) {
+    // Green (person data 0x4A bit 2): lit only by the ghost green ambient (_vGhostGreen 8047551C,
+    // set by the unit's static initialiser: 0.8, 1.8, 0.65), no directional or point lights.
+    static ELights s_greenLight;  // _ESim_GreenLight 80475528
+    s_greenLight.m_numPoint = 0;
+    s_greenLight.m_numDir = 0;
+    s_greenLight.m_ambient[0] = 0.8f;
+    s_greenLight.m_ambient[1] = 1.8f;
+    s_greenLight.m_ambient[2] = 0.65f;
+    m_simLights = s_greenLight;
+    m_lights = s_greenLight;
   } else {
-    m_lights.m_ambient[0] = tuning[7] * tuning[4];
-    m_lights.m_ambient[1] = tuning[8] * tuning[4];
-    m_lights.m_ambient[2] = tuning[9] * tuning[4];
-    for (unsigned int i = 0; i < m_lights.m_numDir; ++i) {
-      m_lights.m_dir[i].m_color[0] *= tuning[10];
-      m_lights.m_dir[i].m_color[1] *= tuning[11];
-      m_lights.m_dir[i].m_color[2] *= tuning[12];
+    const float* tuning = ERLevel::s_levelLightingTuning.m_field00;
+    CalcLights(*reinterpret_cast<EVec3*>(m_sphere), m_lights, false);
+    m_simLights = m_lights;
+    float lightColor;
+    if (!ghost) {
+      float r = m_lights.m_ambient[0] * tuning[0], g = m_lights.m_ambient[1] * tuning[0], b = m_lights.m_ambient[2] * tuning[0];
+      const float lum = b * 0.11f + r * 0.3f + g * 0.59f;
+      if (lum < tuning[3]) {
+        if (lum >= 1e-06f) {
+          const float k = tuning[3] / lum;
+          r *= k, g *= k, b *= k;
+        } else {
+          r = g = b = tuning[3];
+        }
+      }
+      m_lights.m_ambient[0] = r, m_lights.m_ambient[1] = g, m_lights.m_ambient[2] = b;
+      for (unsigned int i = 0; i < m_lights.m_numDir; ++i)
+        for (float& c : m_lights.m_dir[i].m_color) c *= tuning[1];
+      for (unsigned int i = 0; i < m_lights.m_numPoint; ++i)
+        for (float& c : m_lights.m_point[i].m_color) c *= tuning[1];
+      lightColor = tuning[2];
+    } else {
+      m_lights.m_ambient[0] = tuning[7] * tuning[4];
+      m_lights.m_ambient[1] = tuning[8] * tuning[4];
+      m_lights.m_ambient[2] = tuning[9] * tuning[4];
+      for (unsigned int i = 0; i < m_lights.m_numDir; ++i) {
+        m_lights.m_dir[i].m_color[0] *= tuning[10];
+        m_lights.m_dir[i].m_color[1] *= tuning[11];
+        m_lights.m_dir[i].m_color[2] *= tuning[12];
+      }
+      m_lights.m_numPoint = 0;
+      lightColor = tuning[5];
     }
-    m_lights.m_numPoint = 0;
-    lightColor = tuning[5];
+    // (0, 0, -1) turned about y (by -90 degrees; ghosts by tuning [6]), then into the world by the
+    // camera's frame.
+    EMat4 ry;
+    ry.RotateY(ghost ? tuning[6] : -1.5707964f);
+    const float lx = -ry.m[2][0], ly = -ry.m[2][1], lz = -ry.m[2][2];
+    const EMat4& cam = data.m_win->m_lookAtPos;
+    if (m_lights.m_numDir == 4) m_lights.m_numDir = 3;
+    ELightsDir& extra = m_lights.m_dir[m_lights.m_numDir];
+    extra.m_dir[0] = lz * cam.m[2][0] + lx * cam.m[0][0] + ly * cam.m[1][0];
+    extra.m_dir[1] = lz * cam.m[2][1] + lx * cam.m[0][1] + ly * cam.m[1][1];
+    extra.m_dir[2] = lz * cam.m[2][2] + lx * cam.m[0][2] + ly * cam.m[1][2];
+    extra.m_color[0] = extra.m_color[1] = extra.m_color[2] = lightColor;
+    ++m_lights.m_numDir;
   }
-  // (0, 0, -1) turned about y (by -90 degrees; ghosts by tuning [6]), then into the world by the
-  // camera's frame.
-  EMat4 ry;
-  ry.RotateY(ghost ? tuning[6] : -1.5707964f);
-  const float lx = -ry.m[2][0], ly = -ry.m[2][1], lz = -ry.m[2][2];
-  const EMat4& cam = data.m_win->m_lookAtPos;
-  if (m_lights.m_numDir == 4) m_lights.m_numDir = 3;
-  ELightsDir& extra = m_lights.m_dir[m_lights.m_numDir];
-  extra.m_dir[0] = lz * cam.m[2][0] + lx * cam.m[0][0] + ly * cam.m[1][0];
-  extra.m_dir[1] = lz * cam.m[2][1] + lx * cam.m[0][1] + ly * cam.m[1][1];
-  extra.m_dir[2] = lz * cam.m[2][2] + lx * cam.m[0][2] + ly * cam.m[1][2];
-  extra.m_color[0] = extra.m_color[1] = extra.m_color[2] = lightColor;
-  ++m_lights.m_numDir;
 
   m_drawModel = 1;
   if (m_firstDraw == 1 || !m_drawSim || HasQueuedOperation()) {
@@ -864,6 +967,25 @@ void ESim::SimOrderTableCallback(ELevelDrawData& data, EOrderTableData* otd) {
       sim->m_freeMorphs = 0;
       sim->m_simModel->DeallocateMorphResources();
     }
+  }
+  sim->DrawSimAndNpcCommonItems(rc);
+  data.m_curLights = nullptr;
+  data.m_curMatrix = nullptr;
+  data.m_curAnim = nullptr;
+  data.m_curShader = nullptr;
+}
+
+// 80032F34
+// A service NPC's (or pet's) own model posed by the controller at the sim's orientation, its props on
+// the same matrices; then the common items, and the draw state is forgotten.
+void ESim::ServiceNpcOrderTableCallback(ELevelDrawData& data, EOrderTableData* otd) {
+  ESim* sim = static_cast<ESim*>(otd->m_instance);
+  ERC* rc = data.m_rc;
+  if (sim->m_drawModel && sim->m_model) {
+    EMat4 orient;
+    sim->GetOrient(orient);
+    sim->m_anim.Draw(rc, sim->m_model, orient);
+    if (SAnimator2* anim = sim->m_person ? sim->m_person->GetSAnimator() : nullptr) anim->DrawProps(rc, false, nullptr);
   }
   sim->DrawSimAndNpcCommonItems(rc);
   data.m_curLights = nullptr;

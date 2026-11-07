@@ -89,7 +89,7 @@ RainEffect::RainEffect(float fadeIn, float duration, float fadeOut, int type) {
   m_rainRes = nullptr;
   _particleman.AddRefAsync(g_RainEmitterIds[m_type]);
   UpdateParticleRainLoad();
-  SIMMY_STUB("RainEffect: SAnimator2::SetIsRaining (the awareness manager's rain)", 0x8007A2D8);
+  SAnimator2::SetIsRaining(true);  // the awareness manager's rain (auto-carry)
 }
 
 // 8007A380
@@ -148,6 +148,7 @@ RET_UNKNOWN RainEffect::UpdateParticleRainLoad() {
 
 // 8007A64C
 RainEffect::~RainEffect() {
+  SAnimator2::SetIsRaining(false);
   if (m_rain) {
     m_rain->UnReg(m_inGlobalSystem ? g_pParticleSystem : g_pParticleWeatherSystem, false);
     delete m_rain;

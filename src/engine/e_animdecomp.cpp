@@ -131,6 +131,20 @@ EQuat& EQuat::Set(EVec3& axis, float angle) {
   return *this;
 }
 
+// 802CD6BC
+// GC also runs SlerpNoInvert into the result first; the Slerp after it overwrites it.
+EQuat& EQuat::Scale(float t, EQuat& q) {
+  if (t == 0.0f) {
+    x = 0.0f, z = 0.0f, y = 0.0f, w = 1.0f;
+  } else if (t == 1.0f) {
+    *this = q;
+  } else {
+    EQuat id;
+    Slerp(t, id, q);
+  }
+  return *this;
+}
+
 // 802CCE84
 // Euler angles: the rotations about x, then y, then z, composed.
 EQuat& EQuat::Set(float xAngle, float yAngle, float zAngle) {

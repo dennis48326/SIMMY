@@ -1,10 +1,11 @@
-// Port of game/sanimator2.cpp (partial): a person's animator. Ported: set-up, the per-frame update,
-// the anim-state choice, the free-move (direct control) states (idle, turn on the spot, walk, run,
-// run stop) with their animations, cross-fades and movement, collision, posing the sim, the animate
-// primitive (skills on track 0x10, their loops and 'xevt' animation events) and walking a route (PC
-// follow modes, see BeginRoute). Not ported: the GC follow modes (sidesteps, portals), awareness,
-// impatient idles, mood overlays, carrying and the fx track, props, costumes, particles, footsteps and
-// sounds, the censor, low-motive idles and walks, NPC auto-run.
+// Port of game/sanimator2.cpp: a person's animator. Set-up, the per-frame update, the anim-state
+// choice, the free-move (direct control) states (idle, turn on the spot, walk, run, run stop) with
+// their animations, cross-fades and movement, collision, posing the sim, the animate primitive
+// (skills on track 0x10, their loops and 'xevt' animation events), following the person's path (the
+// GC follow modes: turns, side steps, walking with slow-down at the end, door portal mode, NPC
+// auto-run, the awareness follow), low-motive walks and idles, skill idles, the mood on the head,
+// carrying, props, costumes, particles, footsteps, sounds, rumble notes and the censor. The awareness
+// manager is game/awarenessmanager.cpp.
 #include "simmy/types_gen.hpp"
 #include "simmy/unported_globals.hpp"
 #include "simmy/roomresolve.hpp"
@@ -23,6 +24,7 @@ const float kBlendToDefaultIdle = 0.5f;    // 804FDAD4
 const float kTurnToIdleBlendTime = 0.3f;   // 804FDADC
 const float kExitIdleOverlayBlend = 0.4f;  // 804FDACC
 const float kCarryBlendTime = 0.6f;        // 804FDAF8
+const float kSidestepBlendTime = 0.2f;     // 804FDAF0
 const float kPi = 3.1415927f;
 const float kTwoPi = 6.2831855f;
 
@@ -53,31 +55,41 @@ SAnimator2::~SAnimator2() {
 }
 
 // 8005C43C
-// For `person`: its instance, the bones the camera and props follow (right hand 0x35, head 0x10,
-// pelvis 2, torso 0xC; GC: other ones for pets).
+// For `person`: its instance and destination list (its path), the bones the camera, props and the
+// awareness follow (right hand, head, pelvis, torso: dogs and cats 2, 0x17, 6, 0; monkeys 0x17, 0x10,
+// 2, 0xE; people 0x35, 0x10, 2, 0xC), then the awareness manager.
 int SAnimator2::Initialize(cXPerson* person) {
   m_person = person;
   m_flags &= ~1u;
   cXPersonImpl* impl = Impl(person);
   m_sim = impl ? static_cast<ESim*>(impl->m_instance) : nullptr;
-  SIMMY_STUB("SAnimator2::Initialize: the person's destination list (GetDestList), AwarenessManager", 0x8005C43C);
+  m_destList = impl ? &impl->m_path : nullptr;  // GetDestList (vtable 0x184)
   m_turnStartDir = kNoDir;
   m_pauseMult = 1.0f;
-  m_field114 = 0;
+  m_useSpeed = 0.0f;
   m_dir = 0.0f;
   m_timeMult = 1.0f;
   m_walkBlend = 0.0f;
   m_shuffleDir = 2;
   m_longIdleCount = 0;
   SetIdleInitialized(false);
+  m_carryObject = 0;
   m_lowMotiveIdle = 0;
+  m_moodAnim = 0;
+  m_skillAnimId = 0;
+  m_suspendedSkill = 0;
+  m_skillSuspended = 0;
   m_lowMotive = 0;
   m_resetPos = 0;
   m_pendingAnim = 0;
-  m_boneIndex[0] = 0x35;
-  m_boneIndex[1] = 0x10;
-  m_boneIndex[2] = 2;
-  m_boneIndex[3] = 0xc;
+  if (impl && (impl->IsDog() || impl->IsCat())) {
+    m_boneIndex[0] = 2, m_boneIndex[3] = 0, m_boneIndex[1] = 0x17, m_boneIndex[2] = 6;
+  } else if (impl && impl->IsMonkey()) {
+    m_boneIndex[0] = 0x17, m_boneIndex[3] = 0xe, m_boneIndex[1] = 0x10, m_boneIndex[2] = 2;
+  } else {
+    m_boneIndex[0] = 0x35, m_boneIndex[3] = 0xc, m_boneIndex[1] = 0x10, m_boneIndex[2] = 2;
+  }
+  if (m_sim) m_aware.Init(this, &m_sim->m_anim);
   return 1;
 }
 
@@ -108,18 +120,24 @@ float SAnimator2::StyleVelocity(int style) {
 }
 
 // 8005CC80
-// The frame's speed (the simulator's; 0 while it is paused or stalled), the movement state, the main
+// A person read from a save in a costume skips the changing curtain. The frame's speed (the
+// simulator's; 0 while it is paused or stalled), the awareness check, the movement state, the main
 // animation's events up to now (looping animations start over), then the animations; the sim posed
-// where it stands. GC: also the overlay's events, particles, render models and the censor.
+// where it stands. GC: also nothing moves (speed 0) while an animation loads outside a follow
+// (m_pendingCount; PC: loads are synchronous).
 void SAnimator2::Update() {
   if (!m_sim || !m_person) return;
+  if (m_reconstituted == 1) {
+    m_reconstituted = 0;
+    if (m_person->GetPersonData(8) != 0) m_sim->m_field424 = 1;
+  }
   cSimulatorImpl* sim = Globs_pSimulator;
   m_timeMult = 1.0f;
   if (sim) m_timeMult = (sim->IsStalled() || sim->IsPaused() || sim->IsStopped()) ? 0.0f : static_cast<float>(sim->GetSpeedMultiplier());
-  m_field114 = 0;
+  m_aware.SetTimeMultiplier(m_timeMult);
   adjustAnimationPlayRates();
   m_prevTimeMult = m_timeMult;
-  PassiveInfluenceAwarenessCheck(this);  // GC: AwarenessManager::AwarenessCheck (its passive influence part)
+  m_aware.AwarenessCheck(static_cast<unsigned int>(m_animState));
   updateMovementState();
   checkParticleCleanup();
   if (m_curAnim) {
@@ -169,33 +187,37 @@ void SAnimator2::adjustAnimationPlayRates() {
 }
 
 // 8005CC2C
-// Along a route, or (under player control) the free-move state; awareness follows (6..) are not
-// ported.
+// Along a follow, or (under player control) the free-move state; the awareness follows (6..) turn
+// the sim toward what it is aware of.
 void SAnimator2::updateMovementState() {
   if (m_followMode < 6) {
     if (m_routing == 1) moveAnimation();
     else if (m_flags & 1) updateFreeMoveState();
   } else {
-    SIMMY_STUB("SAnimator2::awarenessMove", 0x8006067C);
+    awarenessMove();
   }
 }
 
 // 8005C8E8
 // Without a desired direction: the run (or a walk still fading in from one) stops with the run-stop
-// animation, then the state becomes the desired one. With one: standing (or stopping), it turns on
-// the spot first (a shuffle, state 12); it turns toward the direction (GetTurnRate), and once there
-// takes the desired state (walk or run), the direction used up. The person faces where it turned.
+// animation, then the state becomes the desired one (a run while carrying a direct-control object or
+// low on energy or bladder walks: the low-motive walk loads). With one: standing (or stopping), it
+// turns on the spot first (a shuffle, state 12; the sim's sounds are quietened); it turns toward the
+// direction (GetTurnRate), and once there takes the desired state, the direction used up. The person
+// faces where it turned.
 void SAnimator2::updateFreeMoveState() {
   const float dt = ScaledDt();
   if (m_desiredDir == kNoDir) {
     if (m_animState == kImpatient) {
-      // Still wanted: once the impatient idle has played, standing again, and autonomy takes the sim
-      // (GC: also the optional motion and idle animations unloaded).
+      // Still wanted: once the impatient idle has played, standing again, and autonomy takes the sim.
       if (m_desiredState == kImpatient) {
         if (!(m_flags & 0x1000000u) || !m_sim->m_anim.IsTrackAnimComplete(eTrackFlags{1})) return;
         m_animState = kFreeIdle;
         m_desiredState = kFreeIdle;
         m_flags &= ~0x1000000u;
+        UnloadDCOptionalMotionAnims();
+        UnloadOptionalIdleAnim();
+        UnloadPendingLongIdleAnim();
         if (auto* p = dynamic_cast<cXPersonImpl*>(Impl(m_person))) p->SetIdlePlayerSimAutonomous();
         return;
       }
@@ -208,16 +230,23 @@ void SAnimator2::updateFreeMoveState() {
       if (m_animState == kFreeRun || (m_animState == kFreeWalk && fromWalk)) {
         m_animState = kRunStop;
         m_flags &= ~0x800000u;
+        UnloadDCOptionalMotionAnims();
         return;
       }
       if (m_animState == kRunStop) {
         if (!m_sim->m_anim.IsTrackAnimComplete(eTrackFlags{1})) return;
         m_animState = kFreeIdle;
         m_flags &= ~0x800000u;
+        UnloadDCOptionalMotionAnims();
         return;
       }
     }
-    // GC: running while carrying or with a low motive walks instead (LoadDCOptionalMotionAnims).
+    cXPersonImpl* p = Impl(m_person);
+    if (m_desiredState == kFreeRun && (p->IsCarryingDCObject() || shouldUseLowMotiveWalk())) {
+      LoadDCOptionalMotionAnims();
+      m_animState = kFreeWalk;
+      return;
+    }
     if (m_desiredState == m_animState) return;
     CheckOptionalMotionAnimStatusOnStateChange(m_desiredState);
     m_animState = m_desiredState;
@@ -229,8 +258,12 @@ void SAnimator2::updateFreeMoveState() {
   } else {
     if (m_turnStartDir == kNoDir) m_turnStartDir = m_dir;
     if (m_animState == kFreeIdle || m_animState == kRunStop) {
-      // GC: the person's sounds are quietened (cSoundPlayer::QuietBySourceID).
+      if (m_animState == kFreeIdle && Globs_pSound && m_person->AsObject())
+        Globs_pSound->QuietBySourceID(static_cast<short>(m_person->AsObject()->GetID()));
       initShuffleRotation(delta);
+      LoadDCOptionalMotionAnims();
+      UnloadOptionalIdleAnim();
+      UnloadPendingLongIdleAnim();
       m_animState = kFreeTurn;
     }
     if (rotateAnimation(dt, m_desiredDir, delta)) {
@@ -243,10 +276,18 @@ void SAnimator2::updateFreeMoveState() {
 }
 
 // 80063234
-// A finished turn takes the desired state (GC: a run while carrying or low on a motive walks).
+// A finished turn takes the desired state: turning or standing stands (the direct-control walks
+// unloaded); a run while carrying a direct-control object or low on a motive walks.
 void SAnimator2::SetNextStateFromCompletedTurn() {
   if (m_desiredState == kFreeTurn || m_desiredState == kFreeIdle) {
+    UnloadDCOptionalMotionAnims();
     m_animState = kFreeIdle;
+    return;
+  }
+  cXPersonImpl* p = Impl(m_person);
+  if (m_desiredState == kFreeRun && (p->IsCarryingDCObject() || shouldUseLowMotiveWalk())) {
+    LoadDCOptionalMotionAnims();
+    m_animState = kFreeWalk;
     return;
   }
   if (m_animState == m_desiredState) return;
@@ -255,10 +296,13 @@ void SAnimator2::SetNextStateFromCompletedTurn() {
 }
 
 // 80064C18
-// GC: entering a free-move turn, walk or run loads the direct-control motion animations
-// (LoadDCOptionalMotionAnims), leaving them unloads them, and leaving an idle unloads the optional
-// idle; PC: the animations load when they are played.
-void SAnimator2::CheckOptionalMotionAnimStatusOnStateChange(int) {}
+// Entering a free-move turn, walk or run loads the direct-control low-motive walk, any other state
+// unloads it; leaving a standing idle (0, 9) for another state unloads the low-motive idle.
+void SAnimator2::CheckOptionalMotionAnimStatusOnStateChange(int state) {
+  if (static_cast<unsigned int>(state - kFreeTurn) < 3) LoadDCOptionalMotionAnims();
+  else UnloadDCOptionalMotionAnims();
+  if ((m_animState == kFreeIdle || m_animState == kIdle) && state != kFreeIdle) UnloadOptionalIdleAnim();
+}
 
 // 8006A494
 double SAnimator2::getDeltaDirFromDesiredDir(float desired) {
@@ -280,10 +324,10 @@ int SAnimator2::getShuffleDirFromDeltaDir(float delta) {
 }
 
 // 800608DC
-// Radians a second: instantly when stepping or carrying (2), 3 pi in free-move turns, walks and
-// runs, else the shuffle's own rate.
+// Radians a second: instantly when walking a follow or in a door (portal mode 2), 3 pi in free-move
+// turns, walks and runs, else the shuffle's own rate.
 float SAnimator2::GetTurnRate() {
-  if (m_followMode == 3 || m_carryType == 2) return kTwoPi;
+  if (m_followMode == 3 || m_portalMode == 2) return kTwoPi;
   if (m_animState != kFreeTurn && static_cast<unsigned int>(m_animState - kFreeWalk) > 1) return m_turnRate;
   return 9.424778f;
 }
@@ -411,7 +455,7 @@ void SAnimator2::setPersonDirection(float dir) {
 // 80069230
 double SAnimator2::getPersonDirection() {
   cXPersonImpl* impl = Impl(m_person);
-  double d = ((impl ? impl->GetData(1) : 0) - 2.0f) * -0.7853982f;
+  float d = (static_cast<float>(impl ? impl->GetData(1) : 0) - 2.0f) * -0.7853982f;
   if (d < -kPi) d += kTwoPi;
   if (kPi < d) d -= kTwoPi;
   return d;
@@ -426,38 +470,56 @@ int SAnimator2::getPersonX() { return Impl(m_person)->m_location[1]; }
 int SAnimator2::getPersonY() { return Impl(m_person)->m_location[0]; }
 
 // 80061158
-// The anim state for this frame (routing: by follow mode; under player control the free-move state
-// stands; simulator-controlled people idle or play their skill), then its animation; the sim is posed
-// where it stands (its person's location after SnapToGrid).
+// The anim state for this frame. Following: by follow mode (1 the starting turn 2, 2 a side step 4, 3
+// walking 1, 4 the turn at the end 3, 5 turning to face 3 until it faces the person's direction); the
+// awareness follows 0xF, 0x10, 0x11. Otherwise: the impatient idle seated becomes standing (autonomy
+// takes the sim); under player control the free-move state stands (object data 2: holding, idle 8);
+// simulator controlled the main track says: a skill 5 (socialising 6), an algorithmic idle 7, else 0.
+// Then the state's animation, the mood on the head, and (not loading) the sim posed where it stands
+// with the awareness animations and particles.
 void SAnimator2::updateRenderAnimation() {
   int state = m_animState;
   if (m_followMode < 6) {
     if (m_routing == 1) {
-      // By follow mode: 1 the starting turn (2), 3 walking (1), 5 the turn at the end (3).
-      if (m_followMode == 1) state = 2;
-      else if (m_followMode == 3) state = 1;
-      else if (m_followMode == 5) state = 3;
+      switch (m_followMode) {
+        case 3: state = 1; break;
+        case 1: state = 2; break;
+        case 2: state = 4; break;
+        case 4: state = 3; break;
+        case 5:
+          if (m_dir != static_cast<float>(getPersonDirection())) state = 3;
+          break;
+        default: break;
+      }
     } else if (state == kImpatient) {
       // Seated (idle states 1, 2) there is no impatient idle: autonomy takes the sim at once.
-      auto* p = dynamic_cast<cXPersonImpl*>(Impl(m_person));
-      if (p && static_cast<unsigned int>(p->GetIdleState() - 1) < 2u) {
+      cXPersonImpl* p = Impl(m_person);
+      if (static_cast<unsigned int>(p->GetIdleState() - 1) < 2u) {
         m_animState = kFreeIdle;
         m_desiredState = kFreeIdle;
         p->SetIdlePlayerSimAutonomous();
       }
     } else if (!IsSimulatorControlled()) {
-      // GC: object data 2 set means sim-controlled idling (8).
       if (Impl(m_person)->GetData(2) != 0) state = kSimIdle;
       else if (state < kFreeIdle) state = kFreeIdle;
     } else {
-      // The current main track (its flag 0x10000) a skill: 5, an algorithmic idle (0x20) 7; idles and
-      // anything else 0. GC: socialising (vtable 0x334) 6.
       const unsigned int main = MainTrackFlags();
-      if (!(main & eTrackFlags::kMain) || (main & 1)) state = kIdle;
-      else state = (main & 0x20) ? 7 : 5;
+      if (!(main & eTrackFlags::kMain) || (main & 1)) {
+        state = kIdle;
+        if (Impl(m_person)->IsInSocialMode()) state = 6;
+      } else if (!(main & 0x20)) {
+        state = 5;
+      } else {
+        state = 7;
+        if (Impl(m_person)->IsInSocialMode()) state = 6;
+      }
     }
-  } else {
-    SIMMY_STUB("SAnimator2::updateRenderAnimation: awareness states", 0x80061158);
+  } else if (m_followMode == 7) {
+    state = 0x10;
+  } else if (m_followMode == 6) {
+    state = 0xf;
+  } else if (m_followMode == 8) {
+    state = 0x11;
   }
   if (m_animState != state) {
     CheckOptionalMotionAnimStatusOnStateChange(state);
@@ -467,41 +529,42 @@ void SAnimator2::updateRenderAnimation() {
     case kIdle: case kSimIdle: case kFreeIdle:
       handleIdleAnimation();
       break;
-    case kFreeWalk: case kFreeRun:
-      stopIdleOverlay();
-      handleFreeMoveWalkRunAnimation();
-      break;
-    case 5: case 6:
-      stopIdleOverlay();
-      break;
     case 1:
       stopIdleOverlay();
       handleWalkRunAnimation();
       break;
-    case 2: case 3:
+    case 2: case 3: case kFreeTurn: case 0xf: case 0x11:
       stopIdleOverlay();
       handleTurnAnimation();
       break;
-    case 7:
-      SIMMY_STUB("SAnimator2::handleSkillIdleAnimation", 0x800635DC);
-      break;
-    case kRunStop:
+    case 4:
       stopIdleOverlay();
-      handleRunStopAnimation();
+      handleSidestepAnimation();
+      break;
+    case 5: case 6:
+      stopIdleOverlay();
+      break;
+    case 7:
+      handleSkillIdleAnimation();
       break;
     case kImpatient:
       stopIdleOverlay();
       handleImpatientIdleAnimation();
       break;
-    case kFreeTurn:
+    case kRunStop:
       stopIdleOverlay();
-      handleTurnAnimation();
+      handleRunStopAnimation();
       break;
-    default:
-      SIMMY_STUB("SAnimator2::updateRenderAnimation: walking, sidestep, skill, impatient and awareness animations", 0x80061158);
+    case kFreeWalk: case kFreeRun:
+      stopIdleOverlay();
+      handleFreeMoveWalkRunAnimation();
       break;
+    case 0x10:
+      stopIdleOverlay();
+      break;
+    default: break;
   }
-  SIMMY_STUB("SAnimator2::handleMoodAnimations", 0x80061804);
+  handleMoodAnimations();
   if (m_pendingAnim == 0) {
     if (m_resetPos) {
       m_resetPos = 0;
@@ -510,31 +573,35 @@ void SAnimator2::updateRenderAnimation() {
     }
     m_renderPos[0] = m_pos[0];
     m_renderPos[1] = m_pos[1];
+    m_aware.handleAwarenessAnimations(static_cast<unsigned int>(m_animState));
     if (m_sim->m_modelReady) positionCharacter(nullptr);
     updateParticles();
   }
 }
 
 // 80068ECC
-// Not under player control, routing, socialising, in motive failure or busy with an interaction (GC:
-// vtable 0x334, 0x354, 0x22C, 0xF4; PC: socialising and motive failure are not ported), or a skill
-// track (0x10) still playing.
+// Not under player control, following, socialising (or the second player's social), in motive failure
+// or busy with an interaction (GC: vtable 0x334, 0x354, 0x22C, 0xF4), or a skill track (0x10) still
+// playing.
 bool SAnimator2::IsSimulatorControlled() {
   if (!(m_flags & 1) || m_routing == 1) return true;
-  // GetCurrentInteractionStackObject (vtable 0xF4): PC, an object's tree on the person's stack.
-  if (!Impl(m_person)->m_gosubObjects.empty()) return true;
+  cXPersonImpl* p = Impl(m_person);
+  if (p->IsInSocialMode() || p->IsSecondPlayerInSocialMode() || p->IsInMotiveFailure()) return true;
+  if (p->GetCurrentInteractionStackObject() != 0) return true;
   return m_sim->m_anim.IsTrackAnimComplete(eTrackFlags{0x10}) == 0;
 }
 
 // 80068FBC
-// The player steers this person (direct control) or the simulator does; the controller's flag 1
-// follows. GC: also AwarenessManager::SetPlayerControl.
+// The player steers this person (direct control) or the simulator does; the controller's flag 1 and
+// the awareness manager follow.
 void SAnimator2::SetPlayerControl(bool control) {
   if (control) m_flags |= 1;
   else m_flags &= ~1u;
-  if (!m_sim) return;
-  if (control) m_sim->m_anim.m_flags |= 1;
-  else m_sim->m_anim.m_flags &= ~1u;
+  if (m_sim) {
+    if (!control) m_sim->m_anim.m_flags &= ~1u;
+    else m_sim->m_anim.m_flags |= 1;
+  }
+  m_aware.SetPlayerControl(control);
 }
 
 // 80069114
@@ -652,7 +719,7 @@ void SAnimator2::ResetCensorship() {}
 // After the person's trees reset (cXPersonImpl::Reset): the optional motion and long idle animations
 // unloaded, the props taken off, the impatient idle cleared; no animate primitive's animation, events,
 // main or overlay animation, facing or costume; the flags but player control cleared; an animation
-// still loading given up; the awareness manager reset (+0x620, not ported).
+// still loading given up; the awareness manager reset.
 void SAnimator2::Reset() {
   UnloadDCOptionalMotionAnims();
   UnloadSMOptionalMotionAnims();
@@ -671,8 +738,9 @@ void SAnimator2::Reset() {
   m_lastCostume = 0;
   if (m_pendingAnim != 0) {
     _animman.DelRefAsync(static_cast<unsigned int>(m_pendingAnim));
-    m_pendingAnim = 0;  // GC: also m_pendingCount - 1
+    m_pendingAnim = 0;
   }
+  m_aware.Reset();
 }
 
 // 8005F4E8
@@ -990,7 +1058,7 @@ void SAnimator2::selectIdleOverlay() {
   m_flags |= 0x1000;
   int weights[5];
   weights[0] = 0x14;
-  weights[1] = (p->IsCarrying() || (m_flags & 0x800) || (m_awareFlags & 0x200)) ? 0x14 : 0x28;
+  weights[1] = (p->IsCarrying() || (m_flags & 0x800) || (m_aware.m_flags & 0x200)) ? 0x14 : 0x28;
   weights[2] = weights[1] + 0x14;
   weights[3] = weights[1] + 0x28;
   weights[4] = weights[1] + 0x3c;
@@ -1129,7 +1197,7 @@ void SAnimator2::handleIdleAnimation() {
 // carrying.
 void SAnimator2::handleTurnAnimation() {
   if (m_flags & 0x10) return;
-  if (m_carryType == 2 || (m_carryType == 1 && m_animState == 3)) return;
+  if (m_portalMode == 2 || (m_portalMode == 1 && m_animState == 3)) return;
   const AnimRef* ref = nullptr;
   getTurnSkillID(ref, m_shuffleDir);
   unsigned int flags = 0;
@@ -1223,8 +1291,15 @@ void SAnimator2::handleFreeMoveWalkRunAnimation() {
   const unsigned int playing = anim.GetTrackAnimId(eTrackFlags{eTrackFlags::kMain});
   const float dt = ScaledDt();
   int style = 8;
-  if (m_animState == kFreeWalk) style = 7;
-  else if (m_animState == kFreeRun && m_lowMotive != 0) SIMMY_STUB("SAnimator2: low-motive runs", 0x800627C0);
+  if (m_animState == kFreeWalk) {
+    style = 7;
+  } else if (m_animState == kFreeRun && m_lowMotive != 0) {
+    // A low-motive run walks once its low-motive walk is in.
+    const AnimRef* low = nullptr;
+    if (m_lowMotive == 5) GetStdAnimRef(m_person, 0x12, low);
+    else if (m_lowMotive == 9) GetStdAnimRef(m_person, 0x3b, low);
+    if (low && _animman.GetRef(AnimRefId(low))) style = 7;
+  }
   if (style != m_walkStyle) {
     m_prevWalkStyle = m_walkStyle;
     m_walkStyle = style;
@@ -1234,9 +1309,9 @@ void SAnimator2::handleFreeMoveWalkRunAnimation() {
   const AnimRef* ref = nullptr;
   getWalkRunSkillID(ref);
   if (ref && AnimRefId(ref) != playing) {
-    if (m_skillOverlay && !(m_skillOverlay->m_flags & 0x80000)) {
-      anim.SetTrackBlendSmooth(m_skillOverlay, 0.0f, kFastRemoveBlendTime, 0.01f);
-      m_skillOverlay = nullptr;
+    if (m_monitoredTrack && !(m_monitoredTrack->m_flags & 0x80000)) {
+      anim.SetTrackBlendSmooth(m_monitoredTrack, 0.0f, kFastRemoveBlendTime, 0.01f);
+      m_monitoredTrack = nullptr;
     }
     float* velocity;
     unsigned int bit;
@@ -1286,16 +1361,14 @@ void SAnimator2::handleFreeMoveWalkRunAnimation() {
   EVec2 to{m_pos[0], m_pos[1]};
   CheckCollision(from, to);
   m_pos[0] = to.x, m_pos[1] = to.y;
+  // The person goes where the sim walked if it can be placed there (CanPlace / Place, vtable 0x134 /
+  // 0x13C: its tile and room, the tile map); else the sim steps back.
   cXPersonImpl* impl = Impl(m_person);
-  CTilePt tile(static_cast<int>(m_pos[0] + 0.5f) >> 4, static_cast<int>(m_pos[1] + 0.5f) >> 4, impl->m_level);
-  if (!Globs_pFixedWorld || Globs_pFixedWorld->OutOfBounds(tile)) {
+  const int pos[2] = {static_cast<int>(m_pos[1] + 0.5f), static_cast<int>(m_pos[0] + 0.5f)};
+  if (!ObjCanPlace(impl, pos, impl->m_level, nullptr, 0)) {
     m_pos[0] = from.x, m_pos[1] = from.y;
   } else {
-    impl->m_location[1] = static_cast<int>(m_pos[0] + 0.5f);
-    impl->m_location[0] = static_cast<int>(m_pos[1] + 0.5f);
-    UpdateObjectRoomID(impl);  // GC: cXObjectImpl::SetLocation
-    // GC Place: the person is its new tile's object (the tile map; TrySetToNext kind 9 reads it).
-    if (Globs_pObjectModule && impl->m_data[2] == 0) Globs_pObjectModule->SetSiteTile(impl);
+    impl->PlacePerson(pos);
   }
 }
 
@@ -1867,7 +1940,7 @@ void SAnimator2::eventHandler(EAnimNote& note, int) {
       if (Globs_pSound && m_person && m_person->AsObject())
         Globs_pSound->PlayBySource(const_cast<char*>(note.m_text.c_str()), static_cast<short>(m_person->AsObject()->GetID()));
       break;
-    case 7: SIMMY_STUB("SAnimator2::eventHandler: rumble notes (playRumble)", 0x80065818); break;
+    case 7: playRumble(const_cast<char*>(note.m_text.c_str())); break;
     case 0xd: case 0xe: case 0xf: HandleEffectNote(m_person, note, static_cast<int>(note.m_field04)); break;
     case 0xa:  // a particle effect: the attachment by name, toggled on the sim's bones (boneparticle.cpp)
       if (EResource* att = g_effectsAttachmentMan.AddRef(const_cast<char*>(note.m_text.c_str()), nullptr, 0)) {
@@ -1879,6 +1952,36 @@ void SAnimator2::eventHandler(EAnimNote& note, int) {
   }
 }
 
+// 800661D8
+// A rumble note: its RumbleDataElement (ObjectFolder::GetRumbleByName).
+void SAnimator2::playRumble(char* name) {
+  ObjectFolderImpl* folder = Globs_pObjectFolder;
+  if (const void* rumble = folder ? folder->GetRumbleByName(name) : nullptr)
+    playRumble(static_cast<RumbleDataElement*>(const_cast<void*>(rumble)));
+}
+
+// 8006622C
+// The sim of a player (its instance this one) rumbles that player's pad, when rumble is on in the
+// options and the rumble lasts: motor one at +0, motor two at +2 / 255, both for +4 seconds.
+void SAnimator2::playRumble(RumbleDataElement* rumble) {
+  int port = -1;
+  cXPerson* p0 = _globals.GetSelectedPerson(0);
+  if (p0 && p0->AsObject() && p0->AsObject()->GetObjectImplementation()->m_instance == static_cast<ISimInstance*>(m_sim))
+    port = _pCtrlMan->GetPlayerControllerIndex(0);
+  cXPerson* p1 = _globals.GetSelectedPerson(1);
+  if (p1 && p1->AsObject() && p1->AsObject()->GetObjectImplementation()->m_instance == static_cast<ISimInstance*>(m_sim))
+    port = _pCtrlMan->GetPlayerControllerIndex(1);
+  auto* options = static_cast<OptionsRecon*>(_globals.m_optionsRecon);  // DAT_80475F14
+  const float seconds = ERQuickdata::F32(rumble, 4);
+  static const bool trace = std::getenv("SIMMY_RUMBLE_TRACE") != nullptr;  // PC dev trace
+  if (trace)
+    std::printf("[rumble] %s: %u %u %.2f s (port %d)\n", Impl(m_person)->DebugName(), ERQuickdata::U16(rumble, 0),
+                ERQuickdata::U16(rumble, 2), seconds, port);
+  if (port == -1 || !options || options->m_opt04 == 0 || !(0.0010000000474974513 < seconds) || !_globals.m_vibrate) return;
+  _globals.m_vibrate->VibrateAll(static_cast<unsigned char>(port), static_cast<float>(ERQuickdata::U16(rumble, 0)),
+                                 static_cast<float>(ERQuickdata::U16(rumble, 2)) / 255.0f, seconds, seconds);
+}
+
 // 800689FC
 // GC: the instance's "animation valid" flag (ESim +0x394) follows the main track.
 void SAnimator2::UpdateAnimationValidity() {}
@@ -1886,55 +1989,306 @@ void SAnimator2::UpdateAnimationValidity() {}
 // 8005ED9C
 int SAnimator2::IsFollowing() { return m_routing != 0 ? 1 : 0; }
 
-// 8005E7CC
-// The person's path (cXPersonImpl::m_path, InitRoute's): walk it but its last point, then turn toward
-// that one. The walk style: the low-motive one (person not a pet), else object data 0x11 (GC: else an
-// auto run by AwarenessManager::AwarenessAutoRunCheck, not ported: none). PC: the walk itself is
-// BeginRoute's (moveAnimation); GC: the follow modes (a side step first for a short three-point path
-// unless +0x5F8), UpdatePortalMode, the optional motion animations.
-void SAnimator2::BeginFollow(float dist) {
-  (void)dist;
-  cXPersonImpl* p = dynamic_cast<cXPersonImpl*>(Impl(m_person));
-  if (!p) return;
-  const std::vector<TileListPoint>& pts = p->m_path.m_points;
-  std::vector<EVec2> route;
-  for (size_t i = 0; i + 1 < pts.size(); ++i) {
-    const EVec2 q{static_cast<float>(pts[i].p[1]), static_cast<float>(pts[i].p[0])};
-    // PC: a leg of no length (smoothing can leave two equal points) is not walked (the PC walker would
-    // turn toward it first).
-    if (!route.empty() && route.back().x == q.x && route.back().y == q.y) continue;
-    route.push_back(q);
+// 8005EDB4
+// A walk can always be interrupted (TryGotoRoutingSlot asks when the person should give way).
+RET_UNKNOWN SAnimator2::IsInterruptable() { return 1; }
+
+// ---------------------------------------------------------------------------------------------------
+// Following the person's destination list (its path: the person's spot, the way points, and a last
+// point a tile on in the direction to face). Points are 1/16 tiles, p[1] the animation format's x and
+// p[0] its y. The follow modes: 1 turn on the spot toward the first leg, 2 a side step (a short
+// three-point list), 3 walk the legs (turning into each at 2 pi a second), 4 turn (to the nearest
+// eighth) along the last leg, 5 turn to the person's direction; then done (m_routing 2) until
+// FollowOneStep places the person.
+
+TileList& SAnimator2::DestList() { return *m_destList; }
+int SAnimator2::DestCount() { return m_destList ? static_cast<int>(m_destList->m_points.size()) : 0; }
+
+void SAnimator2::dropMonitoredTrack() {
+  if (!m_monitoredTrack) return;
+  m_sim->m_anim.SetTrackBlendSmooth(m_monitoredTrack, 0.0f, kFastRemoveBlendTime, 0.01f);
+  m_monitoredTrack = nullptr;
+}
+
+// 8006A69C
+double SAnimator2::GetMovementVelocityFromStyle(int style) { return StyleVelocity(style); }
+
+// 80069A14
+// An adult's walk 19.84, a child's 17.28; runs 64.96 (1/16 tiles a second).
+double SAnimator2::defaultVelocity(int style) {
+  if (style == 1 || style == 8) return 64.95999908447266;
+  return m_sim->IsAdult() ? 19.84000015258789 : 17.280000686645508;
+}
+
+// 80069A8C
+double SAnimator2::getAnimDuration(ERAnim* anim) {
+  return anim ? static_cast<float>(anim->m_frameCount - 1) / anim->m_fps : 0.0f;
+}
+
+// 8006A3AC
+int SAnimator2::getIsLeftFootUp() {
+  const double phase = m_sim->m_anim.GetTrackPos(eTrackFlags{eTrackFlags::kMain});
+  return (phase < 0.25 || 0.75 <= phase) ? 1 : 0;
+}
+
+// 80069D10
+// The walk/run style's velocity, once, from its cycle (getWalkRunSkillID) when loaded: the root's
+// forward distance at its second-to-last frame over that time, if over 0.2.
+void SAnimator2::setMovementVelocityFromAnimation() { readWalkVelocity(); }
+
+void SAnimator2::readWalkVelocity() {
+  float* velocity;
+  unsigned int bit;
+  if (m_walkStyle == 2) velocity = &m_lowEnergyVel, bit = 4;
+  else if (m_walkStyle == 3) velocity = &m_lowBladderVel, bit = 8;
+  else if (m_walkStyle == 1 || m_walkStyle == 8) velocity = &m_runVel, bit = 2;
+  else velocity = &m_walkVel, bit = 1;
+  if (m_velocityKnown & bit) return;
+  const AnimRef* ref = nullptr;
+  getWalkRunSkillID(ref);
+  if (!ref || !_animman.GetRef(AnimRefId(ref))) return;
+  auto* a = static_cast<ERAnim*>(_animman.AddRef(AnimRefId(ref), nullptr, 0));
+  if (!a) return;
+  const float frames = static_cast<float>(a->m_frameCount - 1);
+  const float length = (frames / a->m_fps) * (static_cast<float>(a->m_frameCount - 2) / frames);
+  if (length == 0.0f) {
+    _animman.DelRef(a, EResourceManager__DelRefMode{1});
+  } else {
+    EAnimController& anim = m_sim->m_anim;
+    EACTrack t;
+    t.m_anim = a;
+    anim.CreateStreams(&t);
+    t.m_pos = static_cast<float>(a->m_frameCount - 2);
+    const EVec3 root = anim.GetAnimRootNodeTrans(&t);
+    if (0.2f < root.y) *velocity = root.y * 16.0f / length;
+    anim.DestroyStreams(&t);
+    t.m_anim = nullptr;
+    _animman.DelRef(a, EResourceManager__DelRefMode{1});
   }
-  float endDir = kNoDir;
-  if (pts.size() >= 2) {
-    const EVec2 last{static_cast<float>(pts.back().p[1]), static_cast<float>(pts.back().p[0])};
-    endDir = -std::atan2(last.y - route.back().y, last.x - route.back().x);
+  m_velocityKnown |= bit;
+}
+
+// 80069ADC
+// The side step's velocity (+0x0A4), once, from the side step animation: the root's sideways (x)
+// distance half way through over 0.45 of half its length.
+void SAnimator2::setSideStepSpeedFromAnimation(const AnimRef* ref) {
+  if ((m_velocityKnown & 0x10) || !ref) return;
+  auto* a = static_cast<ERAnim*>(_animman.AddRef(AnimRefId(ref), nullptr, 0));
+  if (!a) return;
+  const float time = (static_cast<float>(a->m_frameCount - 1) / a->m_fps) * 0.45f * 0.5f;
+  if (time == 0.0f) {
+    _animman.DelRef(a, EResourceManager__DelRefMode{1});
+  } else {
+    EAnimController& anim = m_sim->m_anim;
+    EACTrack t;
+    t.m_anim = a;
+    anim.CreateStreams(&t);
+    t.m_pos = static_cast<float>(a->m_frameCount - 1) * 0.5f;
+    const EVec3 root = anim.GetAnimRootNodeTrans(&t);
+    if (0.2f < std::fabs(root.y)) m_sideVel = std::fabs(root.y) * 16.0f / time;
+    anim.DestroyStreams(&t);
+    t.m_anim = nullptr;
+    _animman.DelRef(a, EResourceManager__DelRefMode{1});
   }
-  if (route.empty()) route.push_back(EVec2{static_cast<float>(getPersonX()), static_cast<float>(getPersonY())});
-  BeginRoute(route, endDir);
-  m_follow = 1;
+  m_velocityKnown |= 0x10;
+}
+
+// 80069FBC
+// The shuffle's rate from its animation's length (as initShuffleRotation, without marking the turn).
+void SAnimator2::setRotationRateFromShuffleDir(int shuffle, float delta) {
+  delta = std::fabs(delta);
+  const unsigned int main = MainTrackFlags();
+  const bool fromIdle = (main & 0x21) || (main & 4);
+  const int row = fromIdle ? 0 : 1;
+  const int bit = fromIdle ? shuffle + 8 : shuffle + 0x13;
+  float* times = m_turnTime[row];
+  if (!(m_velocityKnown & (1u << bit))) {
+    const AnimRef* ref = nullptr;
+    getTurnSkillID(ref, shuffle);
+    if (auto* anim = ref ? static_cast<ERAnim*>(_animman.AddRef(AnimRefId(ref), nullptr, 0)) : nullptr) {
+      const float t = static_cast<float>(anim->m_frameCount - 1) / anim->m_fps;
+      if (t != 0.0f) {
+        times[shuffle + 5] = t;
+        times[-shuffle + 5] = t;
+      }
+      _animman.DelRef(anim, EResourceManager__DelRefMode{1});
+    }
+    m_velocityKnown |= 1u << bit;
+    m_velocityKnown |= 1u << (fromIdle ? -shuffle + 8 : -shuffle + 0x13);
+  }
+  m_turnRate = delta / times[shuffle + 5];
+  if (m_turnRate < 0.3926991f) m_turnRate = 0.3926991f;
+}
+
+// 8006A508
+// The direction of the leg walked (from the point before the current one; the first leg at the
+// start); along the last leg (mode 4) to the nearest eighth; on the spot the sim's own.
+double SAnimator2::getDesiredDir() {
+  const std::vector<TileListPoint>& p = DestList().m_points;
+  const int i = m_routeIndex;
+  float dx, dy;
+  if (i == 0) {
+    dx = static_cast<float>(p[1].p[1] - p[0].p[1]);
+    dy = static_cast<float>(p[1].p[0] - p[0].p[0]);
+  } else {
+    dx = static_cast<float>(p[i].p[1] - p[i - 1].p[1]);
+    dy = static_cast<float>(p[i].p[0] - p[i - 1].p[0]);
+  }
+  if (dx <= -0.001f || 0.001f <= dx || dy <= -0.001f || 0.001f <= dy) {
+    double d = std::atan2(-dy, dx);
+    if (m_followMode == 4) d = std::floor(static_cast<float>(d + 0.39269909262657166) / 0.7853982f) * 0.7853981852531433;
+    return static_cast<float>(d);
+  }
+  return m_dir;
+}
+
+// 8006982C
+void SAnimator2::updateDesiredAndDeltaDir(float& desired, float& delta) {
+  desired = static_cast<float>(getDesiredDir());
+  delta = static_cast<float>(getDeltaDirFromDesiredDir(desired));
+}
+
+// 8006952C
+// A side step for a short (under a tile) three-point list unless in a door's portal mode; else the turn.
+int SAnimator2::determineFirstFollowMode(TileList*) {
+  UpdatePortalMode();
+  const std::vector<TileListPoint>& p = DestList().m_points;
+  if (m_portalMode == 0 && p.size() == 3) {
+    const int dy = p[1].p[0] - p[0].p[0], dx = p[1].p[1] - p[0].p[1];
+    if (dx * dx + dy * dy < 0x101) return 2;
+  }
+  return 1;
+}
+
+// PC helper (inlined in BeginFollow, determineWalkRunStyle, exitAwarenessFollow): the follow's walk
+// style: the low-motive walk (not pets: energy 2, bladder 3), else object data 0x11; plain walks run
+// in a side step (4: none) or by AwarenessAutoRunCheck.
+int SAnimator2::followWalkStyle(float dist) {
+  cXPersonImpl* p = Impl(m_person);
   int style;
   if (m_lowMotive == 0 || p->IsPet()) style = p->GetData(0x11);
   else if (m_lowMotive == 5) style = 2;
   else if (m_lowMotive == 9) style = 3;
   else style = 0;
-  if (style == 0 && m_followMode == 2) style = 4;
+  if (style == 0) style = m_followMode == 2 ? 4 : (StartAutoRun(dist) ? 1 : 0);
+  return style;
+}
+
+// 800695B8
+void SAnimator2::determineWalkRunStyle(float dist) {
+  UnloadDCOptionalMotionAnims();
+  UnloadSMOptionalMotionAnims();
+  LoadSMOptionalMotionAnims();
+  const int style = followWalkStyle(dist);
   if (style != m_walkStyle) {
     m_prevWalkStyle = m_walkStyle;
     m_walkStyle = style;
   }
 }
 
+// 80069870
+// Following; unless in an awareness follow, from `mode` with the outgoing main tracks faded out.
+void SAnimator2::setFirstFollowMode(int mode) {
+  m_routing = 1;
+  if (m_followMode < 6) {
+    m_followMode = mode;
+    m_flags &= ~0x7eu;
+    m_sim->m_anim.BlendAllOutgoingTracks(0.0f, 0.1f, true);
+    m_monitoredTrack = nullptr;
+  }
+}
+
+// 800698E4
+void SAnimator2::setFollowMiddle() {
+  m_followMode = 3;
+  m_flags &= ~0x5eu;
+  setMovementVelocityFromAnimation();
+}
+
+// 80069920
+void SAnimator2::setFollowEnd() {
+  m_followMode = 4;
+  m_useSpeed = 0.0f;
+  m_flags &= ~0x5eu;
+  dropMonitoredTrack();
+}
+
+// 80069998
+void SAnimator2::setFollowDone() {
+  m_followMode = 5;
+  m_useSpeed = 0.0f;
+  m_flags = (m_flags & ~0x5eu) | 0x20;
+  dropMonitoredTrack();
+}
+
+// 8006C850
+// Long enough (AwarenessAutoRunCheck) to run: the person's data 0x11 says so (1) until EndAutoRun.
+bool SAnimator2::StartAutoRun(float dist) {
+  m_autoRun = m_aware.AwarenessAutoRunCheck(dist);
+  if (m_autoRun == 1) Impl(m_person)->SetData(0x11, 1);
+  return m_autoRun == 1;
+}
+
+// 800692E4
+bool SAnimator2::EndAutoRun() {
+  const bool was = m_autoRun == 1;
+  if (was) {
+    Impl(m_person)->SetData(0x11, 0);
+    m_autoRun = 0;
+  }
+  return was;
+}
+
+// 8005E7CC
+// Follows the destination list: a load in flight given up; the first follow mode (a side step for a
+// short three-point list, else the turn), the direction the person faces, the simulator's low-motive
+// walk loaded, the walk style (followWalkStyle); the walk starts at the person's spot.
+void SAnimator2::BeginFollow(float dist) {
+  if (m_pendingAnim != 0) {
+    _animman.DelRefAsync(static_cast<unsigned int>(m_pendingAnim));
+    m_pendingAnim = 0;
+  }
+  m_sim->DrawSim(true);
+  UpdatePortalMode();
+  int mode = 1;
+  const std::vector<TileListPoint>& p = DestList().m_points;
+  if (m_portalMode == 0 && p.size() == 3) {
+    const int dy = p[1].p[0] - p[0].p[0], dx = p[1].p[1] - p[0].p[1];
+    if (dx * dx + dy * dy < 0x101) mode = 2;
+  }
+  m_dir = static_cast<float>(getPersonDirection());
+  setFirstFollowMode(mode);
+  UnloadDCOptionalMotionAnims();
+  UnloadSMOptionalMotionAnims();
+  LoadSMOptionalMotionAnims();
+  const int style = followWalkStyle(dist);
+  if (style != m_walkStyle) {
+    m_prevWalkStyle = m_walkStyle;
+    m_walkStyle = style;
+  }
+  m_routeIndex = 0;
+  m_pos[0] = static_cast<float>(getPersonX());
+  m_resetPos = 0;
+  m_pos[1] = static_cast<float>(getPersonY());
+  m_pathStartsHere = (!p.empty() && p.size() > 1 && p[0].p[1] == p[1].p[1] && p[0].p[0] == p[1].p[0]) ? 1 : 0;
+  static const bool trace = std::getenv("SIMMY_WALK_TRACE") != nullptr;  // PC dev trace
+  if (trace)
+    std::printf("[walk] %s: follow %d points from %d,%d, mode %d style %d dist %.1f\n", Impl(m_person)->DebugName(),
+                static_cast<int>(p.size()), getPersonX(), getPersonY(), mode, m_walkStyle, dist);
+}
+
 // 8005EAB8
+// 2 while walking (or the model changes); arrived (2): the person goes to the nearest point of its path
+// to where the sim stands if it fits there (1), else stays where it is (0, the sim snapped back); it
+// faces where the sim does. Blocked or not following: 0.
 int SAnimator2::FollowOneStep() {
   m_sim->DrawSim(true);
   if (m_sim->HasQueuedOperation()) return 2;
   if (m_routing == 1) return 2;
   if (m_routing != 2) return 0;
-  cXPersonImpl* p = dynamic_cast<cXPersonImpl*>(Impl(m_person));
-  if (!p) return 0;
+  cXPersonImpl* p = Impl(m_person);
   int pos[2] = {static_cast<int>(m_pos[1] + 0.5f), static_cast<int>(m_pos[0] + 0.5f)};
-  p->m_path.FindNearestPoint(pos, -1);
+  DestList().FindNearestPoint(pos, -1);
   const int x = getPersonX(), y = getPersonY();
   const int ok = ObjCanPlace(p, pos, p->m_level, nullptr, 0);
   if (!ok) {
@@ -1948,178 +2302,1075 @@ int SAnimator2::FollowOneStep() {
 }
 
 // 8005EC74
-// The follow ends: the default idle unless the main track idles already, back to standing; an auto run
-// is undone. True unless it was still walking. PC: a walk under way stops where it is.
+// The follow ends: the portal mode and the animate flag cleared, the default idle unless the main
+// track idles already, the monitored track faded, the turn to face done, the outgoing tracks faded,
+// the simulator's low-motive walk unloaded, an auto run undone. True unless it was still walking.
 bool SAnimator2::EndFollow() {
+  m_portalModeSet = 0;
+  m_animatePrim = 0;
   if (!(MainTrackFlags() & 0x21)) StartDefaultIdle();
+  if (m_monitoredTrack) DetachMonitoredTrack();
   const int old = m_routing;
-  if (m_routing == 1) {
-    m_routeResult = -1;
-    setPersonDirection(m_dir);
-  }
+  if (m_followMode != 5) setFollowDone();
   m_routing = 0;
-  m_followMode = 0;
-  m_follow = 0;
-  m_route.clear();
+  m_sim->m_anim.BlendAllOutgoingTracks(0.0f, 0.1f, false);
+  UnloadSMOptionalMotionAnims();
+  if (m_autoRun == 1) {
+    Impl(m_person)->SetData(0x11, 0);
+    m_autoRun = 0;
+  }
   return old != 1;
 }
 
-// 8005EDB4
-// A walk can always be interrupted (TryGotoRoutingSlot asks when the person should give way).
-RET_UNKNOWN SAnimator2::IsInterruptable() { return 1; }
-
-// ---------------------------------------------------------------------------------------------------
-// Routing: walking a path
-
-namespace {
-// The facing (radians) of the move from `a` to `b` (animation format): moving along +x is 0.
-float HeadingTo(const EVec2& a, const EVec2& b) { return -std::atan2(b.y - a.y, b.x - a.x); }
-}  // namespace
-
-// PC (GC 8005E7CC BeginFollow: the person's destination list, the first follow mode by the first
-// leg (1 a turn on the spot first, 2 a side step for a short one), the walk style (low motives walk
-// slowly, long routes run: StartAutoRun), the start at the person's location).
-// Follow modes used: 1 turning toward the first leg, 3 walking, 5 turning to the end facing.
-void SAnimator2::BeginRoute(const std::vector<EVec2>& points, float endDir) {
-  m_follow = 0;
-  if (m_pendingAnim != 0) {
-    _animman.DelRef(static_cast<unsigned int>(m_pendingAnim), EResourceManager__DelRefMode{1});
-    m_pendingAnim = 0;
-  }
-  m_sim->DrawSim(true);
-  m_route = points;
-  m_routeNode = 1;
-  m_routeEndDir = endDir;
-  m_routeResult = 0;
-  m_dir = static_cast<float>(getPersonDirection());
-  m_pos[0] = static_cast<float>(getPersonX());
-  m_pos[1] = static_cast<float>(getPersonY());
-  m_resetPos = 0;
-  m_routeIndex = 0;
-  if (m_walkStyle != 0) {
-    m_prevWalkStyle = m_walkStyle;
-    m_walkStyle = 0;
-  }
-  m_routing = 1;
-  m_followMode = 1;
-  m_flags &= ~0x50u;
-  if (m_route.size() < 2) m_followMode = 5;
+// 800697D8
+void SAnimator2::DetachMonitoredTrack() {
+  m_sim->m_anim.SetTrackBlendSmooth(m_monitoredTrack, 0.0f, kFastRemoveBlendTime, 0.01f);
+  m_monitoredTrack = nullptr;
 }
 
-void SAnimator2::AbortRoute() {
-  if (m_routing != 1) return;
-  m_routing = 0;
-  m_followMode = 0;
-  m_routeResult = -1;
-  m_route.clear();
-  setPersonDirection(m_dir);
+// 8005F958
+// The follow is done: standing without a main track (a door's portal mode aside), a random idle (the
+// low-motive one when it is in) with maybe an overlay; the sim at the path's second-to-last point (the
+// person's spot for a short list).
+int SAnimator2::endFollowDone() {
+  const int count = DestCount();
+  if (m_portalMode == 0 && !m_sim->m_anim.IsTrackValid(eTrackFlags{1})) {
+    m_longIdleCount = 0;
+    const int idle = selectRandomIdle();
+    if (m_lowMotiveIdle != 0) LoadOptionalIdleAnim();
+    if (!(m_flags & 0x100000)) {
+      const AnimRef* ref = nullptr;
+      GetStdAnimRef(m_person, idle, ref);
+      EACTrack* t = ref ? m_sim->m_anim.SetTrackAnim(eTrackFlags{1}, AnimRefId(ref), -1, -1.0f, nullptr) : nullptr;
+      m_eventFrame = 0;
+      m_eventFraction = 0.0f;
+      m_curAnim = ref;
+      m_flags |= 0x10000;
+      if (t) {
+        m_sim->m_anim.SetTrackSpeed(t, m_timeMult);
+        t->m_endMode = 0;
+      }
+    }
+    selectIdleOverlay();
+  }
+  m_routing = 2;
+  m_flags &= ~0x60u;
+  if (count < 2) {
+    m_pos[0] = static_cast<float>(getPersonX());
+    m_pos[1] = static_cast<float>(getPersonY());
+  } else {
+    const TileListPoint& q = DestList().m_points[static_cast<size_t>(count - 2)];
+    m_pos[0] = static_cast<float>(q.p[1]);
+    m_pos[1] = static_cast<float>(q.p[0]);
+  }
+  return 0;
+}
+
+// 8005FB50
+int SAnimator2::followStandToTurnUpdate(float& desired, float& delta, float dt) {
+  if (delta == 0.0f) return 1;
+  if (!(m_flags & 0x40)) initShuffleRotation(delta);
+  return rotateAnimation(dt, desired, delta);
+}
+
+// 8005FBD0
+// A side step along the legs (at normal speed or less, its style follows the side step's phase: 4
+// stepping, 5 moving, 6 ending), the angle of the step kept in +0x110 for its animation. 1: done.
+int SAnimator2::followSidestepUpdate(float& desired, float& delta, float dt) {
+  int done = 0;
+  float time = dt;
+  if (m_flags & 2) {
+    int style = 5;
+    bool set = true;
+    if (m_timeMult * m_pauseMult < 2.0f) {
+      set = false;
+      const double phase = m_sim->m_anim.GetTrackPos(eTrackFlags{eTrackFlags::kMain});
+      if (m_walkStyle == 4 && 0.25 < phase) style = 5, set = true;
+      else if (m_walkStyle == 5 && 0.699999988079071 < phase) style = 6, set = true;
+      else if (m_walkStyle == 6 && !(0.25 < phase)) style = 4, set = true;
+    }
+    if (set) m_walkStyle = style;
+  }
+  if (m_routeIndex == 0) m_routeIndex = 1;
+  const int last = DestCount() - 1;
+  if (0.0f < time && m_routeIndex < last) {
+    do {
+      if (m_pathStartsHere < m_routeIndex) sidestepAlongNode(time);
+      if (0.0f < time) {
+        ++m_routeIndex;
+        updateDesiredAndDeltaDir(desired, delta);
+      }
+    } while (0.0f < time && m_routeIndex < last);
+  }
+  float angle;
+  if (m_routeIndex < last) {
+    angle = delta;
+  } else {
+    done = 1;
+    angle = 0.0f;
+  }
+  m_walkBlend = angle;
+  return done;
+}
+
+// 8005FDBC
+// Along the legs by this frame's time; 1 once at the last point.
+int SAnimator2::followMiddleUpdate(float& desired, float& delta, float dt) {
+  float time = dt;
+  const int count = DestCount();
+  if (0.0f < dt) {
+    if (count - 1 <= m_routeIndex) return 1;
+    do {
+      if (m_pathStartsHere < m_routeIndex) advanceAlongNode(time);
+      if (0.0f < time) {
+        ++m_routeIndex;
+        updateDesiredAndDeltaDir(desired, delta);
+      }
+    } while (0.0f < time && m_routeIndex < count - 1);
+  }
+  return count - 1 <= m_routeIndex ? 1 : 0;
+}
+
+// 8005FEB8
+int SAnimator2::followMoveToTurnUpdate(float& desired, float& delta, float dt) {
+  if (!(m_flags & 0x40)) initShuffleRotation(delta);
+  return rotateAnimation(dt, desired, delta);
+}
+
+// 8005FF1C
+int SAnimator2::followDoneUpdate(float& desired, float& delta, float dt) {
+  if (!(m_flags & 0x40)) initShuffleRotation(delta);
+  return rotateAnimation(dt, desired, delta);
 }
 
 // 8006028C
-// One frame along the route (GC: the follow modes' updates, sidesteps, portals, awareness): turn on
-// the spot toward the leg (a shuffle), walk it at the walk style's velocity turning into each new leg
-// as it goes, and at the end turn to the goal's facing; the person's location follows.
+// One frame of the follow, going on through the modes while each finishes within the frame: 1 the
+// starting turn (in a door: none) then 3 the walk (velocity from its animation), 2 the side step, 3
+// walking the legs turning into each (unless the starting turn ran this frame) then 4 the turn along
+// the last leg, then 5 turning to face the person's direction and done (endFollowDone); then the
+// person placed (endMoveAnimation).
 void SAnimator2::moveAnimation() {
   const float dt = ScaledDt();
-  cXPersonImpl* impl = Impl(m_person);
-  auto finish = [&] {
-    m_routing = m_follow ? 2 : 0;  // a follow stays "done" until FollowOneStep places the person
-    m_followMode = 0;
-    m_routeResult = 1;
-    m_route.clear();
-    m_flags &= ~0x50u;
-    setPersonDirection(m_dir);
-  };
-  auto place = [&] {
-    impl->m_location[1] = static_cast<int>(m_pos[0] + 0.5f);
-    impl->m_location[0] = static_cast<int>(m_pos[1] + 0.5f);
-    UpdateObjectRoomID(impl);  // GC: cXObjectImpl::SetLocation
-    // PC: the tile map follows the moved location (GC: the location and the person's tile map entry
-    // stay at the last Place, FollowOneStep's), so a tile's object is where it names.
-    if (Globs_pObjectModule && impl->m_data[2] == 0) Globs_pObjectModule->SetSiteTile(impl);
-  };
-  if (m_followMode == 1) {
-    const float desired = HeadingTo(EVec2{m_pos[0], m_pos[1]}, m_route[m_routeNode]);
-    const float delta = static_cast<float>(getDeltaDirFromDesiredDir(desired));
-    if (std::fabs(delta) < 0.3926991f) {
-      m_dir = desired;
+  bool turned = false;
+  float desired = static_cast<float>(getDesiredDir());
+  float delta = static_cast<float>(getDeltaDirFromDesiredDir(desired));
+  int r = 0;
+  do {
+    const int mode = m_followMode;
+    if (mode == 3) {
+      m_portalModeSet = 0;
+      if (m_portalMode == 2) m_portalMode = 0;
+      r = followMiddleUpdate(desired, delta, dt);
+      if (!turned) {
+        if (delta == 0.0f) m_dir = desired;
+        else rotateAnimation(dt, desired, delta);
+        updateDesiredAndDeltaDir(desired, delta);
+      }
+      if (turned) r = 0;
+      if (r != 1) break;
+      m_followMode = 4;
+      m_flags &= ~0x5eu;
+      r = 1;
+      m_useSpeed = 0.0f;
+      dropMonitoredTrack();
+    } else if (mode == 1) {
+      UpdatePortalMode();
+      if (m_portalMode == 2) {
+        r = 1;
+      } else if (delta == 0.0f) {
+        r = 1;
+        m_dir = desired;
+      } else {
+        r = followStandToTurnUpdate(desired, delta, dt);
+        turned = true;
+      }
+      if (r != 1) break;
+      updateDesiredAndDeltaDir(desired, delta);
       m_followMode = 3;
-      m_flags &= ~0x50u;
-    } else {
-      if (!(m_flags & 0x40)) initShuffleRotation(delta);
-      if (rotateAnimation(dt, desired, delta)) {
-        m_followMode = 3;
-        m_flags &= ~0x50u;
+      m_flags &= ~0x5eu;
+      setMovementVelocityFromAnimation();
+      r = 1;
+    } else if (mode == 2) {
+      r = followSidestepUpdate(desired, delta, dt);
+      if (r != 1) break;
+      updateDesiredAndDeltaDir(desired, delta);
+      m_followMode = 4;
+      m_flags &= ~0x5eu;
+      r = 1;
+      m_useSpeed = 0.0f;
+      dropMonitoredTrack();
+    } else if (mode == 4) {
+      if (delta == 0.0f) {
+        r = 1;
+        m_dir = desired;
+      } else {
+        r = followMoveToTurnUpdate(desired, delta, dt);
       }
-      return;
-    }
-  }
-  if (m_followMode == 3) {
-    float remaining = dt * StyleVelocity(m_walkStyle);
-    if (EACTrack* out = OutgoingTrack()) remaining *= 1.0f - out->m_intensity * 0.5f;
-    while (remaining > 0.0f && m_routeNode < m_route.size()) {
-      const EVec2& target = m_route[m_routeNode];
-      const float dx = target.x - m_pos[0], dy = target.y - m_pos[1];
-      const float dist = std::sqrt(dx * dx + dy * dy);
-      if (dist <= remaining) {
-        m_pos[0] = target.x, m_pos[1] = target.y;
-        remaining -= dist;
-        ++m_routeNode;
-        continue;
-      }
-      m_pos[0] += dx / dist * remaining;
-      m_pos[1] += dy / dist * remaining;
-      remaining = 0.0f;
-    }
-    if (m_routeNode < m_route.size()) {
-      // Turn into the leg while walking (at the turn rate a walk turns: 3 pi a second).
-      const float desired = HeadingTo(EVec2{m_pos[0], m_pos[1]}, m_route[m_routeNode]);
-      const float delta = Wrap(desired - m_dir);
-      const float step = dt * 9.424778f;
-      m_dir = std::fabs(delta) <= step ? desired : Wrap(m_dir + (delta > 0.0f ? step : -step));
-    } else {
+      if (r != 1) break;
       m_followMode = 5;
-      m_flags &= ~0x50u;
+      m_flags = (m_flags & ~0x5eu) | 0x20;
+      r = 1;
+      m_useSpeed = 0.0f;
+      dropMonitoredTrack();
+    } else if (mode == 5) {
+      desired = static_cast<float>(getPersonDirection());
+      delta = static_cast<float>(getDeltaDirFromDesiredDir(desired));
+      if (delta == 0.0f) {
+        r = 1;
+        m_dir = desired;
+      } else {
+        r = followDoneUpdate(desired, delta, dt);
+      }
+      if (r != 1) break;
+      r = endFollowDone();
+    } else {
+      break;
     }
-    place();
-    setPersonDirection(m_dir);
-    if (m_followMode == 3) return;
+  } while (r == 1);
+  endMoveAnimation();
+}
+
+// 8005FF80
+// The person placed (CanPlace / Place) at the point of its path nearest the sim (at the end: the
+// second-to-last point); where it cannot be, the follow is blocked (m_routing 3). It faces the sim's
+// way.
+void SAnimator2::endMoveAnimation() {
+  cXPersonImpl* p = Impl(m_person);
+  const int count = DestCount();
+  int pos[2];
+  if (count < 2) {
+    // PC: a list without its facing point (GC reads before the list).
+    pos[1] = getPersonX();
+    pos[0] = getPersonY();
+  } else if (m_routeIndex < count - 1) {
+    pos[1] = static_cast<int>(m_pos[0] + 0.5f);
+    pos[0] = static_cast<int>(m_pos[1] + 0.5f);
+    DestList().FindNearestPoint(pos, -1);
+  } else {
+    const TileListPoint& q = DestList().m_points[static_cast<size_t>(count - 2)];
+    pos[1] = q.p[1];
+    pos[0] = q.p[0];
   }
-  if (m_followMode == 5) {
-    place();
-    if (m_routeEndDir == kNoDir) {
-      finish();
-      return;
+  if (!ObjCanPlace(p, pos, p->m_level, nullptr, 0)) m_routing = 3;
+  else p->PlacePerson(pos);
+  setPersonDirection(m_dir);
+}
+
+// 800600E0
+// Once per leg: a route through a door (more than one route on the stack) whose last tile is outside
+// the person's room enters portal mode 1; then (back in the room, or no door) mode 1 becomes 2 (and an
+// NPC's auto-run is checked again) and 2 becomes 0.
+void SAnimator2::UpdatePortalMode() {
+  if (m_portalModeSet != 0) return;
+  cXPersonImpl* p = Impl(m_person);
+  const int count = DestCount();
+  bool advance = false;
+  if (static_cast<int>(p->GetRouteStackSize()) < 2 || count < 3) {
+    advance = true;
+  } else {
+    const TileListPoint& q = DestList().m_points[static_cast<size_t>(count - 2)];
+    CTilePt tile(q.p[1] >> 4, q.p[0] >> 4, p->m_level);  // GC: CTilePt(FTilePt&, level)
+    Room* room = RoomManager::GetRoomManager() ? RoomManager::GetRoomManager()->GetRoom(p->GetCurrentRoom()) : nullptr;
+    if (room) {
+      if (!room->IsTileInRoom(tile)) m_portalMode = 1;
+      else advance = true;
     }
-    const float delta = static_cast<float>(getDeltaDirFromDesiredDir(m_routeEndDir));
-    if (delta == 0.0f) {
-      finish();
-      return;
+  }
+  if (advance && m_portalMode != 0) {
+    if (m_portalMode == 1) {
+      m_portalMode = 2;
+      if (!(m_flags & 1)) UpdateNPCAutoRun();
+    } else {
+      m_portalMode = 0;
     }
-    if (!(m_flags & 0x40)) initShuffleRotation(delta);
-    if (rotateAnimation(dt, m_routeEndDir, delta)) finish();
+  }
+  m_portalModeSet = 1;
+}
+
+// 8006AF28
+int SAnimator2::UpdateNPCAutoRunState() {
+  if (m_autoRun == 0 || m_lowMotive != 0) return 0;
+  if (Impl(m_person)->GetCurrentRoom() == 0) {
+    if (m_walkStyle != 1) {
+      m_walkStyle = 1;
+      return 1;
+    }
+  } else if (m_walkStyle != 0) {
+    m_walkStyle = 0;
+    return 1;
+  }
+  return 0;
+}
+
+// 8006AFC4
+// An auto-running NPC runs outside (room 0) and walks inside: on a change the cycle switches (its
+// velocity read once) keeping its phase.
+void SAnimator2::UpdateNPCAutoRun() {
+  if (!UpdateNPCAutoRunState()) return;
+  setMovementVelocityFromAnimation();
+  const AnimRef* ref = nullptr;
+  getWalkRunSkillID(ref);
+  if (!ref) return;
+  EAnimController& anim = m_sim->m_anim;
+  const float phase = static_cast<float>(anim.GetTrackPos(eTrackFlags{eTrackFlags::kMain}));
+  anim.SetTrackAnim(eTrackFlags{2}, AnimRefId(ref), 2, kWalkRunBlendTime, nullptr);
+  anim.SetTrackPos(eTrackFlags{eTrackFlags::kMain}, phase, true);
+  m_eventFrame = 0;
+  m_flags |= 0x10000;
+  m_eventFraction = 0.0f;
+  m_curAnim = ref;
+}
+
+// 80060A84
+// Toward the current point at the side step's style velocity for `time`, the time left over kept.
+void SAnimator2::sidestepAlongNode(float& time) {
+  const float v = StyleVelocity(m_walkStyle);
+  const TileListPoint& q = DestList().m_points[static_cast<size_t>(m_routeIndex)];
+  const float tx = static_cast<float>(q.p[1]), ty = static_cast<float>(q.p[0]);
+  const float dx = tx - m_pos[0], dy = ty - m_pos[1];
+  const float dist = std::sqrt(dx * dx + dy * dy);
+  if (0.0001f <= dist) {
+    const float step = v * time;
+    if (step <= dist || step <= 0.0f) {
+      time = 0.0f;
+      m_pos[0] = m_pos[0] + dx * (1.0f / dist) * step;
+      m_pos[1] = m_pos[1] + dy * (1.0f / dist) * step;
+    } else {
+      time = time * ((step - dist) / step);
+      m_pos[1] = ty;
+      m_pos[0] = tx;
+    }
+  } else {
+    m_pos[0] = tx;
+    m_pos[1] = ty;
+  }
+}
+
+// 80060C20
+// A leg longer than a sixteenth of a tile or so is walked (moveTowardsDestination).
+void SAnimator2::advanceAlongNode(float& time) {
+  const std::vector<TileListPoint>& p = DestList().m_points;
+  const TileListPoint& q = p[static_cast<size_t>(m_routeIndex)];
+  const TileListPoint& o = p[static_cast<size_t>(m_routeIndex - 1)];
+  const int dx = q.p[1] - o.p[1], dy = q.p[0] - o.p[0];
+  if (3 < dx * dx + dy * dy) {
+    EVec2 to{static_cast<float>(q.p[1]), static_cast<float>(q.p[0])};
+    moveTowardsDestination(time, to);
+  }
+}
+
+// 80060CE0
+// The speed this frame: on the last legs, slowing (over `decel` seconds to stop) as the end comes
+// near (pets and doors at 30% at least, a door at full speed), else picking up from +0x114 by the
+// frame's acceleration; at most `velocity`.
+double SAnimator2::getUseSpeed(float velocity, float decel, float dist, float time) {
+  const double v = velocity;
+  const float accel = static_cast<float>(-v / decel);
+  const float stopDist = static_cast<float>(static_cast<float>(static_cast<float>(accel * 0.5f) * decel) * decel +
+                                            static_cast<float>(v * decel));
+  double speed;
+  if (stopDist <= dist || m_routeIndex < DestCount() - 2) {
+    speed = static_cast<float>(-accel * time + m_useSpeed);
+  } else if (Impl(m_person)->GetData(9) == 0) {
+    const float root = std::sqrt(static_cast<float>(v * v + static_cast<double>(static_cast<float>(accel + accel) * static_cast<float>(stopDist - dist))));
+    speed = static_cast<float>(v + static_cast<float>(-v + root)) * 1.001;
+  } else {
+    float f = std::sqrt(static_cast<float>(dist / stopDist));
+    if (f < 0.30000001192092896f) f = 0.30000001192092896f;
+    speed = v;
+    if (m_portalMode != 1) speed = static_cast<float>(f * v);
+  }
+  if (v < speed) speed = v;
+  return speed;
+}
+
+// 80060E30
+// On the last leg when the stopping distance covers what is left (not in a door): the walk fades
+// into the idle (flag 8).
+void SAnimator2::EnableWalkFade(unsigned int& flags, float dist, float velocity, float decel) {
+  const int lastLeg = DestCount() - 2;
+  if (lastLeg <= m_routeIndex &&
+      (lastLeg < m_routeIndex ||
+       static_cast<float>(dist / static_cast<float>(static_cast<float>(decel * decel) * static_cast<float>(-velocity / decel) * 0.5f +
+                                                   static_cast<float>(velocity * decel))) < 1.0f)) {
+    if (m_portalMode != 1) flags |= 8;
+    return;
+  }
+  flags &= ~8u;
+}
+
+// 80060EBC
+// Toward `to` for `time` at the speed getUseSpeed gives (decelerating over 0.5 s of game time), the
+// time left over kept; the walk's share of the walk cycle (+0x110) while walking (mode 3).
+void SAnimator2::moveTowardsDestination(float& time, EVec2& to) {
+  const float velocity = StyleVelocity(m_walkStyle);
+  const float dy = to.y - m_pos[1];
+  const float dx = to.x - m_pos[0];
+  const float dist = std::sqrt(dx * dx + dy * dy);
+  if (9.999999747378752e-05 <= dist) {
+    const double inv = 1.0 / dist;
+    const float decel = m_timeMult == 0.0f ? 1e+12f : 0.5f / (m_timeMult * m_pauseMult);
+    const double speed = getUseSpeed(velocity, decel, dist, time);
+    EnableWalkFade(m_flags, dist, velocity, decel);
+    m_useSpeed = static_cast<float>(speed);
+    const double step = static_cast<float>(speed * time);
+    if (step <= dist || step <= 0.0) {
+      time = 0.0f;
+      m_pos[0] = m_pos[0] + static_cast<float>(static_cast<double>(dx * static_cast<float>(inv)) * step);
+      m_pos[1] = m_pos[1] + static_cast<float>(static_cast<double>(dy * static_cast<float>(inv)) * step);
+    } else {
+      time = static_cast<float>(time * static_cast<double>(static_cast<float>(static_cast<float>(step - dist) / step)));
+      m_pos[0] = to.x;
+      m_pos[1] = to.y;
+    }
+    m_walkBlend = static_cast<float>(speed / velocity);
+    if (m_followMode != 3) m_walkBlend = 0.0f;
+  } else {
+    dropMonitoredTrack();
+    m_walkBlend = 0.0f;
+    m_flags &= ~8u;
   }
 }
 
 // 800620AC
-// Walking a route (follow mode 3): the style's walk (or run) cycle on the walk track (flag 2),
-// cross-faded over kWalkRunBlendTime, at the simulator's speed. GC: also low-motive walks, a
-// slowed-down end of the route and the walk's events.
+// Walking the legs (mode 3): the style's cycle on the walk track (flag 2) once per follow (an NPC
+// auto-run picks run outside, walk inside; ghosts their own; low-motive walks once loaded), fading in
+// over the outgoing track (4), a running start on the other foot; at the end (8) the base idle fades
+// in under it as the walk slows (+0x110). Played at the simulator's speed.
 void SAnimator2::handleWalkRunAnimation() {
-  if (m_followMode != 3) return;
+  if (m_followMode != 3) {
+    m_walkStarted = 0;
+    return;
+  }
   EAnimController& anim = m_sim->m_anim;
-  const AnimRef* ref = nullptr;
-  getWalkRunSkillID(ref);
-  if (!ref) return;
-  if (AnimRefId(ref) != anim.GetTrackAnimId(eTrackFlags{eTrackFlags::kMain})) {
-    EACTrack* t = anim.SetTrackAnim(eTrackFlags{2}, AnimRefId(ref), 2, kWalkRunBlendTime, nullptr);
-    if (t) t->m_endMode = 0;
+  if (!(m_flags & 2)) {
+    if (!(m_flags & 1) && m_autoRun != 0 && m_lowMotive == 0) {
+      if (Impl(m_person)->GetCurrentRoom() == 0) {
+        if (m_walkStyle != 1) m_walkStyle = 1;
+      } else if (m_walkStyle != 0) {
+        m_walkStyle = 0;
+      }
+    }
+    const AnimRef* ref = nullptr;
+    getWalkRunSkillID(ref);
+    EACTrack* outgoing = nullptr;
+    if (ref) anim.SetTrackAnim(eTrackFlags{2}, AnimRefId(ref), 4, -1.0f, &outgoing);
+    if (m_shuffleDir < 0) anim.SetTrackPos(eTrackFlags{eTrackFlags::kMain}, 0.5f, true);
     m_eventFrame = 0;
-    m_eventFraction = 0.0f;
     m_curAnim = ref;
     m_flags |= 0x10000;
+    m_eventFraction = 0.0f;
+    if (outgoing) {
+      dropMonitoredTrack();
+      m_monitoredTrack = outgoing;
+      m_flags |= 4;
+    }
+    m_flags |= 2;
+  }
+  if (m_flags & 4) {
+    if (m_monitoredTrack) {
+      float i = 1.0f - m_walkBlend;
+      if (i < 9.999999747378752e-05f) i = 0.0f;
+      anim.SetTrackIntensity(m_monitoredTrack, i, false);
+      if (i == 0.0f) {
+        m_monitoredTrack = nullptr;
+        m_flags &= ~4u;
+      }
+    }
+  } else if (m_flags & 8) {
+    if (!(MainTrackFlags() & 1)) {
+      const AnimRef* idle = nullptr;
+      GetStdAnimRef(m_person, 3, idle);
+      EACTrack* outgoing = nullptr;
+      if (idle) anim.SetTrackAnim(eTrackFlags{1}, AnimRefId(idle), 4, -1.0f, &outgoing);
+      m_eventFrame = 0;
+      m_flags |= 0x10000;
+      m_curAnim = idle;
+      m_eventFraction = 0.0f;
+      if (outgoing) {
+        dropMonitoredTrack();
+        m_monitoredTrack = outgoing;
+      }
+    }
+    if (m_monitoredTrack) {
+      float i = m_walkBlend;
+      if (i < 9.999999747378752e-05f) i = 0.0f;
+      anim.SetTrackIntensity(m_monitoredTrack, i, false);
+      if (i == 0.0f) {
+        m_monitoredTrack = nullptr;
+        m_flags &= ~8u;
+      }
+    }
   }
   anim.SetTrackSpeed(eTrackFlags{eTrackFlags::kMain}, m_timeMult * m_pauseMult);
+  m_walkStarted = 1;
+}
+
+// 8006AC98
+// The side step (std anims 0x27 right / 0x28 left) and the walk it blends with (0x29 / 0x2A forward,
+// 0x2B / 0x2C backward) for a step at `angle` from the facing.
+void SAnimator2::getSidestepSkillIDs(const AnimRef*& side, const AnimRef*& walk, float angle) {
+  const bool forward = !(angle < -1.5707963705062866f || 1.5707963705062866f < angle);
+  if (0.0f < angle) {
+    GetStdAnimRef(m_person, 0x27, side);
+    GetStdAnimRef(m_person, forward ? 0x29 : 0x2b, walk);
+  } else {
+    GetStdAnimRef(m_person, 0x28, side);
+    GetStdAnimRef(m_person, forward ? 0x2a : 0x2c, walk);
+  }
+}
+
+// 8006B4D0
+double SAnimator2::getSidestepIntensity() {
+  const float s = std::sin(m_walkBlend);
+  double i = s * s;
+  if (9.999999747378752e-05 <= i) {
+    if (0.9998999834060669 < i) i = 1.0;
+  } else {
+    i = 0.0;
+  }
+  return i;
+}
+
+// 8006B52C
+// The side step: its velocity read once; straight sideways the side step alone (track 0x40),
+// otherwise the side step as a static blend phase-locked to the walk (track 2) at the step's sine.
+void SAnimator2::initSidestep() {
+  dropMonitoredTrack();
+  const AnimRef* side = nullptr;
+  const AnimRef* walk = nullptr;
+  getSidestepSkillIDs(side, walk, m_walkBlend);
+  setSideStepSpeedFromAnimation(walk);
+  EAnimController& anim = m_sim->m_anim;
+  const float intensity = static_cast<float>(getSidestepIntensity());
+  if (intensity == 1.0f) {
+    if (EACTrack* t = side ? anim.SetTrackAnim(eTrackFlags{0x40}, AnimRefId(side), 2, kSidestepBlendTime, nullptr) : nullptr)
+      t->m_endMode = 0;
+  } else {
+    EACTrack* s = side ? anim.SetTrackAnim(eTrackFlags{0x40}, AnimRefId(side), 2, kSidestepBlendTime, nullptr) : nullptr;
+    m_monitoredTrack = s;
+    if (s) {
+      s->m_flags &= ~static_cast<unsigned int>(eTrackFlags::kStarted);
+      s->m_endMode = 0;
+    }
+    EACTrack* w = walk ? anim.SetTrackAnim(eTrackFlags{2}, AnimRefId(walk), 5, -1.0f, nullptr) : nullptr;
+    if (w) w->m_endMode = 0;
+    anim.SetTrackPhaseLock(m_monitoredTrack, w, 0.0f);
+    if (m_monitoredTrack) anim.SetTrackIntensity(m_monitoredTrack, intensity, false);
+  }
+  anim.SetTrackSpeed(eTrackFlags{eTrackFlags::kMain}, (m_timeMult * 24.0f) / m_sideVel);
+  m_flags |= 2;
+}
+
+// 80061C1C
+// A side step (mode 2), once: initSidestep's animations.
+void SAnimator2::handleSidestepAnimation() {
+  if (m_followMode != 2 || (m_flags & 2)) return;
+  initSidestep();
+}
+
+// 8006B9A4
+// The walk cycle (handleWalkRunAnimation's start, on its own).
+void SAnimator2::initWalkRun() {
+  if (!(m_flags & 1) && m_autoRun != 0 && m_lowMotive == 0) {
+    if (Impl(m_person)->GetCurrentRoom() == 0) {
+      if (m_walkStyle != 1) m_walkStyle = 1;
+    } else if (m_walkStyle != 0) {
+      m_walkStyle = 0;
+    }
+  }
+  const AnimRef* ref = nullptr;
+  getWalkRunSkillID(ref);
+  EACTrack* outgoing = nullptr;
+  EAnimController& anim = m_sim->m_anim;
+  if (ref) anim.SetTrackAnim(eTrackFlags{2}, AnimRefId(ref), 4, -1.0f, &outgoing);
+  if (m_shuffleDir < 0) anim.SetTrackPos(eTrackFlags{eTrackFlags::kMain}, 0.5f, true);
+  m_eventFrame = 0;
+  m_curAnim = ref;
+  m_flags |= 0x10000;
+  m_eventFraction = 0.0f;
+  if (outgoing) {
+    dropMonitoredTrack();
+    m_monitoredTrack = outgoing;
+    m_flags |= 4;
+  }
+  m_flags |= 2;
+}
+
+// 8006BC94
+// The base idle (std anim 3) under the walk, the walk monitored as it fades.
+void SAnimator2::initWalkRunFadeOut() {
+  const AnimRef* idle = nullptr;
+  GetStdAnimRef(m_person, 3, idle);
+  EACTrack* outgoing = nullptr;
+  if (idle) m_sim->m_anim.SetTrackAnim(eTrackFlags{1}, AnimRefId(idle), 4, -1.0f, &outgoing);
+  m_eventFrame = 0;
+  m_flags |= 0x10000;
+  m_curAnim = idle;
+  m_eventFraction = 0.0f;
+  if (outgoing) {
+    dropMonitoredTrack();
+    m_monitoredTrack = outgoing;
+  }
+}
+
+// ---------------------------------------------------------------------------------------------------
+// The awareness follow (the awareness manager's reaction 3): turn toward what the sim is aware of
+// (mode 6), its gesture plays (7), then back to the follow's way or standing (8).
+
+// 80068AB4
+void SAnimator2::setAwarenessFollowStart(float angle) {
+  m_followMode = 6;
+  m_flags &= ~0x7eu;
+  m_sim->m_anim.BlendAllOutgoingTracks(0.0f, 0.1f, true);
+  m_monitoredTrack = nullptr;
+  m_desiredDir = Wrap(angle + m_dir);
+}
+
+// 8006C664
+// The gesture: an idle overlay fades out.
+void SAnimator2::setAwarenessFollowMiddle() {
+  m_followMode = 7;
+  if (m_flags & 0x1000) {
+    m_flags &= ~0x1000u;
+    m_sim->m_anim.SetTrackBlendSmooth(eTrackFlags{0x100}, 0.0f, kExitIdleOverlayBlend, 0.01f);
+  }
+  m_flags &= ~0x5eu;
+}
+
+// 8006C490
+// Back: following, toward the leg walked (as getDesiredDir); else the sim's facing.
+void SAnimator2::setAwarenessFollowEnd() {
+  m_followMode = 8;
+  m_flags &= ~0x5eu;
+  m_useSpeed = 0.0f;
+  if (m_routing == 1) {
+    const std::vector<TileListPoint>& p = DestList().m_points;
+    const int i = m_routeIndex;
+    float dx, dy;
+    if (i == 0) {
+      dx = static_cast<float>(p[1].p[1] - p[0].p[1]);
+      dy = static_cast<float>(p[1].p[0] - p[0].p[0]);
+    } else {
+      dx = static_cast<float>(p[i].p[1] - p[i - 1].p[1]);
+      dy = static_cast<float>(p[i].p[0] - p[i - 1].p[0]);
+    }
+    float d;
+    if (dx <= -0.001f || 0.001f <= dx || dy <= -0.001f || 0.001f <= dy) d = std::atan2(-dy, dx);
+    else d = m_dir;
+    m_desiredDir = d;
+  } else {
+    m_desiredDir = m_dir;
+  }
+}
+
+// 8006C6DC
+// The awareness follow is over: no desired direction; following, the walk goes on (mode 3, the walk
+// style chosen again); else standing with the default idle.
+void SAnimator2::exitAwarenessFollow() {
+  m_desiredDir = kNoDir;
+  m_useSpeed = 0.0f;
+  m_flags &= ~0x5eu;
+  if (m_routing == 1) {
+    m_followMode = 3;
+    setMovementVelocityFromAnimation();
+    UnloadDCOptionalMotionAnims();
+    UnloadSMOptionalMotionAnims();
+    LoadSMOptionalMotionAnims();
+    const int style = followWalkStyle(0.0f);
+    if (style != m_walkStyle) {
+      const int old = m_walkStyle;
+      m_walkStyle = style;
+      m_prevWalkStyle = old;
+    }
+  } else {
+    m_followMode = 0;
+    StartDefaultIdle();
+  }
+}
+
+// 8006067C
+// The awareness follow's frame: 6 turning toward the object (then 7), 7 while the gesture plays (it
+// starts once loaded; done: 8), 8 turning back (then exitAwarenessFollow); the person placed where the
+// sim stands if it can be, facing its way.
+void SAnimator2::awarenessMove() {
+  const float dt = ScaledDt();
+  bool again = false;
+  do {
+    const int mode = m_followMode;
+    if (mode == 7) {
+      again = false;
+      if (m_aware.m_action == 3) {
+        if (!(m_aware.m_flags & AwarenessManager::kMemoryAnimPending)) {
+          if (m_aware.IsMemoryAwarenessAnimDone()) {
+            again = true;
+            setAwarenessFollowEnd();
+          }
+        } else {
+          StartDefaultIdle();
+        }
+      } else {
+        again = true;
+        setAwarenessFollowEnd();
+      }
+    } else if (mode == 6) {
+      float delta = static_cast<float>(getDeltaDirFromDesiredDir(m_desiredDir));
+      int r;
+      if (delta == 0.0f) {
+        r = 1;
+        m_dir = m_desiredDir;
+      } else {
+        r = followMoveToTurnUpdate(m_desiredDir, delta, dt);
+      }
+      if (r != 1) break;
+      setAwarenessFollowMiddle();
+      again = true;
+    } else if (mode == 8) {
+      float delta = static_cast<float>(getDeltaDirFromDesiredDir(m_desiredDir));
+      int r;
+      if (delta == 0.0f) {
+        r = 1;
+        m_dir = m_desiredDir;
+      } else {
+        r = followStandToTurnUpdate(m_desiredDir, delta, dt);
+      }
+      if (r != 1) break;
+      again = false;
+      exitAwarenessFollow();
+    } else {
+      break;
+    }
+  } while (again);
+  cXPersonImpl* p = Impl(m_person);
+  const int pos[2] = {static_cast<int>(m_pos[1] + 0.5f), static_cast<int>(m_pos[0] + 0.5f)};
+  if (ObjCanPlace(p, pos, p->m_level, nullptr, 0)) p->PlacePerson(pos);
+  setPersonDirection(m_dir);
+}
+
+// 80068A40
+cXObject* SAnimator2::GetAwareOfObject() { return m_aware.m_awareOf; }
+// 80068A48
+void SAnimator2::SetAwareOfObject(cXObject* object) { m_aware.SetAwareOfObject(object); }
+// 80068A6C
+void SAnimator2::SetAwareOfObjectKilled(cXObject* object) { m_aware.SetAwareOfObjectKilled(object); }
+// 80068A90
+void SAnimator2::ClearAwareOfObject(cXObject* object) { m_aware.ClearAwareOfObject(object); }
+// 8005C76C
+void SAnimator2::SetIsRaining(bool raining) { AwarenessManager::SetIsRaining(raining); }
+// 80069024
+double SAnimator2::SetPauseMultiplier(float mult) {
+  const float old = m_pauseMult;
+  m_aware.SetPauseMultiplier(mult);
+  m_pauseMult = mult;
+  return old;
+}
+// 800690D0
+double SAnimator2::GetTimeMultiplier() { return m_timeMult; }
+// 8006918C
+double SAnimator2::GetPauseMultiplier() { return m_pauseMult; }
+// 800690F0
+int SAnimator2::GetFollowMode() { return m_followMode; }
+// 800690F8
+int SAnimator2::GetPortalMode() { return static_cast<signed char>(m_portalMode); }
+// 8005D6A0
+int SAnimator2::IsSkillIdleAnimRunning() { return (MainTrackFlags() >> 5) & 1; }
+// 8005E7C8
+void SAnimator2::SetAnimDisplacements(float, float, float) {}
+// 8005C78C
+void SAnimator2::Render(int) {}
+// 8005D120
+void SAnimator2::ResetSuits() {}
+// 8005F4E4
+void SAnimator2::SetPixelated(int) {}
+
+// 80068DD0
+// Energy or bladder (the lower; bladder on a tie) under -75, unless carrying a direct-control object.
+int SAnimator2::shouldUseLowMotiveWalk() {
+  cXPersonImpl* p = Impl(m_person);
+  if (p->IsCarryingDCObject()) return 0;
+  int motive = 5;
+  double low = p->GetMotive(5);
+  if (p->GetMotive(9) <= low) {
+    motive = 9;
+    low = p->GetMotive(9);
+  }
+  return low < -75.0 ? motive : 0;
+}
+
+namespace {
+// The low-motive walk of a motive (energy std anim 0x12, bladder 0x3B), or null.
+const AnimRef* LowMotiveWalkRef(cXPerson* person, int motive) {
+  const AnimRef* ref = nullptr;
+  if (motive == 5) GetStdAnimRef(person, 0x12, ref);
+  else if (motive == 9) GetStdAnimRef(person, 0x3b, ref);
+  return ref;
+}
+void ReleaseAnim(const AnimRef* ref) {
+  if (!ref) return;
+  if (!_animman.GetRef(AnimRefId(ref))) _animman.DelRefAsync(AnimRefId(ref));
+  else _animman.DelRef(AnimRefId(ref), EResourceManager__DelRefMode{1});
+}
+}  // namespace
+
+// 800645C8
+// For a follow (the simulator's): the low-motive walk (shouldUseLowMotiveWalk, +0x5F9) loaded in the
+// background (flag 0x2000000); the direct-control one given back first.
+void SAnimator2::LoadSMOptionalMotionAnims() {
+  if (m_flags & 0x400000) UnloadDCOptionalMotionAnims();
+  if (m_flags & 0x2000000) return;
+  m_lowMotive = static_cast<unsigned char>(shouldUseLowMotiveWalk());
+  if (m_lowMotive == 0) return;
+  m_flags |= 0x2000000;
+  if (const AnimRef* ref = LowMotiveWalkRef(m_person, m_lowMotive)) _animman.AddRefAsync(AnimRefId(ref));
+}
+
+// 8006468C
+// For direct control (flag 0x400000), as LoadSMOptionalMotionAnims.
+void SAnimator2::LoadDCOptionalMotionAnims() {
+  if (m_flags & 0x2000000) UnloadSMOptionalMotionAnims();
+  if (m_flags & 0x400000) return;
+  m_lowMotive = static_cast<unsigned char>(shouldUseLowMotiveWalk());
+  if (m_lowMotive == 0) return;
+  m_flags |= 0x400000;
+  if (const AnimRef* ref = LowMotiveWalkRef(m_person, m_lowMotive)) _animman.AddRefAsync(AnimRefId(ref));
+}
+
+// 80064A40
+void SAnimator2::UnloadDCOptionalMotionAnims() {
+  if (!(m_flags & 0x400000)) return;
+  m_flags &= ~0x400000u;
+  ReleaseAnim(LowMotiveWalkRef(m_person, m_lowMotive));
+  m_lowMotive = 0;
+}
+
+// 80064B2C
+void SAnimator2::UnloadSMOptionalMotionAnims() {
+  if (!(m_flags & 0x2000000)) return;
+  m_flags &= ~0x2000000u;
+  ReleaseAnim(LowMotiveWalkRef(m_person, m_lowMotive));
+  m_lowMotive = 0;
+}
+
+// 80064858
+// A long idle loading (flag 0x80000) is given back.
+void SAnimator2::UnloadPendingLongIdleAnim() {
+  m_longIdleCount = 0;
+  if (!(m_flags & 0x80000)) {
+    m_longIdle = 0;
+    return;
+  }
+  if (m_longIdle == 0) return;
+  const AnimRef* ref = nullptr;
+  GetStdAnimRef(m_person, m_longIdle, ref);
+  ReleaseAnim(ref);
+  m_longIdle = 0;
+  m_flags &= ~0x80000u;
+}
+
+// 8006491C
+// The low-motive idle loading (flag 0x100000) given back; no low-motive idle (and not loaded, 0x8000000).
+void SAnimator2::UnloadOptionalIdleAnim() {
+  if (m_flags & 0x100000) {
+    int id = -1;
+    switch (m_lowMotiveIdle) {
+      case 8: id = 0x3f; break;
+      case 5: id = 0x3c; break;
+      case 7: id = 0x3e; break;
+      case 0xe: id = 0x40; break;
+      case 9: id = 0x3a; break;
+      case 0xf: id = 0x3d; break;
+      default: break;
+    }
+    if (id != -1) {
+      const AnimRef* ref = nullptr;
+      GetStdAnimRef(m_person, id, ref);
+      ReleaseAnim(ref);
+    }
+    m_flags &= ~0x100000u;
+  }
+  m_lowMotiveIdle = 0;
+  m_flags &= ~0x8000000u;
+}
+
+// 800617BC
+// A motive's value (-100..100) as 0..1.
+double GetMotiveMag(float value) {
+  const double m = static_cast<float>(value + 100.0f) / 200.0f;
+  if (!(0.0 <= m)) return 0.0;
+  return 1.0 < m ? 1.0 : m;
+}
+
+// 80061804
+// The mood on the face (not pets): the happy (0x6EE972F7) or sad (0xF4E342DB) pose on the head's
+// track 0x2000, held still, as strong as the mood is far from neutral.
+void SAnimator2::handleMoodAnimations() {
+  cXPersonImpl* p = Impl(m_person);
+  if (p->IsPet()) return;
+  unsigned int id = 0x6ee972f7u;
+  double mag = static_cast<float>(GetMotiveMag(static_cast<float>(p->GetMotive(3))) * 2.0) - 1.0;
+  if (mag < 0.0) {
+    mag = -mag;
+    id = 0xf4e342dbu;
+  }
+  EAnimController& anim = m_sim->m_anim;
+  if (id != m_moodAnim) {
+    m_moodAnim = id;
+    anim.StopTrack(eTrackFlags{0x2000});
+    if (id != 0) {
+      EACTrack* t = anim.SetTrackAnim(eTrackFlags{0x2000}, id, -1, -1.0f, nullptr);
+      anim.SetTrackPos(t, 0.0f, true);
+      anim.SetTrackSpeed(t, 0.0f);
+      anim.SetTrackBlendFactors(t, m_HeadIndexArray);
+    }
+  }
+  if (anim.IsTrackValid(eTrackFlags{0x2000})) anim.SetTrackIntensity(eTrackFlags{0x2000}, static_cast<float>(mag));
+}
+
+// 800635DC
+// A skill's idle (track 0x20, state 7): the fidget overlay as selectIdleOverlay (half the time,
+// unless something plays over the idle, a pet, the awareness gesture, a low-motive idle or one
+// playing); a low-motive idle loading plays once loaded (unless the idle-animate primitive keeps the
+// skill playing as its idle, 0x200000).
+void SAnimator2::handleSkillIdleAnimation() {
+  m_sim->DrawSim(true);
+  EAnimController& anim = m_sim->m_anim;
+  if ((m_flags & 0x1000) && anim.IsTrackAnimComplete(eTrackFlags{0x100}) && (m_flags & 0x1000)) {
+    m_flags &= ~0x1000u;
+    anim.SetTrackBlendSmooth(eTrackFlags{0x100}, 0.0f, kExitIdleOverlayBlend, 0.01f);
+  }
+  cXPersonImpl* p = Impl(m_person);
+  if (!(m_flags & 0x2000) && p->IsPet() != 1 && m_animState != 0x10 && !shouldUseLowMotiveIdle() &&
+      !(m_flags & 0x4000000) && !(m_flags & 0x1000) && simmy::sim_rand() % 100 < 0x32) {
+    m_flags |= 0x1000;
+    int weights[5];
+    weights[0] = 0x14;
+    weights[1] = (p->IsCarrying() || (m_flags & 0x800) || (m_aware.m_flags & 0x200)) ? 0x14 : 0x28;
+    weights[2] = weights[1] + 0x14;
+    weights[3] = weights[1] + 0x28;
+    weights[4] = weights[1] + 0x3c;
+    const int r = simmy::sim_rand() % weights[4];
+    int i = 0;
+    while (weights[i] < r && ++i < 5) {
+    }
+    static const int kOverlays[5] = {0x13, 0x18, 0x19, 0x47, 0x48};
+    const AnimRef* ref = nullptr;
+    GetStdAnimRef(m_person, kOverlays[i < 5 ? i : 4], ref);
+    if (ref) {
+      if (EACTrack* t = anim.SetTrackAnim(eTrackFlags{0x100}, AnimRefId(ref), -1, -1.0f, nullptr)) {
+        anim.SetTrackIntensity(t, 0.0001f, true);
+        anim.SetTrackBlendFactors(t, m_UpperBodyIndexArray);
+        anim.SetTrackBlendSmooth(t, 1.0f, kDefaultBlendTime, 0.01f);
+        t->m_endMode = 1;
+      }
+    }
+  }
+  if (m_flags & 0x200000) return;
+  if (!(m_flags & 0x100000)) return;
+  int id = 3;
+  switch (m_lowMotiveIdle) {
+    case 8: id = 0x3f; break;
+    case 5: id = 0x3c; break;
+    case 7: id = 0x3e; break;
+    case 0xe: id = 0x40; break;
+    case 9: id = 0x3a; break;
+    case 0xf: id = 0x3d; break;
+    default: break;
+  }
+  const AnimRef* ref = nullptr;
+  GetStdAnimRef(m_person, id, ref);
+  if (!ref || !_animman.GetRef(AnimRefId(ref))) return;
+  _animman.DelRef(AnimRefId(ref), EResourceManager__DelRefMode{1});
+  m_flags = (m_flags & ~0x100000u) | 0x8000000u;
+  EACTrack* t = anim.SetTrackAnim(eTrackFlags{0x20}, AnimRefId(ref), -1, -1.0f, nullptr);
+  m_eventFrame = 0;
+  m_eventFraction = 0.0f;
+  m_curAnim = ref;
+  m_flags |= 0x10000;
+  if (t) {
+    anim.SetTrackSpeed(t, m_timeMult);
+    t->m_endMode = 0;
+  }
+}
+
+// 8006C040
+bool SAnimator2::skillIsIdle() { return Impl(m_person)->IsIdle() != 0; }
+
+// 8006C094
+// The skill track has played out, or (player control) an algorithmic idle plays and actions wait.
+int SAnimator2::ShouldEndSkillTrack() {
+  if (m_sim->m_anim.IsTrackAnimComplete(eTrackFlags{0x30})) return 1;
+  if (!(m_flags & 1)) return 0;
+  if (!(MainTrackFlags() & 0x20)) return 0;
+  return Impl(m_person)->CountActions(false) > 0 ? 1 : 0;
+}
+
+// 800693B8
+void SAnimator2::SetSkillName(const AnimRef* ref) {
+  m_eventFrame = 0;
+  m_flags |= 0x10000;
+  m_eventFraction = 0.0f;
+  m_curAnim = ref;
+}
+
+// 800693E0
+// A new desired direction (direct control): a change of more than a sixteenth of a turn restarts
+// the turn's start.
+void SAnimator2::SetDesiredFacing(float dir) {
+  if (m_desiredDir != kNoDir) {
+    float d = dir - m_desiredDir;
+    while (kPi < d) d -= kTwoPi;
+    while (d < -kPi) d += kTwoPi;
+    if (0.3926991f < std::fabs(d)) m_turnStartDir = kNoDir;
+  }
+  m_desiredDir = dir;
+}
+
+// 80069470
+void SAnimator2::clearSuspendedCarry() { resumeCarryAfterSkill(); }
+
+// 800694E0
+void SAnimator2::SetIdleAnimPlaybackParameters(EACTrack* track) {
+  if (!track) return;
+  m_sim->m_anim.SetTrackSpeed(track, m_timeMult);
+  track->m_endMode = 0;
+}
+
+// 8006C148
+// The held object's model stops fading with the walls; the standard carry pose (std anim 0x26) on the
+// right arm unless a carry track plays.
+void SAnimator2::startCarry() {
+  cXPersonImpl* person = Impl(m_person);
+  cXObjectImpl* held = person->GetContainedObject(0);
+  m_carryObject = held ? held->m_id : 0;
+  if (m_carryObject && held->m_instance) held->m_instance->m_interestFade = 0;
+  EAnimController& ctl = m_sim->m_anim;
+  if (ctl.IsTrackValid(eTrackFlags{0x800})) return;
+  m_flags |= 0x800;
+  const AnimRef* ref = nullptr;
+  GetStdAnimRef(m_person, 0x26, ref);
+  EACTrack* t = ref ? ctl.SetTrackAnim(eTrackFlags{0x800}, AnimRefId(ref), -1, -1.0f, nullptr) : nullptr;
+  if (!t) return;
+  ctl.SetTrackIntensity(t, 1.0f, true);
+  ctl.SetTrackSpeed(t, m_timeMult);
+  lockCarryArmNodes(m_RightArmCarryIndexArray, t);
+  if (m_flags & 0x400) ctl.SuspendTrack(t);
+}
+
+// 8006C320
+// The held object fades with the walls again; the carry pose fades out (or goes at once over a skill,
+// which then resumes the track).
+void SAnimator2::stopCarry() {
+  if (m_carryObject) {
+    cXObject* o = Globs_pObjectModule ? Globs_pObjectModule->GetObjectFromID(m_carryObject) : nullptr;
+    cXObjectImpl* impl = o ? o->GetObjectImplementation() : nullptr;
+    if (impl && impl->m_instance) impl->m_instance->m_interestFade = 1;
+    m_carryObject = 0;
+  }
+  EAnimController& ctl = m_sim->m_anim;
+  if (!(m_flags & 0x400)) ctl.SetTrackBlendSmooth(eTrackFlags{0x800}, 0.0f, kCarryBlendTime, 0.01f);
+  else ctl.SetTrackIntensity(eTrackFlags{0x800}, 0.0f);
+  resumeCarryAfterSkill();
+  m_flags &= ~0x800u;
 }
 
 // ---------------------------------------------------------------------------------------------------

@@ -34,7 +34,6 @@ RET_UNKNOWN ObjectModuleImpl::SetTutorialObject(cXObject *) { SIMMY_STUB("Object
 void ObjectModuleImpl::ShowTutorialInfo() { SIMMY_STUB("ObjectModuleImpl::ShowTutorialInfo(void)", 0x800F8CF8); }
 void ObjectModuleImpl::ComputeStats(int *, int *, bool *, bool *, bool *) { SIMMY_STUB("ObjectModuleImpl::ComputeStats(int *, int *, bool *, bool *, bool *)", 0x800F8D44); }
 RET_UNKNOWN ObjectModuleImpl::FillInObjectStats(RoomManager *, HouseStats &) { SIMMY_STUB("ObjectModuleImpl::FillInObjectStats(RoomManager *, HouseStats &)", 0x800F90E8); return {}; }
-RET_UNKNOWN ObjectModuleImpl::IsValidObject(cXObject *) { SIMMY_STUB("ObjectModuleImpl::IsValidObject(cXObject *)", 0x800F9310); return {}; }
 RET_UNKNOWN ObjectModuleImpl::IsValidPerson(cXPerson *) { SIMMY_STUB("ObjectModuleImpl::IsValidPerson(cXPerson *)", 0x800F9384); return {}; }
 RET_UNKNOWN ObjectModuleImpl::AdvanceSelectedPerson(int) { SIMMY_STUB("ObjectModuleImpl::AdvanceSelectedPerson(int)", 0x800F9434); return {}; }
 void ObjectModuleImpl::GetSelectedPerson(int) { SIMMY_STUB("ObjectModuleImpl::GetSelectedPerson(int)", 0x800F945C); }

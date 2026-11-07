@@ -49,14 +49,7 @@ RET_UNKNOWN cXPersonImpl::GetCurrentInteractionNC() { SIMMY_STUB("cXPersonImpl::
 RET_UNKNOWN cXPersonImpl::GetPersonDataArray() { SIMMY_STUB("cXPersonImpl::GetPersonDataArray(void)", 0x8012C778); return {}; }
 void cXPersonImpl::SetIdleLoopCount(short) { SIMMY_STUB("cXPersonImpl::SetIdleLoopCount(short)", 0x8012C7DC); }
 RET_UNKNOWN cXPersonImpl::GetDestList() { SIMMY_STUB("cXPersonImpl::GetDestList(void)", 0x8012C7E4); return {}; }
-void cXPersonImpl::GetNeighborID() const { SIMMY_STUB("cXPersonImpl::GetNeighborID(void) const", 0x8012C7FC); }
 RET_UNKNOWN cXPersonImpl::IsVisitor() { SIMMY_STUB("cXPersonImpl::IsVisitor(void)", 0x8012C8A8); return {}; }
-RET_UNKNOWN cXPersonImpl::IsAlien() { SIMMY_STUB("cXPersonImpl::IsAlien(void)", 0x8012C904); return {}; }
-RET_UNKNOWN cXPersonImpl::IsInMotiveFailure() { SIMMY_STUB("cXPersonImpl::IsInMotiveFailure(void)", 0x8012C910); return {}; }
-RET_UNKNOWN cXPersonImpl::NeedsWantFearShuffle() { SIMMY_STUB("cXPersonImpl::NeedsWantFearShuffle(void)", 0x8012C91C); return {}; }
-void cXPersonImpl::SetInvisible(bool) { SIMMY_STUB("cXPersonImpl::SetInvisible(bool)", 0x8012C928); }
-void cXPersonImpl::SetIsAlien(bool) { SIMMY_STUB("cXPersonImpl::SetIsAlien(bool)", 0x8012C950); }
-RET_UNKNOWN cXPersonImpl::GetVisibility() { SIMMY_STUB("cXPersonImpl::GetVisibility(void)", 0x8012C978); return {}; }
 RET_UNKNOWN cXPersonImpl::GetRecording() { SIMMY_STUB("cXPersonImpl::GetRecording(void)", 0x8012C990); return {}; }
 RET_UNKNOWN cXPersonImpl::GetRecordDuration() { SIMMY_STUB("cXPersonImpl::GetRecordDuration(void)", 0x8012C998); return {}; }
 void cXPersonImpl::SetRecordDuration(int) { SIMMY_STUB("cXPersonImpl::SetRecordDuration(int)", 0x8012C9A0); }
@@ -67,7 +60,4 @@ RET_UNKNOWN cXPersonImpl::GetRecordCurTicks() { SIMMY_STUB("cXPersonImpl::GetRec
 RET_UNKNOWN cXPersonImpl::GetRecordTicksElapsed() { SIMMY_STUB("cXPersonImpl::GetRecordTicksElapsed(void)", 0x8012C9C8); return {}; }
 RET_UNKNOWN cXPersonImpl::GetRecordSkill() { SIMMY_STUB("cXPersonImpl::GetRecordSkill(void)", 0x8012C9D0); return {}; }
 void cXPersonImpl::SetChangingOutfitMode(bool) { SIMMY_STUB("cXPersonImpl::SetChangingOutfitMode(bool)", 0x8012C9F8); }
-void cXPersonImpl::SetAwareOfObject(cXObject *) { SIMMY_STUB("cXPersonImpl::SetAwareOfObject(cXObject *)", 0x8012CAA8); }
-void cXPersonImpl::SetAwareOfObjectKilled(cXObject *) { SIMMY_STUB("cXPersonImpl::SetAwareOfObjectKilled(cXObject *)", 0x8012CAE0); }
-void cXPersonImpl::ClearAwareOfObject(cXObject *) { SIMMY_STUB("cXPersonImpl::ClearAwareOfObject(cXObject *)", 0x8012CB18); }
 AutonomyConstantsClient::AutonomyConstantsClient() { SIMMY_STUB("AutonomyConstantsClient::AutonomyConstantsClient(void)", 0x8012CB50); }

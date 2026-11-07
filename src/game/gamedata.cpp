@@ -100,7 +100,10 @@ void CheckPlayerPad(unsigned int player, unsigned int other, int& disconnected, 
 // Before the state machines update: refresh the rumble state, handle unplugged pads, run the cheat
 // listener. Returns 0 while the disc needs attention.
 RET_UNKNOWN GameData::SystemPreUpdate() {
-  if (_globals.m_vibrate) SIMMY_STUB("GameData::SystemPreUpdate: EVibrate", 0x8003C798);
+  if (_globals.m_vibrate) {
+    _globals.m_vibrate->IsControllerReady(0);
+    _globals.m_vibrate->IsControllerReady(1);
+  }
   m_field2C = 0;
   CheckPlayerPad(0, 1, m_field30, m_field34);
   CheckPlayerPad(1, 0, m_field34, m_field30);

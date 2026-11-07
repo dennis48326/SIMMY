@@ -12,6 +12,7 @@
 // scale and "special" channels: visibility, a vector and three scalars), blends them, and builds the
 // node matrices from the skeleton.
 #pragma once
+#include <cstdint>
 #include <vector>
 
 struct eTrackFlags {
@@ -61,8 +62,9 @@ struct EACTrackStreams {
 struct EACTrack {
   EACTrack();  // 802E76A8
 
-  using UpdateFn = void (*)(unsigned int, EACTrack*, ERCharacter*, EVec3&, EVec3&);
-  using AnimateFn = void (*)(unsigned int, EACTrack*, EMat4&, ERCharacter*, EACNodeState*);
+  // PC: the callbacks' data is pointer-sized (GC: an unsigned int holding the owner's address).
+  using UpdateFn = void (*)(uintptr_t, EACTrack*, ERCharacter*, EVec3&, EVec3&);
+  using AnimateFn = void (*)(uintptr_t, EACTrack*, EMat4&, ERCharacter*, EACNodeState*);
 
   float m_fps = 1.0f;                 // +0x00 frames per second
   float m_defaultIntensity = 1.0f;    // +0x04
@@ -78,7 +80,7 @@ struct EACTrack {
   float m_field20 = 0.01f;            // +0x20
   UpdateFn m_procUpdate = nullptr;    // +0x24 procedural tracks (no animation)
   AnimateFn m_procAnimate = nullptr;  // +0x28
-  unsigned int m_procData = 0;        // +0x2C
+  uintptr_t m_procData = 0;           // +0x2C
   unsigned int m_flags = 0;           // +0x30 eTrackFlags; bits 28-31: slot in the blend list
   int m_index = 0;                    // +0x34
   int m_frameSetAt = 0;               // +0x38 _framecount when the frame was set explicitly
@@ -97,7 +99,7 @@ struct EACTrack {
   float m_hermite0 = 0.0f;            // +0x6C a Hermite blend's tangents
   float m_hermite1 = 0.0f;            // +0x70
   int m_slaveOf = -1;                 // +0x74 track index this one is phase-locked to
-  int m_field78 = 0;                  // +0x78
+  float m_phaseOffset = 0.0f;         // +0x78 a phase-locked track's offset (fraction of a cycle)
   ERAnim* m_anim = nullptr;           // +0x7C
   EVec3 m_rootStart;                  // +0x80 the root translation at frame 0
   std::vector<EACTrack*> m_slaves;    // +0x8C ERedBlackTree of phase-locked tracks
@@ -128,7 +130,8 @@ struct EAnimController {
   void ProcessEvents(TNodeList<EACEventRange *> &, bool);  // 802E8864
   double AddEventRange(TNodeList<EACEventRange *> &, EACTrack *, float, float);  // 802E89EC
   void UpdateTrack(EACTrack* track, EVec3& rootDelta, EVec3& rotDelta);  // 802E8A58
-  RET_UNKNOWN GetSlavePos(EACTrack *, EACTrack *);  // 802E9410
+  // The frame of phase-locked `slave` from its master's phase plus its offset.
+  double GetSlavePos(EACTrack* slave, EACTrack* master);  // 802E9410
   void GetAnimDistance(eTrackFlags, EVec3 &);  // 802E94A8
   RET_UNKNOWN GetAnimTrans(eTrackFlags, EVec3 &);  // 802E94D8
   void GetAnimTranslate(eTrackFlags, EVec3 &, EVec3 &);  // 802E96A8
@@ -150,7 +153,7 @@ struct EAnimController {
   void BlendNodeArrays(EACTrack* track, EACNodeState* from, EACNodeState* to);  // 802EA9E0
   void Animate(EACTrack* track, EACNodeState* states);  // 802EAD18
   static void Blend(float t, EACNodeState& to, EACNodeState& from);  // 802EB1B0
-  static void Layer(float, EACNodeState &, EACNodeState &);  // 802EB340
+  static void Layer(float t, EACNodeState& to, EACNodeState& from);  // 802EB340
   static void CallbackIntermediateComputeMatrices(EMat4 &);  // 802EB53C
   void ComputeMatrices(EMat4& root);  // 802EB570
   void CalcMatrix(EMat4& parent, ECharacterNode& node, EACNodeState& state, EMat4& out);  // 802EBBC8
@@ -172,7 +175,7 @@ struct EAnimController {
   double GetTrackBlendTarget(eTrackFlags);  // 802EDC70
   double GetTrackIntensity(eTrackFlags);  // 802EDDCC
   double GetTrackSpeed(eTrackFlags flags);  // 802EDF1C
-  static void BlendAllOutgoingTracks(float, float, bool);  // 802EE06C
+  void BlendAllOutgoingTracks(float target, float time, bool includeKind4);  // 802EE06C
   void SetTrackBlend(EACTrack* track, float target);  // 802EE17C
   static void SetTrackBlend(eTrackFlags, float);  // 802EE1DC
   void SetTrackBlendSmooth(EACTrack* track, float target, float time, float epsilon);  // 802EE324
@@ -182,8 +185,8 @@ struct EAnimController {
   void SetTrackBlendHermite(EACTrack* track, float target, float time, float t0, float t1);  // 802EE640
   RET_UNKNOWN SetTrackBlendHermite(eTrackFlags, float, float, float, float);  // 802EE6F8
   void BlendTrackIntensity(EACTrack* track);  // 802EE854
-  void SetTrackPhaseLock(EACTrack *, EACTrack *, float);  // 802EEA60
-  void SetProceduralTrack(eTrackFlags, void (*)(unsigned int, EACTrack *, ERCharacter *, EVec3 &, EVec3 &), void (*)(unsigned int, EACTrack *, EMat4 &, ERCharacter *, EACNodeState *), unsigned int);  // 802EEAFC
+  void SetTrackPhaseLock(EACTrack* slave, EACTrack* master, float offset);  // 802EEA60
+  void SetProceduralTrack(eTrackFlags flags, EACTrack::UpdateFn update, EACTrack::AnimateFn animate, uintptr_t data);  // 802EEAFC
   void RestartTrack(eTrackFlags flags);  // 802EED14
   void SetTrackPhase(eTrackFlags, float);  // 802EEEC0
   void SetTrackFrame(eTrackFlags flags, float frame, bool markSet);  // 802EF040
@@ -203,7 +206,8 @@ struct EAnimController {
   RET_UNKNOWN VisibilityTest(EMat4 &);  // 802EFF38
   void CalcVisibilitySphere(EMat4 &, EBoundSphere &);  // 802EFFCC
   EVec3 GetAnimRootNodeTrans(EACTrack* track);  // 802F0300
-  void Draw(ERC *, ERModel *, EMat4 &);  // 802F03B4
+  // `model` posed by this controller at `root` (Compute, then ERModel::DrawHierarchical).
+  void Draw(ERC* rc, ERModel* model, EMat4& root);  // 802F03B4
   RET_UNKNOWN CalcNodePos(int);  // 802F0428
   void CalcNodeMatrix(int, EMat4 &);  // 802F055C
   RET_UNKNOWN GetNodeMatrix(int);  // 802F0678

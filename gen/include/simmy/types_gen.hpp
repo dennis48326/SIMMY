@@ -2108,62 +2108,10 @@ struct AutonomyConstantsClient : public GlobalConstantsClient {
     virtual void UpdateConstants();  // 8011A9E8
     AutonomyConstantsClient();  // 8012CB50
 };
-struct AwarenessManager {
-    using eAwarenessAction = ::AwarenessManager__eAwarenessAction;
-    AwarenessManager();  // 80011EEC
-    void Init(SAnimator2 *, EAnimController *);  // 80011F4C
-    void Reset();  // 80012034
-    virtual ~AwarenessManager();  // 800120EC
-    void AwarenessCheck(unsigned int);  // 80012140
-    void handleAwarenessAnimations(unsigned int);  // 8001220C
-    static void SetIsRaining(bool);  // 80012250
-    RET_UNKNOWN AwarenessAutoRunCheck(float);  // 80012258
-    void SetPlayerControl(bool);  // 800122B0
-    RET_UNKNOWN GetFirstNodeRotation(float, float);  // 800122D8
-    RET_UNKNOWN GetSecondNodeRotation(float);  // 800123D4
-    RET_UNKNOWN AwarenessAnimateHeadLeadsMotion(unsigned int, EACTrack *, EMat4 &, ERCharacter *, EACNodeState *);  // 80012494
-    RET_UNKNOWN AwarenessAnimateTorsoLeadsMotion(unsigned int, EACTrack *, EMat4 &, ERCharacter *, EACNodeState *);  // 80012688
-    RET_UNKNOWN SetAwarenessTargetAngle(cXObject *);  // 8001287C
-    void handlePassiveInfluenceAnimation(unsigned int);  // 80012940
-    void handleMemoryAwarenessAnimation(unsigned int);  // 80012A74
-    void handleAwarenessTurningAnimation();  // 80012ADC
-    RET_UNKNOWN SetAwareOfObject(cXObject *);  // 80012B8C
-    RET_UNKNOWN SetAwareOfObjectKilled(cXObject *);  // 80012BD0
-    RET_UNKNOWN ClearAwareOfObject(cXObject *);  // 80012C04
-    RET_UNKNOWN IsTimeToCheckMemoryAwareness(unsigned int);  // 80012C4C
-    RET_UNKNOWN CanSeePlayer();  // 80012D9C
-    void GetActiveMemoryCategory(cXObject *, int &, int &);  // 80012F50
-    RET_UNKNOWN StarMemoryAwarenessSprite();  // 8001303C
-    bool SetPendingMemoryAwarenessAnim(AwarenessManager__eAwarenessAction, int);  // 800131C4
-    static void StartMemoryAwarenessAnimation(AwarenessManager__eAwarenessAction, int);  // 80013228
-    void SetMemoryAwarenessActionToTry(cXObject *);  // 800133B8
-    void MemoryAwarenessClearAction();  // 800134F8
-    void UpdateAwarenessAngle(unsigned int);  // 800137C0
-    static void MemoryAwarenessCheck(unsigned int);  // 80013960
-    void StopPassiveInfluenceAnimation();  // 80013AAC
-    RET_UNKNOWN StartPassiveInfluenceAnimation(AnimRef *);  // 80013BA4
-    void RainAwarenessCheck();  // 80013CEC
-    void PassiveInfluenceAwarenessCheck(unsigned int);  // 80013D4C
-    RET_UNKNOWN GetPlayerObject(int);  // 80014028
-    double GetDeltaAngleToTargetObject(cXObject *);  // 80014050
-    RET_UNKNOWN GetAwarenessAction();  // 80014248
-    RET_UNKNOWN GetAwareOfObject();  // 80014250
-    RET_UNKNOWN IsMemoryAwarenessAnimPending();  // 80014258
-    RET_UNKNOWN IsAutoCarryActive();  // 80014264
-    void SetTimeMultiplier(float);  // 80014270
-    void SetPauseMultiplier(float);  // 80014278
-    RET_UNKNOWN GetStateFlags();  // 80014280
-    RET_UNKNOWN ShouldAwarenessBeActive(unsigned int);  // 80014288
-    RET_UNKNOWN IsMemoryAwarenessAnimDone();  // 80014378
-    void getPassiveInfluenceSkillID(signed char, AnimRef *&);  // 800143E0
-    void getAwarenessSkillID(int, int, AnimRef *&);  // 80014450
-    RET_UNKNOWN shouldAutoCarry();  // 800145B4
-    void startAutoCarry();  // 8001471C
-    void endAutoCarry();  // 80014A3C
-};
-struct AwarenessManager__eAwarenessAction {
-    AwarenessManager__eAwarenessAction() = default;  // generated: lets derived stubs construct the base
-};
+#include "simmy/classes/ebitarray.hpp"  // hand-written
+#include "simmy/classes/eanimdecomp.hpp"  // hand-written
+#include "simmy/classes/awarenessmanager.hpp"  // hand-written
+#include "simmy/classes/awarenessmanager.hpp"  // hand-written
 #include "simmy/classes/fcmtarget.hpp"  // hand-written
 #include "simmy/classes/bbhtarget.hpp"  // hand-written
 #include "simmy/classes/bbhtarget.hpp"  // hand-written
@@ -2509,9 +2457,7 @@ struct BitMatrix64 {
 #include "simmy/classes/elevel.hpp"  // hand-written
 #include "simmy/classes/eanimtypes.hpp"  // hand-written
 #include "simmy/classes/eanimtypes.hpp"  // hand-written
-#include "simmy/classes/ebitarray.hpp"  // hand-written
 #include "simmy/classes/eranim.hpp"  // hand-written
-#include "simmy/classes/eanimdecomp.hpp"  // hand-written
 #include "simmy/classes/ercharacter.hpp"  // hand-written
 #include "simmy/classes/eanimcontroller.hpp"  // hand-written
 #include "simmy/classes/eistaticmodel.hpp"  // hand-written
@@ -4347,32 +4293,7 @@ struct ETweak {
 };
 #include "simmy/classes/eanimdecomp.hpp"  // hand-written
 #include "simmy/classes/eanimdecomp.hpp"  // hand-written
-struct EVibrate {
-    EVibrate();  // 80307BCC
-    ~EVibrate();  // 80307C24
-    void Enable();  // 80307C4C
-    void Disable();  // 80307CB0
-    RET_UNKNOWN IsOn();  // 80307CBC
-    RET_UNKNOWN TurnOn(unsigned char);  // 80307CC4
-    void IsControllerReady(unsigned char);  // 80307D40
-    void TurnOff(unsigned char);  // 80307D60
-    RET_UNKNOWN IsControllerOn(unsigned char);  // 80307D74
-    void Pause();  // 80307D94
-    void Resume();  // 80307E14
-    RET_UNKNOWN VibrateMotorOne(unsigned char, float);  // 80307EA0
-    RET_UNKNOWN VibrateMotorOne(unsigned char, float, float);  // 80307EFC
-    RET_UNKNOWN VibrateMotorTwo(unsigned char, float);  // 80307F68
-    RET_UNKNOWN VibrateMotorTwo(unsigned char, float, float);  // 80307FC4
-    RET_UNKNOWN VibrateAll(unsigned char, float, float);  // 80308030
-    RET_UNKNOWN VibrateAll(unsigned char, float, float, float, float);  // 8030809C
-    RET_UNKNOWN StopMotorOne(unsigned char);  // 80308128
-    RET_UNKNOWN StopMotorOne(unsigned char, float);  // 80308174
-    RET_UNKNOWN StopMotorTwo(unsigned char);  // 803081D0
-    RET_UNKNOWN StopMotorTwo(unsigned char, float);  // 8030821C
-    RET_UNKNOWN StopVibration(unsigned char);  // 80308278
-    void StopAllVibration();  // 803082C4
-    static RET_UNKNOWN UpdateVibration();  // 8030833C
-};
+#include "simmy/classes/evibrate.hpp"  // hand-written
 #include "simmy/classes/eanimdecomp.hpp"  // hand-written
 #include "simmy/classes/eaudio.hpp"  // hand-written
 #include "simmy/classes/eaudio.hpp"  // hand-written

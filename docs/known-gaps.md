@@ -3,7 +3,7 @@
 What is still missing or different, as of the current tree (checked against the code: `SIMMY_STUB`
 calls, `Unported(...)` primitives, `gen/functions.tsv`). For the full list of unported functions run
 `python tools/progress.py` and look at the `[stub #n]` lines of a run of the path you care about.
-About 55% of the game's functions are ported (8064 of 14600 in `gen/functions.tsv`); much of the rest is
+About 58% of the game's functions are ported (8463 of 14600 in `gen/functions.tsv`); much of the rest is
 unreachable in this build (PDA, EyeToy, Urbz leftovers, Xbox/PS2 code) or replaced by PC code.
 
 ## Possible bugs found while writing these docs (worth a look)
@@ -17,15 +17,16 @@ unreachable in this build (PDA, EyeToy, Urbz leftovers, Xbox/PS2 code) or replac
   tutorial, 0x15 show string, 0x22 UI effect, 0x3D particle effect, person 0x2F reach (it should use the router); 0x39-0x3C HUD
   primitives (only the debug object `zz_move_a__tron`). `TrySetToNext` kinds other than 0-12 return
   false.
-- Passive influence: the person's reaction animation (`AwarenessManager::Start/StopPassiveInfluenceAnimation`)
-  and the rest of the awareness manager (memory awareness, head turning, auto-carry in the rain).
 - `TryUserEvent` formats its string (`ParseUIString`) without showing it, as GC does; `TryPreloadObject`
   never waits (object data is read on demand).
 - Placement: a multi-tile container's side with room is not chosen for a surface object; the grid object
   (GUID 0x437: the port draws its model, the object is not made).
-- `SAnimator2`: awareness, mood animations, skill idle animations, low-motive runs, rumble notes.
-- Routing: the walk animation is the PC walker (GC follow modes, side steps, awareness auto-run not
-  ported); portals are type-8 multi-tile parts without `cXPortalImpl` (scores in `m_portalValues`);
+- `SAnimator2`: `TryIdleAnimate` syncing an object, `TryAnimate` stopping the idle track, event notes
+  of kind 9; animation events of phase-locked tracks (`EAnimController::AddEventRange`).
+- A dead player sim stays on the lot as a ghost (data 0x4A flag 4, now read): its autonomy offers only
+  ghost entries (TTAB flag 0x10), in the tutorial lot that is "Shoo" with score 0, chosen again every
+  few frames (seen in a 1P soak after the sim starved alone; no crash).
+- Routing: portals are type-8 multi-tile parts without `cXPortalImpl` (scores in `m_portalValues`);
   `TrySnap` still uses the PC `PersonCanStandAt`. The GC leaves a "move out of the way" object in the
   world when it cannot be used (kept).
 - `cXPersonImpl`: `Reset` (8011EB78), motive curves from a string set file (no definition on the disc
@@ -63,7 +64,6 @@ unreachable in this build (PDA, EyeToy, Urbz leftovers, Xbox/PS2 code) or replac
   modes, `ENCamera` cuts) and the camera's room opacity (`ERoom::IsRoomWallsOpaque/IsRoomRoofOpaque`,
   written but never read) ([camera.md](camera.md)). CAS morph/portrait paths depend on
   aurora readback (headless: blank).
-- ESim: the model cache / family info in `initModel`, costume skin-change flushing, the green ghost light.
 - Walls: the wallpaper preview drawing (`ERoom::DrawWallpaperPreview`; the build tools draw nothing) and
   its per-room buffers; `ERoom::GetWallPaperCost` (no caller in the release build). Bound-tree level files
   (versions 0/1; not reached by any level loaded in the logged runs).
@@ -71,7 +71,8 @@ unreachable in this build (PDA, EyeToy, Urbz leftovers, Xbox/PS2 code) or replac
 
 ## Audio
 
-`AmbientScorePlayer::SetPause` pauses only the first valid sound (GC quirk kept); rumble notes.
+`AmbientScorePlayer::SetPause` pauses only the first valid sound (GC quirk kept). Rumble notes drive the
+pad motor through `EVibrate` and aurora's `PADControlMotor` (one on/off motor, as on GC).
 
 ## GameCube behaviour deliberately kept
 

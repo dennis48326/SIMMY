@@ -185,7 +185,12 @@ void O2TTarget::SetVariable(char* name, char* value) {
     if (o) o->m_opt20 = static_cast<signed char>(GetScreenYGlobal(static_cast<float>(std::atof(value))));
     SIMMY_STUB("O2TTarget::SetVariable: EGlobal::UseOptionsScreenAdjustXY", 0x801CD598);
   } else if (!std::strcmp("O2T_Vibrate", name)) {
-    if (o) o->m_opt04 = std::atoi(value) != 0;  // GC: a short EVibrate::VibrateAll when turned on
+    const int on = std::atoi(value);
+    if (o) o->m_opt04 = on != 0;
+    // Turned on: a tenth of a second's rumble on the player's pad.
+    if (on && _globals.m_vibrate && _pCtrlMan)
+      _globals.m_vibrate->VibrateAll(static_cast<unsigned char>(_pCtrlMan->GetPlayerControllerIndex(static_cast<unsigned int>(m_player))),
+                                     1.0f, 1.0f, 0.1f, 0.1f);
   } else if (!std::strcmp("O2T_Free_Will", name)) {
     if (o) o->m_opt00 = std::atoi(value) != 0;
   } else if (!std::strcmp("O2T_Invert_CC_Cam", name)) {

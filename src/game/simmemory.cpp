@@ -34,6 +34,12 @@ void cXPersonImpl::SetSimMemory(cXPerson* other, int index, int value) {
   if (Globs_pObjectModule) Globs_pObjectModule->SetSimMemory(GetPersonData(0x1f), other->GetPersonData(0x1f), index, value);
 }
 
+// 8013FF20
+int cXPersonImpl::GetDominantMemory(cXPerson* other, int level) {
+  if (!Globs_pObjectModule) return -1;
+  return static_cast<int>(Globs_pObjectModule->GetDominantMemory(GetNeighborID(), static_cast<cXPersonImpl*>(other)->GetNeighborID(), level));
+}
+
 // 8013FFB4
 RET_UNKNOWN ObjectModuleImpl::GetSimMemory(int from, int to, int index) {
   RelMatrix* m = nullptr;

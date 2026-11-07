@@ -286,7 +286,37 @@ void EAnimController::UpdateTrack(EACTrack* track, EVec3& rootDelta, EVec3& /*ro
       }
     }
   } else {
-    SIMMY_STUB("EAnimController::UpdateTrack: phase-locked tracks (GetSlavePos)", 0x802E9410);
+    // Phase-locked: the master's phase (plus the offset) gives the frame; across the end the shorter
+    // way round wraps, carrying the root motion over the wrap.
+    const float from = track->m_pos;
+    const float to = static_cast<float>(GetSlavePos(track, &m_tracks[static_cast<size_t>(track->m_slaveOf)]));
+    if (to != from) {
+      float forward, backward;
+      if (to <= from) {
+        forward = (last - from) + to;
+        backward = from - to;
+      } else {
+        backward = (last - to) + from;
+        forward = to - from;
+      }
+      if (events) SIMMY_STUB("EAnimController::UpdateTrack: animation events (AddEventRange)", 0x802E89EC);
+      if (backward <= forward) {
+        if (track->m_pos < to && !noRoot) {
+          // Backwards through frame 0.
+          track->m_pos = 0.0f;
+          moved = Sub(GetAnimRootNodeTrans(track), root);
+          track->m_pos = last;
+          root = GetAnimRootNodeTrans(track);
+        }
+      } else if (to < track->m_pos && !noRoot) {
+        // Forwards through the end.
+        track->m_pos = last;
+        moved = Sub(GetAnimRootNodeTrans(track), root);
+        track->m_pos = 0.0f;
+        root = GetAnimRootNodeTrans(track);
+      }
+      track->m_pos = to;
+    }
   }
   if (stop) {
     DeactivateTrack(track);
@@ -893,7 +923,7 @@ EACTrack* EAnimController::SetTrackAnim(eTrackFlags flags, unsigned int animId, 
   track->m_field3C = 0;
   track->m_pos = 0.0f;
   track->m_prevPos = -1.0f;
-  track->m_field78 = 0;
+  track->m_phaseOffset = 0.0f;
   track->m_complete = 0;
   track->m_blending = 0;
   track->m_blendT = 0.0f;
@@ -1090,6 +1120,13 @@ EVec3 EAnimController::GetAnimRootNodeTrans(EACTrack* track) {
   return EVec3{};
 }
 
+// 802F03B4
+void EAnimController::Draw(ERC* rc, ERModel* model, EMat4& root) {
+  if (!m_computeEnabled) return;
+  Compute(root, _framecount);
+  model->DrawHierarchical(rc, m_matrices, m_states, m_character ? m_character->GetNodeCount() : 0);
+}
+
 // 802F0AE8
 // Activating a track (re)creates its streams; deactivating the current main track stops all tracks.
 void EAnimController::SetTrackActive(EACTrack* track, bool active) {
@@ -1194,7 +1231,8 @@ void EAnimController::RestartTrack(eTrackFlags flags) {
   track->m_complete = 0;
   track->m_field3C = 0;
   track->m_pos = 0.0f;
-  if (!track->m_slaves.empty()) SIMMY_STUB("EAnimController::RestartTrack: phase-locked tracks (GetSlavePos)", 0x802EED14);
+  for (EACTrack* slave : track->m_slaves)
+    if (slave) slave->m_pos = static_cast<float>(GetSlavePos(slave, track));
 }
 
 // 802E80A0
@@ -1279,4 +1317,121 @@ double EAnimController::GetTrackIntensity(eTrackFlags flags) {
 void EAnimController::SetTrackIntensity(eTrackFlags flags, float intensity) {
   EACTrack* track = FindTrack(flags, false);
   if (track && track->m_active == 1) SetTrackIntensity(track, intensity, true);
+}
+
+// 802E9410
+// The master's phase (its frame over its length) plus the offset, wrapped into one cycle, as a frame
+// of the slave.
+double EAnimController::GetSlavePos(EACTrack* slave, EACTrack* master) {
+  float phase = master->m_pos / static_cast<float>(master->m_anim->m_frameCount - 1) + slave->m_phaseOffset;
+  while (1.0f < phase) phase -= 1.0f;
+  return phase * static_cast<float>(slave->m_anim->m_frameCount - 1);
+}
+
+// 802EEA60
+// `slave` (active) follows `master`'s phase from now on (null: free again); the master keeps a list of
+// its slaves.
+void EAnimController::SetTrackPhaseLock(EACTrack* slave, EACTrack* master, float offset) {
+  if (!slave || slave->m_active != 1) return;
+  if (slave->m_slaveOf != -1) {
+    std::vector<EACTrack*>& list = m_tracks[static_cast<size_t>(slave->m_slaveOf)].m_slaves;
+    for (size_t i = 0; i < list.size(); ++i)
+      if (list[i] == slave) {
+        list.erase(list.begin() + static_cast<long>(i));
+        break;
+      }
+  }
+  if (!master) {
+    slave->m_slaveOf = -1;
+  } else {
+    // GC: an ERedBlackTree keyed by the slave's index.
+    std::vector<EACTrack*>& list = master->m_slaves;
+    size_t at = 0;
+    while (at < list.size() && list[at]->m_index < slave->m_index) ++at;
+    if (at == list.size() || list[at] != slave) list.insert(list.begin() + static_cast<long>(at), slave);
+    slave->m_slaveOf = master->m_index;
+  }
+  slave->m_phaseOffset = offset;
+}
+
+// 802EB340
+// Adds `from` on top of `to` by `t`: the rotation scaled by t then applied after to's, the
+// translation added, the scale multiplied in.
+void EAnimController::Layer(float t, EACNodeState& to, EACNodeState& from) {
+  to.m_flags |= from.m_flags;
+  EQuat q;
+  q.Scale(t, from.m_rot);
+  const float x = to.m_rot.x, y = to.m_rot.y, z = to.m_rot.z, w = to.m_rot.w;
+  to.m_rot.x = q.x * w + q.y * z + (q.w * x - q.z * y);
+  to.m_rot.w = q.w * w + ((-q.x * x - q.y * y) - q.z * z);
+  to.m_rot.y = q.y * w + ((q.z * x + q.w * y) - q.x * z);
+  to.m_rot.z = q.z * w + q.w * z + -q.y * x + q.x * y;
+  to.m_trans.x = to.m_trans.x + t * from.m_trans.x;
+  to.m_trans.y = to.m_trans.y + t * from.m_trans.y;
+  to.m_trans.z = to.m_trans.z + t * from.m_trans.z;
+  to.m_scale.x = to.m_scale.x + (to.m_scale.x * from.m_scale.x - to.m_scale.x) * t;
+  to.m_scale.z = to.m_scale.z + (to.m_scale.z * from.m_scale.z - to.m_scale.z) * t;
+  to.m_scale.y = to.m_scale.y + (to.m_scale.y * from.m_scale.y - to.m_scale.y) * t;
+}
+
+// 802EC5A0
+void EAnimController::StopTrack(eTrackFlags flags) { DeactivateTrack(FindTrack(flags, false)); }
+
+// 802EF230
+// The per-node factors of an active track.
+void EAnimController::SetTrackBlendFactors(eTrackFlags flags, float* factors) {
+  EACTrack* t = FindTrack(flags, false);
+  if (t && t->m_active == 1) t->m_blendFactors = factors;
+}
+
+// 802EE06C
+// Every outgoing main track still showing fades to `target` over `time` (smoothly), unless it is
+// already blending (with `includeKind4`, a track whose blend is of kind 4 is faded too).
+void EAnimController::BlendAllOutgoingTracks(float target, float time, bool includeKind4) {
+  for (int i = 0; i <= m_mainCount - 1; ++i) {
+    EACTrack& t = m_tracks[static_cast<size_t>(i)];
+    if (t.m_active != 1 || !(t.m_flags & eTrackFlags::kInBlendList) || !(0.0f < t.m_intensity)) continue;
+    if (!includeKind4) {
+      if (t.m_blending == 0) SetTrackBlendSmooth(&t, target, time, 0.01f);
+    } else if (t.m_blending == 0 || t.m_blending == 4) {
+      SetTrackBlendSmooth(&t, target, time, 0.01f);
+    }
+  }
+}
+
+// 802EEAFC
+// A track driven by callbacks instead of an animation (`update` each Update, `animate` writing the
+// node states each Compute, both given `data`); the same callbacks again only change the data.
+void EAnimController::SetProceduralTrack(eTrackFlags flags, EACTrack::UpdateFn update, EACTrack::AnimateFn animate,
+                                         uintptr_t data) {
+  EACTrack* t = FindTrack(flags, false);
+  if (!t) return;
+  if (t->m_procUpdate == update && t->m_procAnimate == animate) {
+    t->m_procData = data;
+    return;
+  }
+  DestroyStreams(t);
+  if (t->m_anim) {
+    t->m_anim->DelRef();
+    t->m_anim = nullptr;
+  }
+  t->m_procUpdate = update;
+  t->m_procAnimate = animate;
+  t->m_procData = data;
+  t->m_flags = static_cast<unsigned int>(static_cast<int>(flags));
+  t->m_active = 0;
+  t->m_anim = nullptr;
+  t->m_blending = 0;
+  t->m_streams = nullptr;
+  t->m_blendFactors = nullptr;
+  t->m_animId = 0;
+  t->m_slaveOf = -1;
+  t->m_phaseOffset = 0.0f;
+  t->m_intensity = 1.0f;
+  t->m_pos = 0.0f;
+  t->m_prevPos = 0.0f;
+  t->m_speed = 1.0f;
+  t->m_fps = 1.0f;
+  t->m_blendT = 0.0f;
+  SetTrackActive(t, true);
 }

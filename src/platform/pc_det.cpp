@@ -232,11 +232,21 @@ void HashAnimator(Hash& h, SAnimator2* a) {
   h.i("aloop", a->m_loopCount);
   h.i("askill", a->m_skillAnimId);
   h.i("aflags", a->m_flags);
-  h.i("aaware", a->m_awareFlags);
-  h.i("arnode", static_cast<long long>(a->m_routeNode));
-  h.i("arres", a->m_routeResult);
-  h.i("afollow", a->m_follow);
-  h.f("arend", a->m_routeEndDir);
+  h.i("aaware", a->m_aware.m_flags);
+  h.f("aang", a->m_aware.m_angle);
+  h.f("amemt", a->m_aware.m_memoryTime);
+  h.i("acat", a->m_aware.m_category);
+  h.i("aact", a->m_aware.m_action);
+  h.i("aof", Globs_pObjectModule && Globs_pObjectModule->IsValidObject(a->m_aware.m_awareOf)
+                 ? a->m_aware.m_awareOf->GetObjectImplementation()->m_id : -1);
+  h.f("atgt", a->m_aware.m_targetAngle);
+  h.f("apit", a->m_aware.m_passiveTime);
+  h.i("aportal", a->m_portalMode);
+  h.i("aportset", a->m_portalModeSet);
+  h.i("aautorun", a->m_autoRun);
+  h.f("ause", a->m_useSpeed);
+  h.i("alowm", a->m_lowMotive);
+  h.i("amood", a->m_moodAnim);
 }
 
 void HashPerson(Hash& h, cXPersonImpl* p) {

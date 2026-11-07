@@ -407,7 +407,11 @@ TheSimsEnterMainMenuState::~TheSimsEnterMainMenuState() = default;
 // 80097EF0
 void TheSimsEnterMainMenuState::Reset() {
   CompactAllHeaps();
-  if (_globals.m_vibrate) SIMMY_STUB("TheSimsEnterMainMenuState::Reset: EVibrate::StopAllVibration", 0x80097EF0);
+  if (_globals.m_vibrate) _globals.m_vibrate->StopAllVibration();
+  // PC: the port tears the house down after ELiveMode::QuitToMainMenu (which empties the players'
+  // model cache on GC after the house is gone), so the sims' last models went into the cache again:
+  // emptied here, on the way to the main menu.
+  ESim::DeletePlayerCachedModel();
   m_stage = 0;
   SIMMY_STUB("TheSimsEnterMainMenuState::Reset: GameData stage timing, two-player mode and front-end flags",
              0x80097EF0);
@@ -522,7 +526,8 @@ void TheSimsMainMenuState::Shutdown() {
 // Game-play state reset, both players unmapped, Apt allowed to read the pads, and the Flash UI
 // updated and drawn from now on.
 void TheSimsMainMenuState::Reset() {
-  SIMMY_STUB("TheSimsMainMenuState::Reset: front-end flags, vibration, NghResFile reset", 0x80098728);
+  SIMMY_STUB("TheSimsMainMenuState::Reset: front-end flags, NghResFile reset", 0x80098728);
+  if (_globals.m_vibrate) _globals.m_vibrate->StopAllVibration();
   _gd.GamePlayReset();
   _pCtrlMan->UnmapPlayer(0);
   _pCtrlMan->UnmapPlayer(1);

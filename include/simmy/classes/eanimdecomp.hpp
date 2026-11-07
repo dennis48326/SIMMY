@@ -29,7 +29,8 @@ struct EQuat {
   void RemoveAxisFlip(EQuat &);  // 802CD054
   EQuat& Slerp(float t, EQuat& a, EQuat b);  // 802CD0B8
   RET_UNKNOWN SlerpNoInvert(float, EQuat &, EQuat &);  // 802CD3E0
-  RET_UNKNOWN Scale(float, EQuat &);  // 802CD6BC
+  // `q`'s rotation scaled by t (from no rotation at 0 to q at 1).
+  EQuat& Scale(float t, EQuat& q);  // 802CD6BC
   EQuat& Set(EVec3& axis, float angle);  // 802CD7B4
 
   void Id() { x = y = z = 0.0f, w = 1.0f; }  // (inline in the original)

@@ -1014,51 +1014,57 @@ int cXPersonImpl::TryChangeSuit(StackElem* frame, const unsigned char* params) {
 
 // 8011F654
 // Operand +0: 0 nothing, 1 turn to the camera, 2 turn to the stack object, 3 turn away from it; only
-// standing (idle state 0 or 3; else false). The animator turns on the spot (GC: BeginFollow over a
-// destination list of my place and the point looked at); waits until it has.
+// standing (idle state 0 or 3; else false). The destination list becomes my spot twice and the point
+// looked at (the camera: 100 tiles along its turn, EGlobal +0x164), object data 9 cleared, and the
+// animator follows it (BeginFollow: a three-point list on the spot side-steps nowhere, then turns along
+// the last leg to the nearest eighth); the result once the follow ends.
 int cXPersonImpl::TryLookTowards(StackElem* frame, const unsigned char* params) {
   if (!m_instance || !m_animator) return 2;  // IsModelLoaded
   const short mode = static_cast<short>(params[0] << 8 | params[1]);
+  if (mode == 0) return 1;
+  if (mode < 0 || mode > 3) {
+    m_treeSim->SetError(0x27);
+    Error(0x27);
+    return -1;
+  }
   if (frame->m_primState == 0) {
-    if (mode == 0) return 1;
-    if (mode < 0 || mode > 3) {
-      m_treeSim->SetError(0x27);
-      Error(0x27);
-      return -1;
-    }
     if (GetIdleState() != 0 && GetIdleState() != 3) return 0;
-    float tx = 0.0f, ty = 0.0f;  // the point looked at (1/16 tiles: x, y)
-    const float mx = static_cast<float>(m_location[1]), my = static_cast<float>(m_location[0]);
+    TileListPoint me, target;
+    me.p[0] = m_location[0];
+    me.p[1] = m_location[1];
     if (mode == 1) {
-      // GC: 100 tiles toward the camera (EGlobal +0x164: its turn in degrees).
       float yaw = 0.0f;
       std::memcpy(&yaw, &_globals.m_field164, sizeof yaw);
       const float a = (yaw + 45.0f) * 0.017453292f;
-      tx = mx + static_cast<float>(static_cast<int>(-std::cos(a) * 100.0f) * 16);
-      ty = my + static_cast<float>(static_cast<int>(-std::sin(a) * 100.0f) * 16);
+      target.p[0] = static_cast<int>(-std::cos(a) * 100.0f) * 0x10 + me.p[0];
+      target.p[1] = static_cast<int>(-static_cast<double>(std::sin(a)) * 100.0) * 0x10 + me.p[1];
     } else {
       cXObject* o = GetObjectFromID(frame->m_stackObject);
-      cXObjectImpl* target = o ? o->GetObjectImplementation() : nullptr;
-      if (!target) {
+      cXObjectImpl* t = o ? o->GetObjectImplementation() : nullptr;
+      if (!t) {
         m_treeSim->SetError(0x15);
         Error(0x15);
         return -1;
       }
-      tx = static_cast<float>(target->m_location[1]);
-      ty = static_cast<float>(target->m_location[0]);
+      target.p[0] = t->m_location[0];
+      target.p[1] = t->m_location[1];
       if (mode == 3) {
-        tx += (tx - mx) * -2.0f;
-        ty += (ty - my) * -2.0f;
+        target.p[1] = target.p[1] + (target.p[1] - me.p[1]) * -2;
+        target.p[0] = target.p[0] + (target.p[0] - me.p[0]) * -2;
       }
     }
-    m_data.WriteVar(9, 0);
-    const float dir = -std::atan2(ty - my, tx - mx);  // animation format: +x is 0
-    m_animator->BeginRoute(std::vector<EVec2>{EVec2{mx, my}}, dir);
+    m_path.m_points.clear();
+    m_path.m_points.push_back(me);
+    m_path.m_points.push_back(me);
+    m_path.m_points.push_back(target);
+    SetData(9, 0);
+    m_animator->BeginFollow(0.0f);
     frame->m_primState = 1;
   }
-  if (m_animator->m_routeResult == 0) return 2;
-  frame->m_primState = 0;
-  return 1;
+  const int r = m_animator->FollowOneStep();
+  if (r == 2) return 2;
+  if (m_animator->EndFollow()) return r;
+  return 2;
 }
 
 // 80124ADC
@@ -1219,7 +1225,7 @@ int cXPersonImpl::TryGotoRoutingSlot(StackElem* frame, RoutingSlot* slot) {
       // A route within a route has no failure trees.
       route.GetRoutingSlot()->m_flags &= ~static_cast<unsigned int>(RoutingSlot::kFailureTrees);
     }
-    if (m_routes.empty() && m_animator) m_animator->m_carryType = 0;  // +0x5F8
+    if (m_routes.empty() && m_animator) m_animator->m_portalMode = 0;  // +0x5F8
     m_routes.push_back(route);
     state = 1;
     if (TraceRoutes())
@@ -1361,23 +1367,23 @@ int cXPersonImpl::TryGotoRoutingSlot(StackElem* frame, RoutingSlot* slot) {
             stuck = 1;
           } else {
             state = 1;
-            if (anim) anim->m_carryType = 0;
+            if (anim) anim->m_portalMode = 0;
           }
         } else if (stuck == 1) {
           stuck = 2;
           if (!route->m_asked && AskOthersToMove(route)) state = 0xe;
           else state = 0x10;
-          if (anim) anim->m_carryType = 0;
+          if (anim) anim->m_portalMode = 0;
         } else if (stuck == 2) {
           stuck = 3;
           state = 1;
-          if (anim) anim->m_carryType = 0;
+          if (anim) anim->m_portalMode = 0;
         } else if (stuck == 3) {
           state = 0x10;
-          if (anim) anim->m_carryType = 0;
+          if (anim) anim->m_portalMode = 0;
         } else {
           state = 7;
-          if (anim) anim->m_carryType = 0;
+          if (anim) anim->m_portalMode = 0;
         }
         break;
       case 7:
@@ -1413,7 +1419,7 @@ int cXPersonImpl::TryGotoRoutingSlot(StackElem* frame, RoutingSlot* slot) {
         if (state == 7) {
           result = 0;
           if (route->m_failure == 0) route->m_failure = 1;
-          if (anim) anim->m_carryType = 0;
+          if (anim) anim->m_portalMode = 0;
         } else {
           route->m_failure = 0;
           result = 1;
@@ -1450,12 +1456,12 @@ int cXPersonImpl::TryGotoRoutingSlot(StackElem* frame, RoutingSlot* slot) {
       case 10:  // the follow failed
         if (!anim->EndFollow()) done = true;
         else state = 6;
-        anim->m_carryType = 0;
+        anim->m_portalMode = 0;
         break;
       case 0xb:
         if (!anim->EndFollow()) done = true;
         else state = 7;
-        anim->m_carryType = 0;
+        anim->m_portalMode = 0;
         break;
       case 0xc:  // set out
         if (dist == -1.0) dist = CalcShortDistance(object);
@@ -1483,7 +1489,7 @@ int cXPersonImpl::TryGotoRoutingSlot(StackElem* frame, RoutingSlot* slot) {
           state = 1;
         }
         route->m_waitStart = start;
-        anim->m_carryType = 0;
+        anim->m_portalMode = 0;
         break;
       }
       case 0xe: {  // a person was asked to move
@@ -1522,13 +1528,13 @@ int cXPersonImpl::TryGotoRoutingSlot(StackElem* frame, RoutingSlot* slot) {
           if (!pushed) state = 6;
         }
         route->m_waitStart = start;
-        anim->m_carryType = 0;
+        anim->m_portalMode = 0;
         break;
       }
       case 0xf:  // plan again
         if (!anim->EndFollow()) done = true;
         else state = 1;
-        anim->m_carryType = 0;
+        anim->m_portalMode = 0;
         break;
       case 0x10: {  // failure feedback
         if (route->m_failure == 0) route->m_failure = 1;
@@ -1546,13 +1552,13 @@ int cXPersonImpl::TryGotoRoutingSlot(StackElem* frame, RoutingSlot* slot) {
             done = true;
           }
         }
-        anim->m_carryType = 0;
+        anim->m_portalMode = 0;
         break;
       }
       case 0x11:
         state = 7;
         SetPersonData(0x3e, static_cast<short>(route->m_failure));
-        anim->m_carryType = 0;
+        anim->m_portalMode = 0;
         break;
       case 0x12: {  // the goals and the path
         const int r = InitRoute(route);
@@ -1569,12 +1575,12 @@ int cXPersonImpl::TryGotoRoutingSlot(StackElem* frame, RoutingSlot* slot) {
       }
       case 0x13:  // the target went
         state = 7;
-        anim->m_carryType = 0;
+        anim->m_portalMode = 0;
         break;
       case 0x14:
         if (!anim->EndFollow()) done = true;
         else state = 0x13;
-        anim->m_carryType = 0;
+        anim->m_portalMode = 0;
         break;
       default:
         state = 7;
@@ -1613,7 +1619,7 @@ void cXPersonImpl::UpdateCurrentRoom() {
 }
 
 // 8012C7F4
-int cXPersonImpl::GetCurrentRoom() const { return m_currentRoom; }
+unsigned short cXPersonImpl::GetCurrentRoom() const { return m_currentRoom; }
 
 // cXPersonImpl::Place (80128294): cXObjectImpl::Place, then the person's room (UpdateCurrentRoom).
 void cXPersonImpl::PlacePerson(const int pos[2]) {
@@ -2097,11 +2103,43 @@ void cXPersonImpl::SpawnWantFearDialog(unsigned int slot) const {
 // The selector's service NPC record (+0x90; null for everyone else).
 const unsigned char* cXPersonImpl::GetServiceNPC() { return m_selector ? m_selector->m_npc : nullptr; }
 // 8012C8E0
-int cXPersonImpl::IsInvisible() { return 0; }
+int cXPersonImpl::IsInvisible() { return static_cast<unsigned short>(m_personData[0x4a]) & 1; }
 // 8012C8EC
-int cXPersonImpl::IsGreen() { return 0; }
+int cXPersonImpl::IsGreen() { return (static_cast<unsigned short>(m_personData[0x4a]) >> 1) & 1; }
 // 8012C8F8
-int cXPersonImpl::IsGhost() { return 0; }
+int cXPersonImpl::IsGhost() { return (static_cast<unsigned short>(m_personData[0x4a]) >> 2) & 1; }
+// 8012C904
+int cXPersonImpl::IsAlien() { return (static_cast<unsigned short>(m_personData[0x4a]) >> 3) & 1; }
+// 8012C910
+int cXPersonImpl::IsInMotiveFailure() { return (static_cast<unsigned short>(m_personData[0x4a]) >> 4) & 1; }
+// 8012C91C
+int cXPersonImpl::NeedsWantFearShuffle() { return (static_cast<unsigned short>(m_personData[0x4a]) >> 5) & 1; }
+// 8012C928
+void cXPersonImpl::SetInvisible(bool on) {
+  if (on) m_personData[0x4a] = static_cast<short>(m_personData[0x4a] | 1);
+  else m_personData[0x4a] = static_cast<short>(m_personData[0x4a] & 0xfffe);
+}
+// 8012C950
+void cXPersonImpl::SetIsAlien(bool on) {
+  if (on) m_personData[0x4a] = static_cast<short>(m_personData[0x4a] | 8);
+  else m_personData[0x4a] = static_cast<short>(m_personData[0x4a] & 0xfff7);
+}
+// 8012C978
+int cXPersonImpl::GetVisibility() { return m_personData[0x4a]; }
+// 8012C7FC
+int cXPersonImpl::GetNeighborID() const { return GetPersonData(0x1f); }
+// 8012CAA8
+void cXPersonImpl::SetAwareOfObject(cXObject* object) {
+  if (m_animator) m_animator->SetAwareOfObject(object);
+}
+// 8012CAE0
+void cXPersonImpl::SetAwareOfObjectKilled(cXObject* object) {
+  if (m_animator) m_animator->SetAwareOfObjectKilled(object);
+}
+// 8012CB18
+void cXPersonImpl::ClearAwareOfObject(cXObject* object) {
+  if (m_animator) m_animator->ClearAwareOfObject(object);
+}
 
 void cXPersonImpl::SetLocation(float x, float y, int level, int dir) {
   m_pos[0] = x;

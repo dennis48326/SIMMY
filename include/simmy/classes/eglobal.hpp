@@ -171,7 +171,7 @@ struct EGlobal {
   ERFont* m_font = nullptr;  // +0x104 the game font (GetGameFontID)
   int m_field108 = 0;  // +0x108
   int m_field10C = 0;  // +0x10C
-  void* m_vibrate = nullptr;  // +0x110 EVibrate
+  EVibrate* m_vibrate = nullptr;  // +0x110 (DAT_80475EDC)
   void* m_cheats = nullptr;  // +0x114 ECheats
   CameraDirector* m_cameraDirectors[2] = {};  // +0x118 one per player (SetDefaults)
   CameraDirector* CameraDirectorOf(int player) const { return m_cameraDirectors[player]; }

@@ -184,8 +184,8 @@ int ObjectFolderImpl::AddSelector(ObjDefinition* def, char*, char* fileName, Res
     for (const unsigned short* c = name; c && *c; ++c) user.push_back(static_cast<char16_t>(*c));
     selector->SetUserName(user);
     if (std::getenv("SIMMY_NPC_TRACE"))
-      std::printf("[npc] %s: gender %d kind %d \"%s\"\n", fileName, ERQuickdata::S32(npc, 0), ERQuickdata::S32(npc, 4),
-                  std::string(user.begin(), user.end()).c_str());
+      std::printf("[npc] %s: gender %d kind %d model %08x \"%s\"\n", fileName, ERQuickdata::S32(npc, 0), ERQuickdata::S32(npc, 4),
+                  static_cast<unsigned int>(ERQuickdata::S32(npc, 8)), std::string(user.begin(), user.end()).c_str());
   }
   selector->m_row = RowIndex(m_objects, def);
   if (ERQuickdata::Ptr(def, 0x34)) selector->m_row2 = RowIndex(m_objects, ERQuickdata::Ptr(def, 0x34));
@@ -638,6 +638,13 @@ void ObjectFolderImpl::DeleteUserSelectors() {
       delete s;
     }
   }
+}
+
+// 800F1520
+const void* ObjectFolderImpl::GetRumbleByName(char* name) {
+  if (!m_objects) return nullptr;
+  const void* table = m_objects->getTable("RumbleDataElement");
+  return table ? m_objects->getRow(table, name) : nullptr;
 }
 
 // 800F1264

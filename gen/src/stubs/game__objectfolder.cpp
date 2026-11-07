@@ -29,7 +29,6 @@ void ObjectFolderImpl::DeletingResFile(iResFile *) { SIMMY_STUB("ObjectFolderImp
 void ObjectFolderImpl::FreeUnusedData() { SIMMY_STUB("ObjectFolderImpl::FreeUnusedData(void)", 0x800F08C0); }
 void ObjectFolderImpl::DeleteSelectorAnimLists() { SIMMY_STUB("ObjectFolderImpl::DeleteSelectorAnimLists(void)", 0x800F0F34); }
 void ObjectFolderImpl::UnloadData(ObjSelector *) { SIMMY_STUB("ObjectFolderImpl::UnloadData(ObjSelector *)", 0x800F111C); }
-RET_UNKNOWN ObjectFolderImpl::GetRumbleByName(char *) { SIMMY_STUB("ObjectFolderImpl::GetRumbleByName(char *)", 0x800F1520); return {}; }
 RET_UNKNOWN ObjectFolderImpl::GetCameraBloomByName(char *) { SIMMY_STUB("ObjectFolderImpl::GetCameraBloomByName(char *)", 0x800F1578); return {}; }
 RET_UNKNOWN ObjectFolderImpl::GetCameraBlurByName(char *) { SIMMY_STUB("ObjectFolderImpl::GetCameraBlurByName(char *)", 0x800F15D0); return {}; }
 RET_UNKNOWN findChecksum(unsigned int, ChecksumList &) { SIMMY_STUB("findChecksum(unsigned int, ChecksumList &)", 0x800F1628); return {}; }

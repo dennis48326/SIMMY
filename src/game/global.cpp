@@ -153,7 +153,12 @@ void EGlobal::SetDefaults() {
              "font, ISimsObjectModel white shader, ESpriteRenderMan", 0x8003ED40);
   for (CameraDirector*& director : m_cameraDirectors)
     if (!director) director = new CameraDirector();
-  SIMMY_STUB("EGlobal::SetDefaults: WantFearManager, EVibrate", 0x8003EE9C);
+  SIMMY_STUB("EGlobal::SetDefaults: WantFearManager", 0x8003EE9C);
+  // The rumble switch, both ports turned on (PC: made once; GC made a new one on every call).
+  if (!m_vibrate) m_vibrate = new EVibrate();
+  m_vibrate->Enable();
+  m_vibrate->TurnOn(0);
+  m_vibrate->TurnOn(1);
   ESims3DHead::InitShaders();
   Globs::Startup();
   SIMMY_STUB("EGlobal::SetDefaults: substitution strings, player cheats", 0x8003EE9C);

@@ -367,6 +367,14 @@ cXObject* ObjectModuleImpl::GetObjectFromID(int id) {
   return m_byId[static_cast<unsigned int>(id) - 1];
 }
 
+// 800F9310
+int ObjectModuleImpl::IsValidObject(cXObject* object) {
+  if (!object) return 0;
+  for (cXObject* o : m_byId)
+    if (o == object) return 1;
+  return 0;
+}
+
 // 800F9668
 int ObjectModuleImpl::GetTileObjectID(CTilePt& tile) {
   const int x = tile.GetX(), y = tile.GetY();

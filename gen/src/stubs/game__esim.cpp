@@ -3,15 +3,11 @@
 
 RET_UNKNOWN operator>>(EStream &, ESim *&) { SIMMY_STUB("operator>>(EStream &, ESim *&)", 0x80030A44); return {}; }
 RET_UNKNOWN operator>>(EFile &, ESim *&) { SIMMY_STUB("operator>>(EFile &, ESim *&)", 0x80030A84); return {}; }
-RET_UNKNOWN ESim::ReadModelFromCache() { SIMMY_STUB("ESim::ReadModelFromCache(void)", 0x80031360); return {}; }
-void ESim::TransferModelToCache() { SIMMY_STUB("ESim::TransferModelToCache(void)", 0x8003154C); }
-void ESim::flushQueuedCostumeModels() { SIMMY_STUB("ESim::flushQueuedCostumeModels(void)", 0x8003176C); }
 void ESim::IsChild() { SIMMY_STUB("ESim::IsChild(void)", 0x80031824); }
 void ESim::IsDog() { SIMMY_STUB("ESim::IsDog(void)", 0x8003185C); }
 void ESim::IsCat() { SIMMY_STUB("ESim::IsCat(void)", 0x80031894); }
 void ESim::IsMonkey() { SIMMY_STUB("ESim::IsMonkey(void)", 0x800318CC); }
 void ESim::IsPet() { SIMMY_STUB("ESim::IsPet(void)", 0x80031904); }
-void ESim::ServiceNpcOrderTableCallback(ELevelDrawData &, EOrderTableData *) { SIMMY_STUB("ESim::ServiceNpcOrderTableCallback(ELevelDrawData &, EOrderTableData *)", 0x80032F34); }
 void ESim::SetAnim(char *) { SIMMY_STUB("ESim::SetAnim(char *)", 0x800342CC); }
 void ESim::UpdateRepShaders(int) { SIMMY_STUB("ESim::UpdateRepShaders(int)", 0x80034740); }
 void ESim::RefreshSkin() { SIMMY_STUB("ESim::RefreshSkin(void)", 0x800347DC); }

@@ -206,7 +206,9 @@ struct ERModel : public EResource {
   void Draw(ERC* rc);  // 80318B18
   void DrawShadow(ERC *, float);  // 80318B84
   void DrawShadowWithStencilInverted(ERC *);  // 80318DA4
-  void DrawHierarchical(ERC *, EMat4 *, EACNodeState *, int);  // 80318FB0
+  // The submodels on the node matrices (each submodel's node: +0x0C, -1 none), those whose node is
+  // hidden left out; sorted along the view (m_field1C) in a 3D window.
+  void DrawHierarchical(ERC* rc, EMat4* matrices, EACNodeState* states, int count);  // 80318FB0
   void GetWeldPos(EWeldVert *);  // 80319214
   void SetWeldPos(EWeldVert *, EVec3 &);  // 803192C0
   void WeldSharedVerts(ERModel *, float);  // 80319350

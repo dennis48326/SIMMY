@@ -136,6 +136,7 @@ Development only: the launcher removes all of them except `SIMMY_INI` from the g
 | `SIMMY_SLOT_TRACE=1`, `SIMMY_SLOT_OFFSET_OFF=1` | Slot offsets: trace; disable |
 | `SIMMY_PORTRAIT_DUMP=<prefix>` | Write each finished portrait as BMP |
 | `SIMMY_UI3D_TRACE=1` | UI3D displays every 60 frames |
+| `SIMMY_GREEN_TEST=1` | Light player 1's sim as a green person (`ESim::Draw`'s ghost-green ambient) |
 | `SIMMY_SHOT_ON_DIALOG=<text>` | Take `--screenshot` 100 frames after the first dialog containing text |
 
 ### UI
@@ -170,11 +171,14 @@ Development only: the launcher removes all of them except `SIMMY_INI` from the g
 | `SIMMY_INFLUENCE_TRACE=1\|2` | Passive influences added/removed, targets' trees; 2 also every motive change |
 | `SIMMY_FIRE_TEST=<tick>,<id>[,burn]` | Start a fire at object `<id>` when the simulator reaches the tick (`,burn`: run the burn primitive 0x09 on it from player 1's sim) |
 | `SIMMY_ROUTE_TRACE=1` | Routing |
+| `SIMMY_WALK_TRACE=1` | Each `SAnimator2::BeginFollow` (points, start tile, follow mode, walk style, distance) |
+| `SIMMY_AWARE_TRACE=1` | Awareness manager: memory awareness, aware-of objects, head turns, passive-influence reaction animations, auto-carry |
+| `SIMMY_RUMBLE_TRACE=1` | Rumble notes (`SAnimator2::playRumble`: strength, kind, seconds, controller port) |
 | `SIMMY_AUTO_TRACE=1\|ads` | Autonomy choices / advertisements |
 | `SIMMY_AUTONOMY_IDLE=<s>` | Idle time before autonomy takes a player's sim |
 | `SIMMY_AUTONOMOUS_JOB=1`, `SIMMY_PLAYER_WORK=1`, `SIMMY_CAREER_MOOD=<v>` | Career test harnesses |
 | `SIMMY_WANTS_TRACE=1`, `SIMMY_WANTS_NOTIFY=<tick>\|story:<event>@<tick>[#house]` | Wants and fears trace (also the HUD's icons, the want/fear dialog and the MDI box) / forced notifications (a numeric tick fulfils player 1's first shown want: the new want flips in and its dialog follows once the lot intro is over, e.g. `SIMMY_DET=1 SIMMY_WANTS_NOTIFY=500`) |
-| `SIMMY_NPC_TRACE=1` | Each service NPC record as the object folder loads it (gender, kind, name) |
+| `SIMMY_NPC_TRACE=1` | Each service NPC record as the object folder loads it (gender, kind, name, model id: `ESim::initModel` poses that model for the NPC) |
 | `SIMMY_FUNDS=<n>`, `SIMMY_BUY_FUNDS=<n>` | Family funds on the lot / when the catalogue opens |
 | `SIMMY_SIM_START=x,y` | Put the sims on a tile at each house load |
 | `SIMMY_INTERACT_PICK=<name>`, `SIMMY_INTERACT_PICK_PLAYER=1\|2`, `SIMMY_INTERACT_NEAR=x,y;...\|#id`, `SIMMY_MENU_ITEM=<n>` | A starts the nearest object's named interaction at once (instead of the menu); limit to a player; objects near a place; which menu item a check tree gives |

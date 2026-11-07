@@ -184,7 +184,9 @@ struct ObjectFolderImpl {
   virtual void Save(iResFile* file);  // 800F129C
   virtual void Load(iResFile* file);  // 800F12CC
   virtual void DoStream(ReconBuffer* buffer, int version);  // 800F12FC
-  virtual RET_UNKNOWN GetRumbleByName(char *);  // 800F1520
+  // The "RumbleDataElement" row named `name` of the objects' quickdata (RumbleDataElement: +0 the
+  // first motor's strength, +2 the second's in 255ths, +4 seconds), or null.
+  virtual const void* GetRumbleByName(char* name);  // 800F1520
   virtual RET_UNKNOWN GetCameraBloomByName(char *);  // 800F1578
   virtual RET_UNKNOWN GetCameraBlurByName(char *);  // 800F15D0
   virtual void GetAnimPreloadList(ChecksumList &);  // 800F165C
@@ -299,7 +301,8 @@ struct ObjectModuleImpl {
   virtual void ComputeStats(int *, int *, bool *, bool *, bool *);  // 800F8D44
   virtual RET_UNKNOWN FillInObjectStats(RoomManager *, HouseStats &);  // 800F90E8
   virtual int IsSelectionSwitchingAllowed();  // 800F9290
-  RET_UNKNOWN IsValidObject(cXObject *);  // 800F9310
+  // `object` is one of the module's objects (GC: a walk of its object list).
+  int IsValidObject(cXObject* object);  // 800F9310
   RET_UNKNOWN IsValidPerson(cXPerson *);  // 800F9384
   virtual RET_UNKNOWN AdvanceSelectedPerson(int);  // 800F9434
   virtual void GetSelectedPerson(int);  // 800F945C

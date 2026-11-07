@@ -206,17 +206,20 @@ struct cXPersonImpl : public cXObjectImpl, public cXPerson {
   bool IsCarrying();  // 8012C788
   void SetIdleLoopCount(short);  // 8012C7DC
   RET_UNKNOWN GetDestList();  // 8012C7E4
-  int GetCurrentRoom() const;  // 8012C7F4
-  void GetNeighborID() const;  // 8012C7FC
+  // The room the person was last placed in (UpdateCurrentRoom; 0xFFFB before).
+  unsigned short GetCurrentRoom() const;  // 8012C7F4
+  int GetNeighborID() const;  // 8012C7FC
   void SetNeighborID(short);  // 8012C838
   bool IsRouting();  // 8012C878
   RET_UNKNOWN IsVisitor();  // 8012C8A8
-  RET_UNKNOWN IsAlien();  // 8012C904
-  RET_UNKNOWN IsInMotiveFailure();  // 8012C910
-  RET_UNKNOWN NeedsWantFearShuffle();  // 8012C91C
-  void SetInvisible(bool);  // 8012C928
-  void SetIsAlien(bool);  // 8012C950
-  RET_UNKNOWN GetVisibility();  // 8012C978
+  // Person data 0x4A's bits: 1 invisible, 2 green, 4 ghost, 8 alien, 0x10 in motive failure, 0x20
+  // the wants and fears are to be shuffled.
+  int IsAlien();  // 8012C904
+  int IsInMotiveFailure();  // 8012C910
+  int NeedsWantFearShuffle();  // 8012C91C
+  void SetInvisible(bool on);  // 8012C928
+  void SetIsAlien(bool on);  // 8012C950
+  int GetVisibility();  // 8012C978
   Motives* GetMotives() { return &m_motives; }  // 8012C980
   MotiveEffects* GetMotiveEffects() { return m_motiveEffects; }  // 8012C988
   RET_UNKNOWN GetRecording();  // 8012C990
@@ -241,12 +244,14 @@ struct cXPersonImpl : public cXObjectImpl, public cXPerson {
   RET_UNKNOWN IsWaitingForSocialMode();  // 8012CA54
   // The object whose tree it runs (the newest GosubObjectTree's), else itself.
   cXObject* GetControllingObject();  // 8012CA5C
-  static void SetAwareOfObject(cXObject *);  // 8012CAA8
-  static void SetAwareOfObjectKilled(cXObject *);  // 8012CAE0
-  static void ClearAwareOfObject(cXObject *);  // 8012CB18
+  // The animator's awareness (SAnimator2 vtable 0x124 / 0x12C / 0x134).
+  void SetAwareOfObject(cXObject* object);  // 8012CAA8
+  void SetAwareOfObjectKilled(cXObject* object);  // 8012CAE0
+  void ClearAwareOfObject(cXObject* object);  // 8012CB18
   RET_UNKNOWN GetSimMemory(cXPerson *, int);  // 8013FDF0
   void SetSimMemory(cXPerson *, int, int);  // 8013FE84
-  void GetDominantMemory(cXPerson *, int);  // 8013FF20
+  // The memory category of mine about `other` strongest at `level` (ObjectModuleImpl's), -1 none.
+  int GetDominantMemory(cXPerson* other, int level);  // 8013FF20
 
   // PC: puts the person at `x`, `y` (tiles, centre at .5) on `level`, facing `dir` (eighths of a turn).
   void SetLocation(float x, float y, int level, int dir);

@@ -8,8 +8,12 @@
 #include "simmy/types_gen.hpp"
 #include "simmy/unported_globals.hpp"
 
+#include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <new>
+#include <utility>
+#include <vector>
 
 using simmy::be32;
 using simmy::befloat;
@@ -296,6 +300,41 @@ int ERModel::GetLatticeCount() { return 0; }
 int ERModel::GetDummyCount() { return static_cast<int>(m_dummies.size()); }
 // 80318B10
 int ERModel::GetCameraCount() { return static_cast<int>(m_cameras.size()); }
+
+// 80318FB0
+void ERModel::DrawHierarchical(ERC* rc, EMat4* matrices, EACNodeState* states, int count) {
+  if (!count || !matrices) return;
+  if (m_matsInDLs == 0) rc->ModelMatrices(matrices, count);
+  else rc->ModelMatrixList(matrices, count);
+  auto* win = static_cast<E3DWindow*>(EWindow::m_pCurrent3DWindow);
+  if (m_field1C == 0 || !win) {
+    for (ESubModel* s : m_subModels) {
+      const int node = s->m_field0C;
+      if (node < 0 || !(states[node].m_flags & EACNodeState::kHidden)) s->Draw(rc);
+    }
+    return;
+  }
+  // Sorted along the view direction by their nodes' positions (GC: an EFloatTree, read in key order).
+  EVec3 dir = win->m_lookDir;
+  if (dir.x != 0.0f || dir.y != 0.0f || dir.z != 0.0f) {
+    const float len = std::sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
+    dir.x /= len, dir.y /= len, dir.z /= len;
+  }
+  const float d = -(win->m_lookPos.x * dir.x + win->m_lookPos.y * dir.y + win->m_lookPos.z * dir.z);
+  std::vector<std::pair<float, ESubModel*>> sorted;
+  for (ESubModel* s : m_subModels) {
+    const int node = s->m_field0C;
+    if (node < 0) {
+      s->Draw(rc);
+    } else if (!(states[node].m_flags & EACNodeState::kHidden)) {
+      const EMat4& m = matrices[node];
+      sorted.emplace_back(dir.z * m.m[3][2] + dir.x * m.m[3][0] + dir.y * m.m[3][1] + d, s);
+    }
+  }
+  std::stable_sort(sorted.begin(), sorted.end(),
+                   [](const std::pair<float, ESubModel*>& a, const std::pair<float, ESubModel*>& b) { return a.first < b.first; });
+  for (auto& e : sorted) e.second->Draw(rc);
+}
 
 // 80318B18
 // Each sub-model selects its shaders and calls their display lists. The caller has set the model

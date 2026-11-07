@@ -79,7 +79,9 @@ is pinned by `SIMMY_AURORA_TAG` in [`CMakeLists.txt`](../CMakeLists.txt).
 | Censor mosaic | [`e_ngcrenderer_censor.cpp`](../src/engine/e_ngcrenderer_censor.cpp) | GC peeked/poked the EFB; aurora has no peek/poke, so the rect is copied out and drawn as one-texel quads; blocks corrected for non-4:3 frames |
 | Fades | [`interestfade.cpp`](../src/engine/interestfade.cpp) | Walls and objects in front of the point of interest |
 | Mirror (CAS) | [`e_mirrorportal.cpp`](../src/engine/e_mirrorportal.cpp) | `EMirrorPortal` |
-| Ghosts | [`ghost.cpp`](../src/game/ghost.cpp) | `SIMMY_GHOST_TEST` |
+| Ghosts | [`ghost.cpp`](../src/game/ghost.cpp), `ESim::Draw` | `SIMMY_GHOST_TEST`. A green person (data 0x4A flag 2) is lit by one green ambient light only (`_vGhostGreen` 0.8, 1.8, 0.65; no sun or point lights) |
+| Sim models | [`esim.cpp`](../src/game/esim.cpp) `initModel` | A player's sim reuses the composited model of the last house (`ReadModelFromCache` / `TransferModelToCache`, dropped at the main menu: `DeletePlayerCachedModel`); service NPCs draw their record's own model (`ServiceNpcOrderTableCallback`); a costume change flushes queued data-manager work and costume models (`UpdateSkinChange`) |
+| Animation | [`e_animcontroller.cpp`](../src/engine/e_animcontroller.cpp), [`e_rmodel.cpp`](../src/engine/e_rmodel.cpp) | Layered and phase-locked tracks (`Layer`, `SetTrackPhaseLock`, `GetSlavePos`), procedural tracks (head turning), `ERModel::DrawHierarchical`. Animation events of phase-locked tracks (`AddEventRange`) are still stubbed |
 
 ## Gotchas and invariants
 

@@ -595,7 +595,7 @@ void EHouse::BuildHouse() {
     EIFloor::CreateFloors(this);
   }
   m_ready = 1;
-  SIMMY_STUB("EHouse::BuildHouse: SAnimator2::SetIsRaining(0)", 0x80023A20);
+  SAnimator2::SetIsRaining(false);
 }
 
 // 800251FC
@@ -901,7 +901,7 @@ void ELiveMode::GotoStartMode() {
   g_livemode8047622C = 0;
   m_leaving = 1;
   LoadingScreenStateMachine::StartingLoad(CLoadingScreen__eLoadingScreenMode{0});
-  SIMMY_STUB("ELiveMode::GotoStartMode: EVibrate::StopAllVibration", 0x8008DC40);
+  if (_globals.m_vibrate) _globals.m_vibrate->StopAllVibration();  // GC: DAT_80475EDC unchecked
 }
 
 // 8008DC90
@@ -912,9 +912,10 @@ void ELiveMode::QuitToMainMenu() {
   m_leaving = 0;
   if (auto* viewer = static_cast<AptViewer*>(_globals.m_aptViewer)) viewer->m_field3A8 = 0;
   SIMMY_STUB("ELiveMode::QuitToMainMenu: PlumbBob::ShutdownAll, the object module (vtable 0x68), "
-             "Globs::pHouse (vtable 0x90), ESim::DeletePlayerCachedModel, the simulator "
-             "(vtable 0x88 with 0, 0x50); the interactors go with the house (EHouse::Cleanup)",
+             "Globs::pHouse (vtable 0x90), the simulator (vtable 0x88 with 0, 0x50); the interactors "
+             "go with the house (EHouse::Cleanup)",
              0x8008DC90);
+  ESim::DeletePlayerCachedModel();
   if (Globs_pSound) Globs_pSound->QuietAll();
   _gd.m_field94 = 1;  // DAT_80475C18
   _app.m_gameStates->KillState();
