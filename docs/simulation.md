@@ -168,10 +168,21 @@ object the running action's icon (`SetIconObject` 8011A150).
 
 Menu path: A in direct control -> `DirectInteractor::ExecuteActionMenu` (802057C8) ->
 `FlashPiMenu::CreateObjectMenuFromObjList` over `MenuObjectsNear` (PC: objects within 2 tiles, nearest
-first, max 4) -> `CollectInteractionsForObject` (TTAB walk + check trees) -> `HUDTarget::AddMenu/
+first, max 4; then, as on GC, the object the sim holds, `GetContainedObject(0)`, moved or added to the
+head of the list wherever it is) -> `CollectInteractionsForObject` (TTAB walk + check trees) -> `HUDTarget::AddMenu/
 ShowMenu` -> `ActionMenu` (priority-100 pad filter) -> `FlashPiMenu::ChooseAction` -> social mode, or
 `StartMenuInteraction` -> `cXPersonImpl::AddAction`. In classic control the `SimInteractor` builds the
-same menu from the highlighted objects. Priorities: the player's menu choices are 100; a queued action
+same menu from the highlighted objects (the held object goes first only when it is highlighted, GC 8021EA98).
+
+Carrying (trash, newspaper, plates): "Pick Up" (trash pile) or "Read" (newspaper) put the object in the
+sim's hand slot (drawn at the hand: `ISimsObjectModel::Update`, cursor flags 0x40/0x80). The held
+object's own entries then do the rest ("Throw Away" walks to the nearest trash can, kitchen or curb;
+"Drop", "Set Down", "Recycle"). The game's trees decide what is offered in which mode (primitive 0x35
+`TryCheckObject` kind 0, "a sim a player steers in direct control"): in direct control the trash can's
+own "Toss Trash" and the pile's "Clean Up" are hidden (person data 0x32 = 1), so the player throws away
+through the held trash's menu; in classic control "Clean Up" (pick up and bin in one go) and "Toss
+Trash" on a highlighted can are offered, and a sim switched to classic control while holding something
+sets it down (its idle tree). The Take Out Trash want is fulfilled by the disposal (event 0x1FFD). Priorities: the player's menu choices are 100; a queued action
 interrupts the running one only with a strictly higher priority (`ShouldInterrupt`).
 
 Cancel: B under the HUD goes through `H2DTarget::UpdateCancelButton` (GC `H2DTarget::Update` 801B8484):

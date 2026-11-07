@@ -38,6 +38,9 @@ unreachable in this build (PDA, EyeToy, Urbz leftovers, Xbox/PS2 code) or replac
   the world side's stand-ins (livemode.cpp `BGExec_LoadHouse`, lotsave.cpp); `ObjectModuleImpl::ComputeStats`
   is a stand-in (lotsave.cpp). The port saves no people, so an object chained under a person is its tile's
   object again at load.
+- `ISimsObjectModel::Update`: an object in the slot of an object that is itself carried (stub 8004CBDC
+  "carried objects", logged for every held object but only acting for a nested carry, e.g. food on a carried
+  plate) does not follow the outer holder's hand; objects held by a sim do (the hand position is ported).
 - `MoveFamilyOntoLot`, `MenuObjectsNear`, the interactor manager, input manager and `SocialModeInteractor`
   are PC stand-ins (the interactors are tied to the PC keyboard/mouse and co-op layers).
 
@@ -84,6 +87,10 @@ pad motor through `EVibrate` and aurora's `PADControlMotor` (one on/off motor, a
 - Switching sims keeps the running action; a busy partner at priority 100 makes Socialize wait (the
   hourglass shows it).
 - The classic/direct control mode is not saved with the game; the pause menu remembers its last tab.
+- Carried trash in direct control: the trash can itself offers nothing ("Toss Trash" and the pile's
+  "Clean Up" are hidden by the game's check trees for a player-steered sim); A anywhere opens the held
+  trash's menu, whose "Throw Away" walks to the nearest can (kitchen or curb). Switching to classic
+  control while holding something makes the sim set it down (its idle tree).
 - The story family starts with §0 on lot 9; the plumb bob's particles never show (release build stops
   them); bloom has no notes in the shipped data; lightning is empty (`EHouse::TriggerLightningEffect`,
   room effect 0x34 kind 2); GBA communication (0x36) is false without EyeToy hardware; the CAS room has no ambient score.

@@ -472,9 +472,17 @@ void InteractorModule__DirectInteractor::ExecuteActionMenu() {
     m_actionMenu = 0;
     return;
   }
-  // GC: refused too while the person's vtable 0x16C is 3; the object it holds (vtable 0x2BC slot 0)
-  // goes to the head of the list.
+  // GC: refused too while the person's vtable 0x16C is 3.
   std::vector<cXObjectImpl*> objects = MenuObjectsNear(m_player);  // GC: EIObjectMan::GetObjectsInRect
+  // The object the selected sim holds (person vtable 0x2BC, slot 0: carried trash, a newspaper, a plate)
+  // always heads the list, highlighted or not (out of it first if it was there): the held object's own
+  // interactions ("Throw Away", "Drop", ...) are offered wherever the sim stands.
+  if (cXPerson* sel = _globals.GetSelectedPerson(m_player))  // DAT_80475E88
+    if (cXObjectImpl* self = sel->AsObject() ? sel->AsObject()->GetObjectImplementation() : nullptr)
+      if (cXObjectImpl* held = self->GetContainedObject(0)) {
+        objects.erase(std::remove(objects.begin(), objects.end(), held), objects.end());
+        objects.insert(objects.begin(), held);
+      }
   if (objects.empty()) {
     UIAUDIO::Instance()->PlaySound(0x3804219f);
   } else if (FlashPiMenu* pi = _gd.m_players[m_player & 1].m_piMenu) {

@@ -64,7 +64,8 @@ so Y cycles forward round the family.
 
 The left stick sets the animator's desired state and direction (walk/run cut at 0.98; Shift on the
 keyboard gives half deflection = walk). `OnCommandPressed` (8020506C): A opens the action menu
-(`ExecuteActionMenu` 802057C8), B cancels all actions (`[sim] player N cancels: n`), 0x11 switches to
+(`ExecuteActionMenu` 802057C8: the objects near the sim, with the object the sim holds always first, so
+carried trash or a newspaper can be used anywhere), B cancels all actions (`[sim] player N cancels: n`), 0x11 switches to
 classic control, 0xD/0xE switch sims. A, 0x11 and the switch are **ignored while the selected sim is in
 social mode** (the GC gate). `Update` (80204838) first runs the failed-social-mode-entry checks
 ([simulation.md](simulation.md)). After 120 s without input (`SIMMY_AUTONOMY_IDLE`) the idle player's sim
