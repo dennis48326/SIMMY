@@ -74,6 +74,7 @@ std::string NormalizeKey(const std::string& key) {
   if (out == "disc" || out == "discimage" || out == "isopath" || out == "gcm") return "iso";
   if (out == "player1input" || out == "p1controls" || out == "player1controls" || out == "input") return "p1input";
   if (out == "edgepan" || out == "edgepanning" || out == "mouseedgepanning") return "mouseedgepan";
+  if (out == "firecode" || out == "firecodemeter") return "firecodelimit";
   return out;
 }
 
@@ -81,7 +82,7 @@ const char* const kKeys[] = {"window", "fullscreen", "resolution", "aspect", "hu
                              "anisotropy", "vsync", "fpscap", "backend", "resampler", "split",
                              "window2", "window2pos", "window2display", "fullscreen2", "iso",
                              "p1input", "mouseedgepan", "mouserotatespeed", "mousezoomspeed", "mouseinvertx",
-                             "mouseinverty", "mouseinvertwheel"};
+                             "mouseinverty", "mouseinvertwheel", "firecodelimit"};
 bool KnownKey(const std::string& k) {
   for (const char* known : kKeys)
     if (k == known) return true;
@@ -257,6 +258,8 @@ void ApplyValue(GraphicsSettings& g, const std::string& key, const std::string& 
   } else if (key == "mouseinvertx" || key == "mouseinverty" || key == "mouseinvertwheel") {
     bool& b = key == "mouseinvertx" ? g.mouseInvertX : key == "mouseinverty" ? g.mouseInvertY : g.mouseInvertWheel;
     if (!ParseBool(v, b)) Warn(key, v, "on or off");
+  } else if (key == "firecodelimit") {
+    if (!ParseBool(v, g.fireCodeLimit)) Warn(key, v, "on or off");
   }
 }
 
@@ -713,9 +716,13 @@ std::string settings_value_string(const GraphicsSettings& g, const char* rawKey)
     return g.mouseInvertY ? "on" : "off";
   } else if (key == "mouseinvertwheel") {
     return g.mouseInvertWheel ? "on" : "off";
+  } else if (key == "firecodelimit") {
+    return g.fireCodeLimit ? "on" : "off";
   }
   return buf;
 }
+
+bool settings_fire_code_limit() { return graphics_settings().fireCodeLimit; }
 
 std::string settings_ini_path() {
   const GraphicsSettings& g = graphics_settings();
@@ -740,7 +747,7 @@ const char* const kNames[] = {"window", "fullscreen", "resolution", "aspect", "h
                               "anisotropy", "vsync", "fps_cap", "backend", "resampler", "split",
                               "window2", "window2_pos", "window2_display", "fullscreen2", "iso",
                               "p1_input", "mouse_edge_pan", "mouse_rotate_speed", "mouse_zoom_speed",
-                              "mouse_invert_x", "mouse_invert_y", "mouse_invert_wheel"};
+                              "mouse_invert_x", "mouse_invert_y", "mouse_invert_wheel", "fire_code_limit"};
 bool SaveNames(const char* const* names, size_t count, std::string& message);
 }  // namespace
 

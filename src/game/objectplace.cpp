@@ -1006,8 +1006,8 @@ void PlainPickup(cXObjectImpl* o) {
 }
 
 // 800E1E30
-// The tile is on the lot and may be edited (error 1), the object can go there, at a tile's middle.
-// GC: slots of types 5..7 refuse (0xB) unless the move-objects cheat.
+// The tile is on the lot and may be edited (error 1), the object can go there, at a tile's middle;
+// slots of types 5..7 refuse (0xB) unless the move-objects cheat.
 int PlainUserCanPlace(cXObjectImpl* o, const int pos[2], int level, cXObjectImpl* container, int slot) {
   gPlacementConflict = nullptr;
   gPlacementError = 0;
@@ -1018,9 +1018,17 @@ int PlainUserCanPlace(cXObjectImpl* o, const int pos[2], int level, cXObjectImpl
     return 0;
   }
   if (!ObjCanPlace(o, pos, level, container, slot) || (pos[1] & 0xf) != 8 || (pos[0] & 0xf) != 8) return 0;
-  if (container && !MoveObjectsCheat())
-    SIMMY_STUB("cXObjectImpl::UserCanPlace: the slot's type (GetObjectSlot +8: 5..7 refused)", 0x800E1E30);
-  return 1;
+  // A container's slot whose type (ObjectSlot +8, its height kind: ObjectSlotHeight) is 5..7 is refused
+  // (0xB), unless the move-objects cheat.
+  if (MoveObjectsCheat() || !container) return 1;
+  const unsigned char* d = ObjectSlotDescriptor(container, slot);  // cXObject vtable 0x2BC GetObjectSlot
+  if (!d) return 1;
+  int type = 0;
+  float alt = 0.0f;
+  ObjectSlotHeight(d, type, alt);
+  if (type > 7 || type < 5) return 1;
+  gPlacementError = 0xb;
+  return 0;
 }
 }  // namespace
 

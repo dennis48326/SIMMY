@@ -53,3 +53,10 @@ void EGlobal::RecalcHouse() {
   m_house->ReCalcHouse();
   if (m_house->m_objectMan) m_house->m_objectMan->PostLoad();
 }
+
+// 80041F98
+// The object's definition takes a zero extent override (flags 2 or 4, +0xB6).
+bool EGlobal::CheckForZeroExtentOverride(cXObject* object) {
+  const ObjDefinition* def = object ? object->GetDef() : nullptr;
+  return def && (objdef::Flags(def) & 6) != 0;
+}

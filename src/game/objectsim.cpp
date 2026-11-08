@@ -392,9 +392,9 @@ int cXObjectImpl::TryMakeActionString(StackElem* frame, const unsigned char* par
 
 // 801058E0
 // Tells the world an object changed: operand +0 which (0 me, 1 the stack object), +2 what (0 nothing, 1
-// its graphics/room (GlobalDispatch 0xEE: ObjectModule re-sends 0xED with its room), 2 its room's score,
-// 3 its 3D instance refreshes, 4 the house's lighting). True. PC: the listeners (room lighting and
-// scores, the instance's refresh, the house's light update) are not ported.
+// its graphics/room (GlobalDispatch 0xEE: ObjectModule re-sends 0xED with its room: the room's
+// statistics and light are recomputed), 2 its room's score, 3 its 3D instance placed again, 4 the
+// house's lot data (HouseImpl::ComputeAndStoreLotData)). True.
 int cXObjectImpl::TryUpdate(StackElem* frame, const unsigned char* params) {
   const int who = Be16(params, 0), what = Be16(params, 1);
   cXObjectImpl* o = nullptr;
@@ -415,14 +415,18 @@ int cXObjectImpl::TryUpdate(StackElem* frame, const unsigned char* params) {
     return -1;
   }
   switch (what) {
-    case 1: SIMMY_STUB("primitive 0x07 TryUpdate: GlobalDispatch 0xEE (the object's room lighting, 0xED)", 0x801058E0); break;
+    case 1: ObjectModuleDispatch(0xee, o->m_id); break;  // GlobalDispatch(0xEE, the object's id)
     case 2:
       // The object's room's score (not the 0xFFFB "no room").
       if (o->GetRoom() != 0xfffb)
         if (RoomManager* rooms = RoomManager::GetRoomManager()) rooms->RoomScoreChanged(o->GetRoom());
       break;
-    case 3: SIMMY_STUB("primitive 0x07 TryUpdate: the 3D instance's refresh (+0x320 vtable 0x14)", 0x801058E0); break;
-    case 4: SIMMY_STUB("primitive 0x07 TryUpdate: the house's light update (EHouse vtable 0x8C)", 0x801058E0); break;
+    case 3:  // its 3D instance placed again (IBaseSimInstance vtable 0x14: SetObjOrient)
+      if (o->m_instance) o->m_instance->SetObjOrient();
+      break;
+    case 4:  // Globs::pHouse vtable 0x8C: the lot data
+      if (Globs_pHouse) Globs_pHouse->ComputeAndStoreLotData();
+      break;
     default: break;
   }
   return 1;
@@ -1866,6 +1870,12 @@ bool FindGoodLocationFor(cXObjectImpl* object, const int start[2], int level, bo
 }
 }  // namespace
 
+// PC: FindGoodLocationFor for other callers (FlashPiMenu's go-here object: the person's
+// FindGoodLocation, cXObject vtable 0x194).
+bool ObjFindGoodLocation(cXObjectImpl* object, const int start[2], int level, bool sameRoom, bool emptyTile, int out[2]) {
+  return FindGoodLocationFor(object, start, level, sameRoom, emptyTile, out);
+}
+
 // 800FADF4
 // Puts the stack object somewhere it fits: operand +0 how (0 near the reference, 1 out of the world, 2
 // at the reference turned to face from its front-left, 3 / 4 near the reference along its facing (4: a
@@ -3010,7 +3020,12 @@ int cXObjectImpl::TryCompleteGoal(StackElem*, const unsigned char* params) {
   // With the reward dialog: while another one is up (or waiting) the primitive waits (4).
   if ((params[6] & 2) && _gd.m_h2dTarget && !_gd.m_h2dTarget->SpawnRewardMomentDialog(kind, index)) return 4;
   unlocks.GrantUnlock(IGoalUnlock__UnlockType{kind}, index);
-  if (kind == 1) SIMMY_STUB("cXObjectImpl::TryCompleteGoal: CasClothingUnlocks::UnlockGroup (fashion unlocks)", 0x80106798);
+  // Fashion (kind 1): the clothing group of that number unlocks, marked new.
+  if (kind == 1) {
+    NeighborhoodImpl* hood = Globs_pNeighborhood;
+    if (auto* family = hood ? dynamic_cast<PlayerFamilyImpl*>(hood->GetFamily(1)) : nullptr)
+      family->GetClothingUnlocks()->UnlockGroup(static_cast<unsigned int>(index), true);
+  }
   std::printf("[goal] %s unlocks kind %d #%d\n", DebugName(), kind, index);
   return 1;
 }

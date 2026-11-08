@@ -4,6 +4,7 @@
 #include "simmy/unported_globals.hpp"
 #include "simmy/classes/placement.hpp"
 #include "simmy/classes/buildtools.hpp"
+#include "simmy/platform.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -147,13 +148,71 @@ RET_UNKNOWN filter_object(PCTTarget__PCTTabInfo* tab, ObjSelector* selector) {
   return (tab->functions & functions) != 0 ? 1 : 0;
 }
 
+namespace {
+// The memory meter (EMemoryMeterWin, GameData +0x04: _gd.m_memoryMeter) at its GC offsets.
+float MeterF(int off) {
+  float v;
+  std::memcpy(&v, _gd.m_memoryMeter + off, 4);
+  return v;
+}
+void SetMeterF(int off, float v) { std::memcpy(_gd.m_memoryMeter + off, &v, 4); }
+void SetMeterI(int off, int v) { std::memcpy(_gd.m_memoryMeter + off, &v, 4); }
+}  // namespace
+
+// 80057A1C (game/memorymeterwin.cpp)
+// How full the lot is (EIObjectMan::CountObjects over the house's object instances): objects / 300,
+// weighted objects / 500 and the models' memory, (KB - 420) / 1190 (the house's own model counted too,
+// EHouse +0x20); the fill (+0x08, kept in 0..1; +0x0C unclamped) is the largest share plus 0.3 times
+// the middle one plus 0.1 times the smallest. The three shares and their counts (+0x10..+0x24) are kept
+// for the debug meter. PC: the model sizes are the MODL data sizes the port's loader records (the same
+// disc data, ERModel::LoadModel), so the memory share is the GameCube's.
+void PollMemoryLevels() {
+  EHouse* house = _globals.m_house;  // DAT_80475E94
+  if (!house || !house->m_objectMan) return;
+  float models = 0.0f, objects = 0.0f, weighted = 0.0f, memory = 0.0f;
+  house->m_objectMan->CountObjects(models, objects, weighted, memory);
+  if (house->m_model) memory = memory + static_cast<float>(static_cast<double>(house->m_model->m_flags >> 8));
+  memory = memory * 0.0009765625f - 420.0f;
+  if (memory < 0.0f) memory = 0.0f;
+  const float other = weighted / 500.0f;
+  const float obj = objects / 300.0f;
+  SetMeterF(0x20, other);
+  const float mem = memory / 1190.0f;
+  SetMeterF(0x18, obj);
+  SetMeterF(0x10, mem);
+  SetMeterI(0x14, static_cast<int>(memory + 0.5f));
+  SetMeterI(0x1c, static_cast<int>(objects + 0.5f));
+  SetMeterI(0x24, static_cast<int>(weighted + 0.5f));
+  float hi = obj, lo = other;
+  if (obj < other) hi = other, lo = obj;
+  float mid = hi, top = mem;
+  if (mem < hi) mid = mem, top = hi;
+  float m2 = mid;
+  if (mid < lo) m2 = lo, lo = mid;
+  const float fill = lo * 0.1f + m2 * 0.3f + top;
+  SetMeterF(0x08, fill);
+  SetMeterF(0x0c, fill);
+  if (fill < 0.0f) SetMeterF(0x08, 0.0f);
+  if (1.0f < MeterF(0x08)) SetMeterF(0x08, 1.0f);
+  static const bool trace = std::getenv("SIMMY_FIRE_CODE_TRACE") != nullptr;
+  if (trace)
+    std::printf("[firecode] objects %.0f (%.3f) weighted %.1f (%.3f) models %.0f memory %.0f KB over 420 (%.3f) -> %.3f\n",
+                objects, obj, weighted, other, models, memory, mem, MeterF(0x08));
+}
+
 // 800427A8 (game/global.cpp)
-// The memory meter's fill (EMemoryMeterWin::PollMemoryLevels): how close the lot is to the fire code's
-// limit; capped below 1 with the fire code cheat. PC: the memory meter (EIObjectMan::CountObjects, the
-// world side's) is not ported: 0; development aid: SIMMY_FIRE_CODE=<0..1> sets the value.
-double GetFireCodeValue(bool) {
+// The memory meter's fill (polled first when asked): how close the lot is to the fire code's limit;
+// capped at 0.97 once full with the EOR config's fire code switch (EGlobal +0x39C, off in the release).
+// PC: fire_code_limit=off in simmy.ini gives 0 (an empty meter, no limit); development aid:
+// SIMMY_FIRE_CODE=<0..1> sets the value.
+double GetFireCodeValue(bool poll) {
   static const char* test = std::getenv("SIMMY_FIRE_CODE");
-  return test ? std::atof(test) : 0.0;
+  if (test) return std::atof(test);
+  if (!simmy::settings_fire_code_limit()) return 0.0;
+  if (poll) PollMemoryLevels();
+  float v = MeterF(0x08);
+  if (1.0f <= v && _globals.ConfigInt(0x39c) != 0) v = 0.97f;
+  return v;
 }
 
 // 8004281C (game/global.cpp)
@@ -1164,7 +1223,8 @@ void PCTTarget::delete_dialog_selection_callback(int selection) {
 
 // 801D6E68
 // Yes (0): the object in hand sold: the sale sound, its value (GetCurrentValue) back to the family's
-// funds (not with the free cheat), the affordability updated, then it is destroyed.
+// funds (not with the free cheat), the affordability updated, then it is destroyed (a light source:
+// the lighting grid again).
 void PCTTarget::sell_dialog_selection_callback(int selection) {
   m_dialogActive = 0;
   if (selection != 0) return;
@@ -1177,7 +1237,9 @@ void PCTTarget::sell_dialog_selection_callback(int selection) {
   m_canAfford = can_afford_selection();
   std::printf("[grab] player %d sold %s for %d: funds %d\n", m_player + 1, object->DebugName(), value,
               static_cast<int>(GetSimFunds(0)));
+  const bool light = object->GetObjectLightSource() == 1;
   GrabDestroyObjectInHand(m_player);
+  if (light) RecomputeLightingGrid(nullptr);  // InteractorModule::RecomputeLightingGrid(0)
   if (m_bbh) {
     m_bbh->SetSellingPig(false);
     m_bbh->SetCurrentPrice(0);

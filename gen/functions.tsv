@@ -957,7 +957,7 @@
 800416B8	game/global.cpp	ported	void EGlobal::FreeSpriteRenderer(cXObject *)	EGlobal	static void FreeSpriteRenderer(cXObject *)
 800416E4	game/global.cpp	ported	void EGlobal::UpdateSpriteRenderer(SpriteSlot *)	EGlobal	static void UpdateSpriteRenderer(SpriteSlot *)
 80041708	game/global.cpp	ported	void EGlobal::ConvertSpriteIdToResId(unsigned int)	EGlobal	void ConvertSpriteIdToResId(unsigned int)
-80041758	game/global.cpp	stub	RET_UNKNOWN EGlobal::GetCounterModelTable()	EGlobal	RET_UNKNOWN GetCounterModelTable()
+80041758	game/global.cpp	ported	RET_UNKNOWN EGlobal::GetCounterModelTable()	EGlobal	RET_UNKNOWN GetCounterModelTable()
 80041788	game/global.cpp	stub	void EGlobal::LoadSelectorData(ObjSelector *, bool)	EGlobal	void LoadSelectorData(ObjSelector *, bool)
 800417B0	game/global.cpp	stub	void EGlobal::UnloadSelectorData(ObjSelector *)	EGlobal	void UnloadSelectorData(ObjSelector *)
 800417DC	game/global.cpp	ported	RET_UNKNOWN EGlobal::CreateThumbnail(ObjSelector *)	EGlobal	RET_UNKNOWN CreateThumbnail(ObjSelector *)
@@ -973,7 +973,7 @@
 80041B9C	game/global.cpp	ported	void CollectInteractionsForObject(cXObject *, InteractionList &, int, int)		void CollectInteractionsForObject(cXObject *, InteractionList &, int, int)
 80041BE0	game/global.cpp	stub	void CollectInteractionsForObject(cXObject *, InteractionList &, cXPerson *, int)		void CollectInteractionsForObject(cXObject *, InteractionList &, cXPerson *, int)
 80041F00	game/global.cpp	stub	RET_UNKNOWN EGlobal::CheckForZeroExtentOverride(CTilePt &, cXObject *)	EGlobal	RET_UNKNOWN CheckForZeroExtentOverride(CTilePt &, cXObject *)
-80041F98	game/global.cpp	stub	bool EGlobal::CheckForZeroExtentOverride(cXObject *)	EGlobal	bool CheckForZeroExtentOverride(cXObject *)
+80041F98	game/global.cpp	ported	bool EGlobal::CheckForZeroExtentOverride(cXObject *)	EGlobal	bool CheckForZeroExtentOverride(cXObject *)
 80041FE4	game/global.cpp	ported	void EGlobal::SetBackgroundColor(float, float, float)	EGlobal	static void SetBackgroundColor(float, float, float)
 800420AC	game/global.cpp	ported	RET_UNKNOWN EGlobal::IsBuildHouseMode()	EGlobal	static RET_UNKNOWN IsBuildHouseMode()
 800420B4	game/global.cpp	stub	void EGlobal::SwapSelectedSims()	EGlobal	void SwapSelectedSims()
@@ -1160,7 +1160,7 @@
 8004C644	game/iobject.cpp	ported	ISimsObjectModel::~ISimsObjectModel()	ISimsObjectModel	virtual ~ISimsObjectModel()
 8004C7F0	game/iobject.cpp	stub	double ISimsObjectModel::GetHeightOffset()	ISimsObjectModel	double GetHeightOffset()
 8004C91C	game/iobject.cpp	ported	void ISimsObjectModel::InsertSubModelsInHouse(ERLevel *)	ISimsObjectModel	virtual void InsertSubModelsInHouse(ERLevel *)
-8004C96C	game/iobject.cpp	stub	void ISimsObjectModel::PropigateFlagsToSubModels()	ISimsObjectModel	virtual void PropigateFlagsToSubModels()
+8004C96C	game/iobject.cpp	ported	void ISimsObjectModel::PropigateFlagsToSubModels()	ISimsObjectModel	virtual void PropigateFlagsToSubModels()
 8004C9D0	game/iobject.cpp	ported	void ISimsObjectModel::CleanupStuff(ERLevel *)	ISimsObjectModel	virtual void CleanupStuff(ERLevel *)
 8004CBDC	game/iobject.cpp	ported	void ISimsObjectModel::Update()	ISimsObjectModel	virtual void Update()
 8004D598	game/iobject.cpp	ported	void ISimsObjectModel::UpdateParticle(ObjAnimDef *)	ISimsObjectModel	void UpdateParticle(ObjAnimDef *)
@@ -1204,11 +1204,11 @@
 80050630	game/iobject.cpp	ported	RET_UNKNOWN ISimsObjectModel::processAnimEvents(ERAnim *, int, int, bool)	ISimsObjectModel	RET_UNKNOWN processAnimEvents(ERAnim *, int, int, bool)
 800507E8	game/iobject.cpp	ported	RET_UNKNOWN ISimsObjectModel::animEventHandler(ERAnim *, EAnimNote &, int)	ISimsObjectModel	RET_UNKNOWN animEventHandler(ERAnim *, EAnimNote &, int)
 80050B00	game/iobject.cpp	ported	void ISimsObjectModel::SetInitalObjectState()	ISimsObjectModel	void SetInitalObjectState()
-80050C38	game/iobject.cpp	stub	void PortalRoom(unsigned int, bool, short &, short &)		void PortalRoom(unsigned int, bool, short &, short &)
+80050C38	game/iobject.cpp	ported	void PortalRoom(unsigned int, bool, short &, short &)		void PortalRoom(unsigned int, bool, short &, short &)
 80050CA0	game/iobject.cpp	ported	void ISimsObjectModel::Create(cXObject *, EHouse *)	ISimsObjectModel	virtual void Create(cXObject *, EHouse *)
 80050D44	game/iobject.cpp	ported	void ISimsObjectModel::SetObjOrient()	ISimsObjectModel	void SetObjOrient()
-80050EB4	game/iobject.cpp	stub	void ISimsObjectModel::OrientSubObjects()	ISimsObjectModel	void OrientSubObjects()
-80050F14	game/iobject.cpp	stub	void ISimsObjectModel::OrentSubObject()	ISimsObjectModel	virtual void OrentSubObject()
+80050EB4	game/iobject.cpp	ported	void ISimsObjectModel::OrientSubObjects()	ISimsObjectModel	void OrientSubObjects()
+80050F14	game/iobject.cpp	ported	void ISimsObjectModel::OrentSubObject()	ISimsObjectModel	virtual void OrentSubObject()
 800510F0	game/iobject.cpp	stub	RET_UNKNOWN operator>>(EStream &, ISimsWallObjectModel *&)		RET_UNKNOWN operator>>(EStream &, ISimsWallObjectModel *&)
 80051130	game/iobject.cpp	stub	RET_UNKNOWN operator>>(EFile &, ISimsWallObjectModel *&)		RET_UNKNOWN operator>>(EFile &, ISimsWallObjectModel *&)
 80051170	game/iobject.cpp	ported	ISimsWallObjectModel::ISimsWallObjectModel()	ISimsWallObjectModel	ISimsWallObjectModel()
@@ -1224,16 +1224,16 @@
 80051B94	game/iobject.cpp	ported	void ISimsMultiTileObjectModel::SetObjOrient()	ISimsMultiTileObjectModel	void SetObjOrient()
 8005202C	game/iobject.cpp	stub	RET_UNKNOWN operator>>(EStream &, ISimsCounterTopObject *&)		RET_UNKNOWN operator>>(EStream &, ISimsCounterTopObject *&)
 8005206C	game/iobject.cpp	stub	RET_UNKNOWN operator>>(EFile &, ISimsCounterTopObject *&)		RET_UNKNOWN operator>>(EFile &, ISimsCounterTopObject *&)
-800520AC	game/iobject.cpp	stub	ISimsCounterTopObject::ISimsCounterTopObject()	ISimsCounterTopObject	ISimsCounterTopObject()
-800520F4	game/iobject.cpp	stub	ISimsCounterTopObject::~ISimsCounterTopObject()	ISimsCounterTopObject	virtual ~ISimsCounterTopObject()
-80052154	game/iobject.cpp	stub	void ISimsCounterTopObject::Create(cXObject *, EHouse *)	ISimsCounterTopObject	virtual void Create(cXObject *, EHouse *)
-80052190	game/iobject.cpp	stub	void ISimsCounterTopObject::SetObjOrient()	ISimsCounterTopObject	void SetObjOrient()
+800520AC	game/iobject.cpp	ported	ISimsCounterTopObject::ISimsCounterTopObject()	ISimsCounterTopObject	ISimsCounterTopObject()
+800520F4	game/iobject.cpp	ported	ISimsCounterTopObject::~ISimsCounterTopObject()	ISimsCounterTopObject	virtual ~ISimsCounterTopObject()
+80052154	game/iobject.cpp	ported	void ISimsCounterTopObject::Create(cXObject *, EHouse *)	ISimsCounterTopObject	virtual void Create(cXObject *, EHouse *)
+80052190	game/iobject.cpp	ported	void ISimsCounterTopObject::SetObjOrient()	ISimsCounterTopObject	void SetObjOrient()
 80052564	game/iobject.cpp	stub	RET_UNKNOWN operator>>(EStream &, IShrubObject *&)		RET_UNKNOWN operator>>(EStream &, IShrubObject *&)
 800525A4	game/iobject.cpp	stub	RET_UNKNOWN operator>>(EFile &, IShrubObject *&)		RET_UNKNOWN operator>>(EFile &, IShrubObject *&)
-800525E4	game/iobject.cpp	stub	IShrubObject::IShrubObject()	IShrubObject	IShrubObject()
-8005262C	game/iobject.cpp	stub	IShrubObject::~IShrubObject()	IShrubObject	virtual ~IShrubObject()
-8005268C	game/iobject.cpp	stub	void IShrubObject::Create(cXObject *, EHouse *)	IShrubObject	virtual void Create(cXObject *, EHouse *)
-800526EC	game/iobject.cpp	stub	void IShrubObject::SetObjOrient()	IShrubObject	void SetObjOrient()
+800525E4	game/iobject.cpp	ported	IShrubObject::IShrubObject()	IShrubObject	IShrubObject()
+8005262C	game/iobject.cpp	ported	IShrubObject::~IShrubObject()	IShrubObject	virtual ~IShrubObject()
+8005268C	game/iobject.cpp	ported	void IShrubObject::Create(cXObject *, EHouse *)	IShrubObject	virtual void Create(cXObject *, EHouse *)
+800526EC	game/iobject.cpp	ported	void IShrubObject::SetObjOrient()	IShrubObject	void SetObjOrient()
 80052DEC	game/iobject.cpp	stub	RET_UNKNOWN ISimsObjectModel::IsMultiTilePart()	ISimsObjectModel	virtual RET_UNKNOWN IsMultiTilePart()
 80052E3C	game/iobject.cpp	ported	void ISimsObjectModel::ApplyMatrix(float, EVec3 &, EVec3 &)	ISimsObjectModel	void ApplyMatrix(float, EVec3 &, EVec3 &)
 80053C08	game/iobject.cpp	ported	void ISimsObjectModel::New()	ISimsObjectModel	static void New()
@@ -1285,35 +1285,35 @@
 80054128	game/iobject.cpp	ported	RET_UNKNOWN ISimsMultiTileObjectModel::GetReadVersion()	ISimsMultiTileObjectModel	static RET_UNKNOWN GetReadVersion()
 80054134	game/iobject.cpp	stub	void ISimsMultiTileObjectModel::RegisterType(unsigned short)	ISimsMultiTileObjectModel	static void RegisterType(unsigned short)
 80054188	game/iobject.cpp	stub	void ISimsMultiTileObjectModel::CreateCopy() const	ISimsMultiTileObjectModel	void CreateCopy() const
-800541A8	game/iobject.cpp	stub	void ISimsCounterTopObject::New()	ISimsCounterTopObject	static void New()
-800541FC	game/iobject.cpp	stub	void ISimsCounterTopObject::Construct(ISimsCounterTopObject *)	ISimsCounterTopObject	void Construct(ISimsCounterTopObject *)
-8005421C	game/iobject.cpp	stub	void ISimsCounterTopObject::Destruct(ISimsCounterTopObject *)	ISimsCounterTopObject	static void Destruct(ISimsCounterTopObject *)
-80054240	game/iobject.cpp	stub	void ISimsCounterTopObject::SafeDelete()	ISimsCounterTopObject	virtual void SafeDelete()
-80054280	game/iobject.cpp	stub	ETypeInfo* ISimsCounterTopObject::GetTypeInfo() const	ISimsCounterTopObject	virtual ETypeInfo* GetTypeInfo() const
-8005428C	game/iobject.cpp	stub	const char* ISimsCounterTopObject::GetTypeName() const	ISimsCounterTopObject	virtual const char* GetTypeName() const
-80054298	game/iobject.cpp	stub	unsigned int ISimsCounterTopObject::GetTypeKey() const	ISimsCounterTopObject	virtual unsigned int GetTypeKey() const
-800542A4	game/iobject.cpp	stub	unsigned short ISimsCounterTopObject::GetTypeVersion() const	ISimsCounterTopObject	virtual unsigned short GetTypeVersion() const
-800542B0	game/iobject.cpp	stub	RET_UNKNOWN ISimsCounterTopObject::GetTypeInfoStatic()	ISimsCounterTopObject	static RET_UNKNOWN GetTypeInfoStatic()
-800542BC	game/iobject.cpp	stub	RET_UNKNOWN ISimsCounterTopObject::GetReadVersion()	ISimsCounterTopObject	static RET_UNKNOWN GetReadVersion()
+800541A8	game/iobject.cpp	ported	void ISimsCounterTopObject::New()	ISimsCounterTopObject	static void New()
+800541FC	game/iobject.cpp	ported	void ISimsCounterTopObject::Construct(ISimsCounterTopObject *)	ISimsCounterTopObject	void Construct(ISimsCounterTopObject *)
+8005421C	game/iobject.cpp	ported	void ISimsCounterTopObject::Destruct(ISimsCounterTopObject *)	ISimsCounterTopObject	static void Destruct(ISimsCounterTopObject *)
+80054240	game/iobject.cpp	ported	void ISimsCounterTopObject::SafeDelete()	ISimsCounterTopObject	virtual void SafeDelete()
+80054280	game/iobject.cpp	ported	RET_UNKNOWN ISimsCounterTopObject::GetTypeInfo() const	ISimsCounterTopObject	virtual RET_UNKNOWN GetTypeInfo() const
+8005428C	game/iobject.cpp	ported	RET_UNKNOWN ISimsCounterTopObject::GetTypeName() const	ISimsCounterTopObject	virtual RET_UNKNOWN GetTypeName() const
+80054298	game/iobject.cpp	ported	RET_UNKNOWN ISimsCounterTopObject::GetTypeKey() const	ISimsCounterTopObject	virtual RET_UNKNOWN GetTypeKey() const
+800542A4	game/iobject.cpp	ported	RET_UNKNOWN ISimsCounterTopObject::GetTypeVersion() const	ISimsCounterTopObject	virtual RET_UNKNOWN GetTypeVersion() const
+800542B0	game/iobject.cpp	ported	RET_UNKNOWN ISimsCounterTopObject::GetTypeInfoStatic()	ISimsCounterTopObject	static RET_UNKNOWN GetTypeInfoStatic()
+800542BC	game/iobject.cpp	ported	RET_UNKNOWN ISimsCounterTopObject::GetReadVersion()	ISimsCounterTopObject	static RET_UNKNOWN GetReadVersion()
 800542C8	game/iobject.cpp	stub	void ISimsCounterTopObject::RegisterType(unsigned short)	ISimsCounterTopObject	static void RegisterType(unsigned short)
 8005431C	game/iobject.cpp	stub	void ISimsCounterTopObject::CreateCopy() const	ISimsCounterTopObject	void CreateCopy() const
-8005433C	game/iobject.cpp	stub	void IShrubObject::New()	IShrubObject	static void New()
-80054390	game/iobject.cpp	stub	void IShrubObject::Construct(IShrubObject *)	IShrubObject	void Construct(IShrubObject *)
-800543B0	game/iobject.cpp	stub	void IShrubObject::Destruct(IShrubObject *)	IShrubObject	static void Destruct(IShrubObject *)
-800543D4	game/iobject.cpp	stub	void IShrubObject::SafeDelete()	IShrubObject	virtual void SafeDelete()
-80054414	game/iobject.cpp	stub	ETypeInfo* IShrubObject::GetTypeInfo() const	IShrubObject	virtual ETypeInfo* GetTypeInfo() const
-80054420	game/iobject.cpp	stub	const char* IShrubObject::GetTypeName() const	IShrubObject	virtual const char* GetTypeName() const
-8005442C	game/iobject.cpp	stub	unsigned int IShrubObject::GetTypeKey() const	IShrubObject	virtual unsigned int GetTypeKey() const
-80054438	game/iobject.cpp	stub	unsigned short IShrubObject::GetTypeVersion() const	IShrubObject	virtual unsigned short GetTypeVersion() const
-80054444	game/iobject.cpp	stub	RET_UNKNOWN IShrubObject::GetTypeInfoStatic()	IShrubObject	static RET_UNKNOWN GetTypeInfoStatic()
-80054450	game/iobject.cpp	stub	RET_UNKNOWN IShrubObject::GetReadVersion()	IShrubObject	static RET_UNKNOWN GetReadVersion()
+8005433C	game/iobject.cpp	ported	void IShrubObject::New()	IShrubObject	static void New()
+80054390	game/iobject.cpp	ported	void IShrubObject::Construct(IShrubObject *)	IShrubObject	void Construct(IShrubObject *)
+800543B0	game/iobject.cpp	ported	void IShrubObject::Destruct(IShrubObject *)	IShrubObject	static void Destruct(IShrubObject *)
+800543D4	game/iobject.cpp	ported	void IShrubObject::SafeDelete()	IShrubObject	virtual void SafeDelete()
+80054414	game/iobject.cpp	ported	RET_UNKNOWN IShrubObject::GetTypeInfo() const	IShrubObject	virtual RET_UNKNOWN GetTypeInfo() const
+80054420	game/iobject.cpp	ported	RET_UNKNOWN IShrubObject::GetTypeName() const	IShrubObject	virtual RET_UNKNOWN GetTypeName() const
+8005442C	game/iobject.cpp	ported	RET_UNKNOWN IShrubObject::GetTypeKey() const	IShrubObject	virtual RET_UNKNOWN GetTypeKey() const
+80054438	game/iobject.cpp	ported	RET_UNKNOWN IShrubObject::GetTypeVersion() const	IShrubObject	virtual RET_UNKNOWN GetTypeVersion() const
+80054444	game/iobject.cpp	ported	RET_UNKNOWN IShrubObject::GetTypeInfoStatic()	IShrubObject	static RET_UNKNOWN GetTypeInfoStatic()
+80054450	game/iobject.cpp	ported	RET_UNKNOWN IShrubObject::GetReadVersion()	IShrubObject	static RET_UNKNOWN GetReadVersion()
 8005445C	game/iobject.cpp	stub	void IShrubObject::RegisterType(unsigned short)	IShrubObject	static void RegisterType(unsigned short)
 800544B0	game/iobject.cpp	stub	void IShrubObject::CreateCopy() const	IShrubObject	void CreateCopy() const
 800544D0	game/iobject.cpp	ported	void ISimsObjectModel::UpdateModel(ObjAnimDef *)	ISimsObjectModel	void UpdateModel(ObjAnimDef *)
 8005450C	game/iobject.cpp	ported	void ISimsObjectModel::UpdateShader(ObjAnimDef *)	ISimsObjectModel	void UpdateShader(ObjAnimDef *)
 8005455C	game/iobject.cpp	ported	void ISimsObjectModel::StartNewAnimTrack(ObjAnimDef *, bool)	ISimsObjectModel	void StartNewAnimTrack(ObjAnimDef *, bool)
 80054704	game/iobject.cpp	stub	void ISimsObjectModel::ProcessPropertyEventTags(ObjAnimDef *, float)	ISimsObjectModel	void ProcessPropertyEventTags(ObjAnimDef *, float)
-800548E0	game/iobject.cpp	stub	RET_UNKNOWN ISimsCounterTopObject::IsSinkId(cXObject *)	ISimsCounterTopObject	static RET_UNKNOWN IsSinkId(cXObject *)
+800548E0	game/iobject.cpp	ported	RET_UNKNOWN ISimsCounterTopObject::IsSinkId(cXObject *)	ISimsCounterTopObject	static RET_UNKNOWN IsSinkId(cXObject *)
 800549B0	game/iobjectman.cpp	ported	EIObjectMan::EIObjectMan(EHouse *)	EIObjectMan	EIObjectMan(EHouse *)
 800549F4	game/iobjectman.cpp	stub	RET_UNKNOWN EIObjectMan::IsValidID(unsigned int)	EIObjectMan	static RET_UNKNOWN IsValidID(unsigned int)
 80054A08	game/iobjectman.cpp	ported	void EIObjectMan::Init()	EIObjectMan	static void Init()
@@ -1330,7 +1330,7 @@
 800550B0	game/iobjectman.cpp	stub	bool EIObjectMan::IsEmpty()	EIObjectMan	bool IsEmpty()
 800550C0	game/iobjectman.cpp	ported	RET_UNKNOWN EIObjectMan::AllocSimsObjectInstance(cXObject *)	EIObjectMan	RET_UNKNOWN AllocSimsObjectInstance(cXObject *)
 800553E0	game/iobjectman.cpp	ported	void EIObjectMan::PostLoad()	EIObjectMan	void PostLoad()
-80055404	game/iobjectman.cpp	stub	void EIObjectMan::CountObjects(float &, float &, float &, float &)	EIObjectMan	void CountObjects(float &, float &, float &, float &)
+80055404	game/iobjectman.cpp	ported	void EIObjectMan::CountObjects(float &, float &, float &, float &)	EIObjectMan	void CountObjects(float &, float &, float &, float &)
 80055990	game/iobjectman.cpp	ported	RET_UNKNOWN EIObjectMan::ReOrientHouse(bool)	EIObjectMan	RET_UNKNOWN ReOrientHouse(bool)
 800559FC	game/iobjectman.cpp	stub	RET_UNKNOWN GetHandleFromISimInstance(ISimInstance *)		RET_UNKNOWN GetHandleFromISimInstance(ISimInstance *)
 80055A5C	game/iobjectman.cpp	stub	RET_UNKNOWN GetObjectInstance(unsigned int)		RET_UNKNOWN GetObjectInstance(unsigned int)
@@ -1401,7 +1401,7 @@
 8005799C	game/memorymeterwin.cpp	stub	void EMemoryMeterWin::Reset()	EMemoryMeterWin	static void Reset()
 800579A0	game/memorymeterwin.cpp	stub	void EMemoryMeterWin::SetState(Panelstateman__Panelstate)	EMemoryMeterWin	virtual void SetState(Panelstateman__Panelstate)
 800579C0	game/memorymeterwin.cpp	stub	RET_UNKNOWN EMemoryMeterWin::GetAffordable(ObjSelector *)	EMemoryMeterWin	RET_UNKNOWN GetAffordable(ObjSelector *)
-80057A1C	game/memorymeterwin.cpp	stub	void EMemoryMeterWin::PollMemoryLevels()	EMemoryMeterWin	void PollMemoryLevels()
+80057A1C	game/memorymeterwin.cpp	ported	void EMemoryMeterWin::PollMemoryLevels()	EMemoryMeterWin	void PollMemoryLevels()
 80057C14	game/memorymeterwin.cpp	stub	void EMemoryMeterWin::SetEvent(Panelstateman__PanelEvent, unsigned int)	EMemoryMeterWin	virtual void SetEvent(Panelstateman__PanelEvent, unsigned int)
 80057C18	game/morphutilities.cpp	ported	MorphUtilities::MorphUtilities(EIStaticModel **)	MorphUtilities	MorphUtilities(EIStaticModel **)
 80057C20	game/morphutilities.cpp	ported	MorphUtilities::~MorphUtilities()	MorphUtilities	~MorphUtilities()
@@ -1778,7 +1778,7 @@
 80071460	game/simmodel.cpp	ported	void SimModel::FlushLoadingModels()	SimModel	void FlushLoadingModels()
 800714C4	game/simmodel.cpp	stub	RET_UNKNOWN SimModel::VerifyRequiredModels() const	SimModel	RET_UNKNOWN VerifyRequiredModels() const
 800714CC	game/simmodel.cpp	stub	void SimModel::WeldAllSharedVertices()	SimModel	void WeldAllSharedVertices()
-80071558	game/simmodel.cpp	stub	void SimModel::WeldSharedVertices(eBodyPartS2C, eBodyPartS2C, bool)	SimModel	void WeldSharedVertices(eBodyPartS2C, eBodyPartS2C, bool)
+80071558	game/simmodel.cpp	ported	void SimModel::WeldSharedVertices(eBodyPartS2C, eBodyPartS2C, bool)	SimModel	void WeldSharedVertices(eBodyPartS2C, eBodyPartS2C, bool)
 80071620	game/simmodel.cpp	ported	void SimModel::ApplyAllLatticeMorphing()	SimModel	void ApplyAllLatticeMorphing()
 8007172C	game/simmodel.cpp	ported	void SimModel::ApplyLatticeMorphingToModelPart(eBodyPartS2C)	SimModel	void ApplyLatticeMorphingToModelPart(eBodyPartS2C)
 80071B1C	game/simmodel.cpp	ported	void SimModel::ApplyAllMorphTargets()	SimModel	void ApplyAllMorphTargets()
@@ -4363,10 +4363,10 @@
 800E2E04	game/object.cpp	stub	RET_UNKNOWN cXObjectImpl::SyncObjectIsReady()	cXObjectImpl	RET_UNKNOWN SyncObjectIsReady()
 800E2F14	game/object.cpp	ported	RET_UNKNOWN cXObjectImpl::RunTree(ObjEntryPoint, short, short *)	cXObjectImpl	RET_UNKNOWN RunTree(ObjEntryPoint, short, short *)
 800E2FE4	game/object.cpp	stub	void cXObjectImpl::SetDrawLabel(bool)	cXObjectImpl	void SetDrawLabel(bool)
-800E2FF8	game/object.cpp	stub	RET_UNKNOWN cXObjectImpl::OverrideRenderPosition(float &, float &)	cXObjectImpl	RET_UNKNOWN OverrideRenderPosition(float &, float &)
-800E301C	game/object.cpp	stub	void cXObjectImpl::SetOverrideRenderPosition(float, float)	cXObjectImpl	void SetOverrideRenderPosition(float, float)
-800E3030	game/object.cpp	stub	void cXObjectImpl::GetOverrideRenderPosition(float &, float &)	cXObjectImpl	void GetOverrideRenderPosition(float &, float &)
-800E3044	game/object.cpp	stub	void cXObjectImpl::ClearOverrideRenderPosition()	cXObjectImpl	void ClearOverrideRenderPosition()
+800E2FF8	game/object.cpp	ported	RET_UNKNOWN cXObjectImpl::OverrideRenderPosition(float &, float &)	cXObjectImpl	RET_UNKNOWN OverrideRenderPosition(float &, float &)
+800E301C	game/object.cpp	ported	void cXObjectImpl::SetOverrideRenderPosition(float, float)	cXObjectImpl	void SetOverrideRenderPosition(float, float)
+800E3030	game/object.cpp	ported	void cXObjectImpl::GetOverrideRenderPosition(float &, float &)	cXObjectImpl	void GetOverrideRenderPosition(float &, float &)
+800E3044	game/object.cpp	ported	void cXObjectImpl::ClearOverrideRenderPosition()	cXObjectImpl	void ClearOverrideRenderPosition()
 800E3050	game/object.cpp	ported	bool cXObjectImpl::IsVehicle()	cXObjectImpl	bool IsVehicle()
 800E3094	game/object.cpp	stub	bool cXObjectImpl::IsPerson()	cXObjectImpl	bool IsPerson()
 800E30D8	game/object.cpp	stub	RET_UNKNOWN cXObjectImpl::GetColorIndex() const	cXObjectImpl	RET_UNKNOWN GetColorIndex() const
@@ -5198,7 +5198,7 @@
 8012D140	game/playerfamilyimpl.cpp	ported	RET_UNKNOWN PlayerFamilyImpl::GetStatValue(int) const	PlayerFamilyImpl	virtual RET_UNKNOWN GetStatValue(int) const
 8012D160	game/playerfamilyimpl.cpp	ported	RET_UNKNOWN PlayerFamilyImpl::GetStatRef(int, short **)	PlayerFamilyImpl	virtual RET_UNKNOWN GetStatRef(int, short **)
 8012D1A4	game/playerfamilyimpl.cpp	ported	RET_UNKNOWN PlayerFamilyImpl::GetResfileStorageId(short)	PlayerFamilyImpl	virtual RET_UNKNOWN GetResfileStorageId(short)
-8012D1AC	game/playerfamilyimpl.cpp	stub	RET_UNKNOWN PlayerFamilyImpl::GetClothingUnlocks()	PlayerFamilyImpl	virtual RET_UNKNOWN GetClothingUnlocks()
+8012D1AC	game/playerfamilyimpl.cpp	ported	RET_UNKNOWN PlayerFamilyImpl::GetClothingUnlocks()	PlayerFamilyImpl	virtual RET_UNKNOWN GetClothingUnlocks()
 8012D1B4	game/playerfamilyimpl.cpp	stub	RET_UNKNOWN PlayerFamilyImpl::GetInventory()	PlayerFamilyImpl	virtual RET_UNKNOWN GetInventory()
 8012D1BC	game/playerfamilyimpl.cpp	stub	RET_UNKNOWN PlayerFamilyImpl::GetGoalAndUnlockData()	PlayerFamilyImpl	virtual RET_UNKNOWN GetGoalAndUnlockData()
 8012D1C4	game/playerfamilyimpl.cpp	stub	RET_UNKNOWN PlayerFamilyImpl::GetTotalAspirationScore() const	PlayerFamilyImpl	virtual RET_UNKNOWN GetTotalAspirationScore() const
@@ -6290,27 +6290,27 @@
 8015E994	game/treetablequickdata.cpp	stub	RET_UNKNOWN TreeTableQuickData::RemoveEntry(ITreeTableEntry *)	TreeTableQuickData	virtual RET_UNKNOWN RemoveEntry(ITreeTableEntry *)
 8015E99C	game/treetablequickdata.cpp	stub	void TreeTableQuickData::SetPrefixCheckTreeID(short)	TreeTableQuickData	virtual void SetPrefixCheckTreeID(short)
 8015E9A0	game/treetablequickdata.cpp	stub	RET_UNKNOWN TreeTableQuickData::GetImplementation() const	TreeTableQuickData	RET_UNKNOWN GetImplementation() const
-8015E9D4	game/casclothingunlocks.cpp	stub	CasClothingUnlocks::CasClothingUnlocks()	CasClothingUnlocks	CasClothingUnlocks()
-8015EAB8	game/casclothingunlocks.cpp	stub	CasClothingUnlocks::~CasClothingUnlocks()	CasClothingUnlocks	~CasClothingUnlocks()
-8015EB20	game/casclothingunlocks.cpp	stub	void CasClothingUnlocks::Unlock(bool, eBodyPartS2C, unsigned int, bool)	CasClothingUnlocks	void Unlock(bool, eBodyPartS2C, unsigned int, bool)
-8015EBA4	game/casclothingunlocks.cpp	stub	void CasClothingUnlocks::Unlock(bool, eTattooTextureTypeS2C, unsigned int, bool)	CasClothingUnlocks	void Unlock(bool, eTattooTextureTypeS2C, unsigned int, bool)
-8015EC28	game/casclothingunlocks.cpp	stub	void CasClothingUnlocks::Lock(bool, eBodyPartS2C, unsigned int)	CasClothingUnlocks	void Lock(bool, eBodyPartS2C, unsigned int)
-8015ECA0	game/casclothingunlocks.cpp	stub	void CasClothingUnlocks::Lock(bool, eTattooTextureTypeS2C, unsigned int)	CasClothingUnlocks	void Lock(bool, eTattooTextureTypeS2C, unsigned int)
-8015ED18	game/casclothingunlocks.cpp	stub	void CasClothingUnlocks::ClearRecentlyUnlocked(bool, eBodyPartS2C, unsigned int)	CasClothingUnlocks	void ClearRecentlyUnlocked(bool, eBodyPartS2C, unsigned int)
-8015ED80	game/casclothingunlocks.cpp	stub	void CasClothingUnlocks::ClearRecentlyUnlocked(bool, eTattooTextureTypeS2C, unsigned int)	CasClothingUnlocks	void ClearRecentlyUnlocked(bool, eTattooTextureTypeS2C, unsigned int)
-8015EDE4	game/casclothingunlocks.cpp	stub	RET_UNKNOWN CasClothingUnlocks::GetFlags(bool, eBodyPartS2C, unsigned int) const	CasClothingUnlocks	RET_UNKNOWN GetFlags(bool, eBodyPartS2C, unsigned int) const
-8015EE4C	game/casclothingunlocks.cpp	stub	RET_UNKNOWN CasClothingUnlocks::GetFlags(bool, eTattooTextureTypeS2C, unsigned int) const	CasClothingUnlocks	RET_UNKNOWN GetFlags(bool, eTattooTextureTypeS2C, unsigned int) const
-8015EEB0	game/casclothingunlocks.cpp	stub	RET_UNKNOWN CasClothingUnlocks::IsLocked(bool, eBodyPartS2C, unsigned int) const	CasClothingUnlocks	RET_UNKNOWN IsLocked(bool, eBodyPartS2C, unsigned int) const
-8015EF1C	game/casclothingunlocks.cpp	stub	RET_UNKNOWN CasClothingUnlocks::IsLocked(bool, eTattooTextureTypeS2C, unsigned int) const	CasClothingUnlocks	RET_UNKNOWN IsLocked(bool, eTattooTextureTypeS2C, unsigned int) const
-8015EF84	game/casclothingunlocks.cpp	stub	RET_UNKNOWN CasClothingUnlocks::IsRecentlyUnlocked(bool, eBodyPartS2C, unsigned int) const	CasClothingUnlocks	RET_UNKNOWN IsRecentlyUnlocked(bool, eBodyPartS2C, unsigned int) const
-8015EFF0	game/casclothingunlocks.cpp	stub	RET_UNKNOWN CasClothingUnlocks::IsRecentlyUnlocked(bool, eTattooTextureTypeS2C, unsigned int) const	CasClothingUnlocks	RET_UNKNOWN IsRecentlyUnlocked(bool, eTattooTextureTypeS2C, unsigned int) const
-8015F058	game/casclothingunlocks.cpp	stub	bool CasClothingUnlocks::CheckBodyIndex(unsigned int) const	CasClothingUnlocks	bool CheckBodyIndex(unsigned int) const
-8015F068	game/casclothingunlocks.cpp	stub	bool CasClothingUnlocks::CheckTextureIndex(unsigned int) const	CasClothingUnlocks	bool CheckTextureIndex(unsigned int) const
-8015F078	game/casclothingunlocks.cpp	stub	void CasClothingUnlocks::ClearUnlocks()	CasClothingUnlocks	void ClearUnlocks()
-8015F0D4	game/casclothingunlocks.cpp	stub	void CasClothingUnlocks::DoStream(ReconBuffer *, int)	CasClothingUnlocks	void DoStream(ReconBuffer *, int)
-8015F1CC	game/casclothingunlocks.cpp	stub	void CasClothingUnlocks::UnlockGroup(unsigned int, bool)	CasClothingUnlocks	void UnlockGroup(unsigned int, bool)
-8015F1F4	game/casclothingunlocks.cpp	stub	void CasClothingUnlocks::LockGroup(unsigned int)	CasClothingUnlocks	void LockGroup(unsigned int)
-8015F21C	game/casclothingunlocks.cpp	stub	void CasClothingUnlocks::MarkGroup(unsigned int, bool, bool)	CasClothingUnlocks	void MarkGroup(unsigned int, bool, bool)
+8015E9D4	game/casclothingunlocks.cpp	ported	CasClothingUnlocks::CasClothingUnlocks()	CasClothingUnlocks	CasClothingUnlocks()
+8015EAB8	game/casclothingunlocks.cpp	ported	CasClothingUnlocks::~CasClothingUnlocks()	CasClothingUnlocks	~CasClothingUnlocks()
+8015EB20	game/casclothingunlocks.cpp	ported	void CasClothingUnlocks::Unlock(bool, eBodyPartS2C, unsigned int, bool)	CasClothingUnlocks	void Unlock(bool, eBodyPartS2C, unsigned int, bool)
+8015EBA4	game/casclothingunlocks.cpp	ported	void CasClothingUnlocks::Unlock(bool, eTattooTextureTypeS2C, unsigned int, bool)	CasClothingUnlocks	void Unlock(bool, eTattooTextureTypeS2C, unsigned int, bool)
+8015EC28	game/casclothingunlocks.cpp	ported	void CasClothingUnlocks::Lock(bool, eBodyPartS2C, unsigned int)	CasClothingUnlocks	void Lock(bool, eBodyPartS2C, unsigned int)
+8015ECA0	game/casclothingunlocks.cpp	ported	void CasClothingUnlocks::Lock(bool, eTattooTextureTypeS2C, unsigned int)	CasClothingUnlocks	void Lock(bool, eTattooTextureTypeS2C, unsigned int)
+8015ED18	game/casclothingunlocks.cpp	ported	void CasClothingUnlocks::ClearRecentlyUnlocked(bool, eBodyPartS2C, unsigned int)	CasClothingUnlocks	void ClearRecentlyUnlocked(bool, eBodyPartS2C, unsigned int)
+8015ED80	game/casclothingunlocks.cpp	ported	void CasClothingUnlocks::ClearRecentlyUnlocked(bool, eTattooTextureTypeS2C, unsigned int)	CasClothingUnlocks	void ClearRecentlyUnlocked(bool, eTattooTextureTypeS2C, unsigned int)
+8015EDE4	game/casclothingunlocks.cpp	ported	RET_UNKNOWN CasClothingUnlocks::GetFlags(bool, eBodyPartS2C, unsigned int) const	CasClothingUnlocks	RET_UNKNOWN GetFlags(bool, eBodyPartS2C, unsigned int) const
+8015EE4C	game/casclothingunlocks.cpp	ported	RET_UNKNOWN CasClothingUnlocks::GetFlags(bool, eTattooTextureTypeS2C, unsigned int) const	CasClothingUnlocks	RET_UNKNOWN GetFlags(bool, eTattooTextureTypeS2C, unsigned int) const
+8015EEB0	game/casclothingunlocks.cpp	ported	RET_UNKNOWN CasClothingUnlocks::IsLocked(bool, eBodyPartS2C, unsigned int) const	CasClothingUnlocks	RET_UNKNOWN IsLocked(bool, eBodyPartS2C, unsigned int) const
+8015EF1C	game/casclothingunlocks.cpp	ported	RET_UNKNOWN CasClothingUnlocks::IsLocked(bool, eTattooTextureTypeS2C, unsigned int) const	CasClothingUnlocks	RET_UNKNOWN IsLocked(bool, eTattooTextureTypeS2C, unsigned int) const
+8015EF84	game/casclothingunlocks.cpp	ported	RET_UNKNOWN CasClothingUnlocks::IsRecentlyUnlocked(bool, eBodyPartS2C, unsigned int) const	CasClothingUnlocks	RET_UNKNOWN IsRecentlyUnlocked(bool, eBodyPartS2C, unsigned int) const
+8015EFF0	game/casclothingunlocks.cpp	ported	RET_UNKNOWN CasClothingUnlocks::IsRecentlyUnlocked(bool, eTattooTextureTypeS2C, unsigned int) const	CasClothingUnlocks	RET_UNKNOWN IsRecentlyUnlocked(bool, eTattooTextureTypeS2C, unsigned int) const
+8015F058	game/casclothingunlocks.cpp	ported	bool CasClothingUnlocks::CheckBodyIndex(unsigned int) const	CasClothingUnlocks	bool CheckBodyIndex(unsigned int) const
+8015F068	game/casclothingunlocks.cpp	ported	bool CasClothingUnlocks::CheckTextureIndex(unsigned int) const	CasClothingUnlocks	bool CheckTextureIndex(unsigned int) const
+8015F078	game/casclothingunlocks.cpp	ported	void CasClothingUnlocks::ClearUnlocks()	CasClothingUnlocks	void ClearUnlocks()
+8015F0D4	game/casclothingunlocks.cpp	ported	void CasClothingUnlocks::DoStream(ReconBuffer *, int)	CasClothingUnlocks	void DoStream(ReconBuffer *, int)
+8015F1CC	game/casclothingunlocks.cpp	ported	void CasClothingUnlocks::UnlockGroup(unsigned int, bool)	CasClothingUnlocks	void UnlockGroup(unsigned int, bool)
+8015F1F4	game/casclothingunlocks.cpp	ported	void CasClothingUnlocks::LockGroup(unsigned int)	CasClothingUnlocks	void LockGroup(unsigned int)
+8015F21C	game/casclothingunlocks.cpp	ported	void CasClothingUnlocks::MarkGroup(unsigned int, bool, bool)	CasClothingUnlocks	void MarkGroup(unsigned int, bool, bool)
 8015F390	game/casclothingunlocks.cpp	stub	void CasClothingUnlocks::PrintUnlocks(CasSimDescriptionS2C *) const	CasClothingUnlocks	void PrintUnlocks(CasSimDescriptionS2C *) const
 8015F524	game/cascostumes.cpp	ported	CasCostumes::CasCostumes()	CasCostumes	CasCostumes()
 8015F55C	game/cascostumes.cpp	ported	CasCostumes::~CasCostumes()	CasCostumes	~CasCostumes()
@@ -6431,11 +6431,11 @@
 801679E4	game/cassimdescription.cpp	ported	RET_UNKNOWN CasSimDescriptionS2C::GetBodyPartParam(eBodyPartS2C) const	CasSimDescriptionS2C	RET_UNKNOWN GetBodyPartParam(eBodyPartS2C) const
 80167B7C	game/cassimdescription.cpp	stub	void CasSimDescriptionS2C::ReadOldDescription(ReconBuffer *)	CasSimDescriptionS2C	void ReadOldDescription(ReconBuffer *)
 80167F00	game/cassimdescription.cpp	ported	void CasSimDescriptionS2C::DoStream(ReconBuffer *, int)	CasSimDescriptionS2C	static void DoStream(ReconBuffer *, int)
-80168408	game/cassimdescription.cpp	stub	void CasSimDescriptionS2C::AssertWithInfo(char *)	CasSimDescriptionS2C	void AssertWithInfo(char *)
+80168408	game/cassimdescription.cpp	ported	void CasSimDescriptionS2C::AssertWithInfo(char *)	CasSimDescriptionS2C	void AssertWithInfo(char *)
 8016850C	game/cassimdescription.cpp	ported	void CasSimDescriptionS2C::Verify()	CasSimDescriptionS2C	void Verify()
-80169468	game/cassimdescription.cpp	stub	void CasSimDescriptionS2C::VerifyBodyPartNoTexture(CasSimPartsS2C &, eBodyPartS2C, signed char &, signed char, bool)	CasSimDescriptionS2C	void VerifyBodyPartNoTexture(CasSimPartsS2C &, eBodyPartS2C, signed char &, signed char, bool)
-80169578	game/cassimdescription.cpp	stub	RET_UNKNOWN CasSimDescriptionS2C::VerifyBodyPartWithNoOptions(CasSimPartsS2C &, eBodyPartS2C, signed char &, signed char &, signed char, signed char, bool)	CasSimDescriptionS2C	RET_UNKNOWN VerifyBodyPartWithNoOptions(CasSimPartsS2C &, eBodyPartS2C, signed char &, signed char &, signed char, signed char, bool)
-8016977C	game/cassimdescription.cpp	stub	RET_UNKNOWN CasSimDescriptionS2C::VerifyBodyPartWithOneOption(CasSimPartsS2C &, eBodyPartS2C, signed char &, signed char &, signed char &, signed char, signed char, signed char, bool)	CasSimDescriptionS2C	RET_UNKNOWN VerifyBodyPartWithOneOption(CasSimPartsS2C &, eBodyPartS2C, signed char &, signed char &, signed char &, signed char, signed char, signed char, bool)
+80169468	game/cassimdescription.cpp	ported	void CasSimDescriptionS2C::VerifyBodyPartNoTexture(CasSimPartsS2C &, eBodyPartS2C, signed char &, signed char, bool)	CasSimDescriptionS2C	void VerifyBodyPartNoTexture(CasSimPartsS2C &, eBodyPartS2C, signed char &, signed char, bool)
+80169578	game/cassimdescription.cpp	ported	RET_UNKNOWN CasSimDescriptionS2C::VerifyBodyPartWithNoOptions(CasSimPartsS2C &, eBodyPartS2C, signed char &, signed char &, signed char, signed char, bool)	CasSimDescriptionS2C	RET_UNKNOWN VerifyBodyPartWithNoOptions(CasSimPartsS2C &, eBodyPartS2C, signed char &, signed char &, signed char, signed char, bool)
+8016977C	game/cassimdescription.cpp	ported	RET_UNKNOWN CasSimDescriptionS2C::VerifyBodyPartWithOneOption(CasSimPartsS2C &, eBodyPartS2C, signed char &, signed char &, signed char &, signed char, signed char, signed char, bool)	CasSimDescriptionS2C	RET_UNKNOWN VerifyBodyPartWithOneOption(CasSimPartsS2C &, eBodyPartS2C, signed char &, signed char &, signed char &, signed char, signed char, signed char, bool)
 801699FC	game/cassimdescription.cpp	ported	RET_UNKNOWN CasSimDescriptionS2C::SetInnerLayerTorsoStyle(CasSimPartsS2C &)	CasSimDescriptionS2C	RET_UNKNOWN SetInnerLayerTorsoStyle(CasSimPartsS2C &)
 80169A40	game/cassimdescription.cpp	ported	void CasSimDescriptionS2C::SwitchInnerLayerTorso(bool)	CasSimDescriptionS2C	void SwitchInnerLayerTorso(bool)
 80169A5C	game/cassimdescription.cpp	ported	void CasSimDescriptionS2C::SwitchMidLayerTorso(bool)	CasSimDescriptionS2C	void SwitchMidLayerTorso(bool)
@@ -6481,8 +6481,8 @@
 8016CDD8	game/cassimparts.cpp	ported	RET_UNKNOWN CasSimPartsS2C::OuterLayerCollarIsAHood(unsigned int, Sim__OuterLayerCollarStyleS2C) const	CasSimPartsS2C	RET_UNKNOWN OuterLayerCollarIsAHood(unsigned int, Sim__OuterLayerCollarStyleS2C) const
 8016CE80	game/cassimparts.cpp	ported	RET_UNKNOWN CasSimPartsS2C::OuterLayerTorsoIsAHood(unsigned int, Sim__OuterLayerTorsoStyleS2C) const	CasSimPartsS2C	RET_UNKNOWN OuterLayerTorsoIsAHood(unsigned int, Sim__OuterLayerTorsoStyleS2C) const
 8016CED8	game/cassimparts.cpp	ported	RET_UNKNOWN CasSimPartsS2C::CanBeWornSleeveless(eBodyPartS2C, unsigned int, Sim__SimPartsS2CParam) const	CasSimPartsS2C	RET_UNKNOWN CanBeWornSleeveless(eBodyPartS2C, unsigned int, Sim__SimPartsS2CParam) const
-8016CF78	game/cassimparts.cpp	stub	RET_UNKNOWN CasSimPartsS2C::MidLayerTorsoHidesBelt(unsigned int, Sim__MidLayerTorsoStyleS2C, unsigned int) const	CasSimPartsS2C	RET_UNKNOWN MidLayerTorsoHidesBelt(unsigned int, Sim__MidLayerTorsoStyleS2C, unsigned int) const
-8016CFF8	game/cassimparts.cpp	stub	RET_UNKNOWN CasSimPartsS2C::OuterLayerTorsoHidesBelt(unsigned int, Sim__OuterLayerTorsoStyleS2C, unsigned int) const	CasSimPartsS2C	RET_UNKNOWN OuterLayerTorsoHidesBelt(unsigned int, Sim__OuterLayerTorsoStyleS2C, unsigned int) const
+8016CF78	game/cassimparts.cpp	ported	RET_UNKNOWN CasSimPartsS2C::MidLayerTorsoHidesBelt(unsigned int, Sim__MidLayerTorsoStyleS2C, unsigned int) const	CasSimPartsS2C	RET_UNKNOWN MidLayerTorsoHidesBelt(unsigned int, Sim__MidLayerTorsoStyleS2C, unsigned int) const
+8016CFF8	game/cassimparts.cpp	ported	RET_UNKNOWN CasSimPartsS2C::OuterLayerTorsoHidesBelt(unsigned int, Sim__OuterLayerTorsoStyleS2C, unsigned int) const	CasSimPartsS2C	RET_UNKNOWN OuterLayerTorsoHidesBelt(unsigned int, Sim__OuterLayerTorsoStyleS2C, unsigned int) const
 8016D078	game/cassimparts.cpp	ported	RET_UNKNOWN CasSimPartsS2C::GetUnlockGroupNum(eBodyPartS2C, unsigned int) const	CasSimPartsS2C	RET_UNKNOWN GetUnlockGroupNum(eBodyPartS2C, unsigned int) const
 8016D294	game/cassimparts.cpp	ported	RET_UNKNOWN CasSimPartsS2C::GetUnlockGroupNum(eTattooTextureTypeS2C, unsigned int) const	CasSimPartsS2C	RET_UNKNOWN GetUnlockGroupNum(eTattooTextureTypeS2C, unsigned int) const
 8016D388	game/cassimparts.cpp	ported	void CasSimPartsS2C::GetTattoosForLocation(eTattooTextureTypeS2C, unsigned char *) const	CasSimPartsS2C	void GetTattoosForLocation(eTattooTextureTypeS2C, unsigned char *) const
@@ -6490,9 +6490,9 @@
 8016D460	game/cassimparts.cpp	stub	void CasSimPartsS2C::GetIndexFromResId(eBodyPartS2C, int, Sim__SimPartsS2CParam, int *)	CasSimPartsS2C	void GetIndexFromResId(eBodyPartS2C, int, Sim__SimPartsS2CParam, int *)
 8016D508	game/cassimparts.cpp	ported	RET_UNKNOWN CasSimPartsS2C::GetGameStateModelID(unsigned int) const	CasSimPartsS2C	RET_UNKNOWN GetGameStateModelID(unsigned int) const
 8016D534	game/cassimparts.cpp	ported	void CasSimPartsS2C::GetGameStateTextureID(unsigned int) const	CasSimPartsS2C	void GetGameStateTextureID(unsigned int) const
-8016D560	game/cassimparts.cpp	stub	RET_UNKNOWN CasSimPartsS2C::GetWeldableBodyPartConnections(eBodyPartS2C, unsigned int *, unsigned int)	CasSimPartsS2C	RET_UNKNOWN GetWeldableBodyPartConnections(eBodyPartS2C, unsigned int *, unsigned int)
-8016D730	game/cassimparts.cpp	stub	RET_UNKNOWN CasSimPartsS2C::GetNumBodyPartOptions(eBodyPartS2C)	CasSimPartsS2C	RET_UNKNOWN GetNumBodyPartOptions(eBodyPartS2C)
-8016D820	game/cassimparts.cpp	stub	RET_UNKNOWN CasSimPartsS2C::GetBodyPartName(eBodyPartS2C)	CasSimPartsS2C	RET_UNKNOWN GetBodyPartName(eBodyPartS2C)
+8016D560	game/cassimparts.cpp	ported	RET_UNKNOWN CasSimPartsS2C::GetWeldableBodyPartConnections(eBodyPartS2C, unsigned int *, unsigned int)	CasSimPartsS2C	RET_UNKNOWN GetWeldableBodyPartConnections(eBodyPartS2C, unsigned int *, unsigned int)
+8016D730	game/cassimparts.cpp	ported	RET_UNKNOWN CasSimPartsS2C::GetNumBodyPartOptions(eBodyPartS2C)	CasSimPartsS2C	RET_UNKNOWN GetNumBodyPartOptions(eBodyPartS2C)
+8016D820	game/cassimparts.cpp	ported	RET_UNKNOWN CasSimPartsS2C::GetBodyPartName(eBodyPartS2C)	CasSimPartsS2C	RET_UNKNOWN GetBodyPartName(eBodyPartS2C)
 8016D8B4	game/cassimparts.cpp	stub	void CasSimPartsS2C::VerifyBodyPartsData()	CasSimPartsS2C	void VerifyBodyPartsData()
 8016EEE0	game/cassimrenderer.cpp	ported	CasSimRenderer::CasSimRenderer()	CasSimRenderer	CasSimRenderer()
 8016EF38	game/cassimrenderer.cpp	ported	CasSimRenderer::~CasSimRenderer()	CasSimRenderer	virtual ~CasSimRenderer()
@@ -6566,12 +6566,12 @@
 80175228	game/cassimstate.cpp	ported	void CasSimState::SetSimName(unsigned short *, unsigned short *)	CasSimState	void SetSimName(unsigned short *, unsigned short *)
 80175294	game/cassimstate.cpp	ported	RET_UNKNOWN CasSimState::GetSimDescription()	CasSimState	RET_UNKNOWN GetSimDescription()
 8017529C	game/cassimstate.cpp	ported	RET_UNKNOWN CasSimState::GetStoredSimDescription()	CasSimState	RET_UNKNOWN GetStoredSimDescription()
-801752A4	game/castweaktool.cpp	stub	CasTweakTool::CasTweakTool()	CasTweakTool	CasTweakTool()
-801752CC	game/castweaktool.cpp	stub	CasTweakTool::~CasTweakTool()	CasTweakTool	virtual ~CasTweakTool()
+801752A4	game/castweaktool.cpp	ported	CasTweakTool::CasTweakTool()	CasTweakTool	CasTweakTool()
+801752CC	game/castweaktool.cpp	ported	CasTweakTool::~CasTweakTool()	CasTweakTool	virtual ~CasTweakTool()
 80175300	game/castweaktool.cpp	stub	void CasTweakTool::GetLights(ELights &)	CasTweakTool	void GetLights(ELights &)
 80175358	game/castweaktool.cpp	stub	void CasTweakTool::SetLights(ELights &)	CasTweakTool	void SetLights(ELights &)
-801753B0	game/castweaktool.cpp	stub	void CasTweakTool::GetCamera(EVec3 &, EVec3 &)	CasTweakTool	void GetCamera(EVec3 &, EVec3 &)
-801753EC	game/castweaktool.cpp	stub	void CasTweakTool::SetCamera(EVec3 &, EVec3 &)	CasTweakTool	void SetCamera(EVec3 &, EVec3 &)
+801753B0	game/castweaktool.cpp	ported	void CasTweakTool::GetCamera(EVec3 &, EVec3 &)	CasTweakTool	void GetCamera(EVec3 &, EVec3 &)
+801753EC	game/castweaktool.cpp	ported	void CasTweakTool::SetCamera(EVec3 &, EVec3 &)	CasTweakTool	void SetCamera(EVec3 &, EVec3 &)
 8017547C	game/castweaktool.cpp	stub	CasTweakTool::CasTweakTool()	CasTweakTool	CasTweakTool()
 801754A8	game/castweaktool.cpp	stub	CasTweakTool::CasTweakTool()	CasTweakTool	CasTweakTool()
 801754D4	game/casscenedefault.cpp	ported	CasSceneDefault::CasSceneDefault()	CasSceneDefault	CasSceneDefault()
@@ -8889,7 +8889,7 @@
 80228EA8	game/e_instance.cpp	stub	RET_UNKNOWN CompareIntensity(void *, void *)		RET_UNKNOWN CompareIntensity(void *, void *)
 80228EF4	game/e_instance.cpp	stub	void LightArray::Init()	LightArray	void Init()
 80228F00	game/e_instance.cpp	ported	void EInstance::CalcLights(EVec3 &, ELights &, bool)	EInstance	void CalcLights(EVec3 &, ELights &, bool)
-8022907C	game/e_instance.cpp	stub	void EInstance::CalcLights4(EVec3 &, ELights &, bool)	EInstance	void CalcLights4(EVec3 &, ELights &, bool)
+8022907C	game/e_instance.cpp	ported	void EInstance::CalcLights4(EVec3 &, ELights &, bool)	EInstance	void CalcLights4(EVec3 &, ELights &, bool)
 802291F8	game/e_instance.cpp	ported	void EInstance::InsertInOrderTable(EOrderTableData &)	EInstance	static void InsertInOrderTable(EOrderTableData &)
 8022921C	game/e_instance.cpp	ported	void EInstance::SetContext(int)	EInstance	static void SetContext(int)
 80229224	game/e_instance.cpp	ported	RET_UNKNOWN EInstance::GetContext()	EInstance	static RET_UNKNOWN GetContext()
@@ -12634,10 +12634,10 @@
 80318B84	engine/e_rmodel.cpp	ported	void ERModel::DrawShadow(ERC *, float)	ERModel	void DrawShadow(ERC *, float)
 80318DA4	engine/e_rmodel.cpp	ported	void ERModel::DrawShadowWithStencilInverted(ERC *)	ERModel	void DrawShadowWithStencilInverted(ERC *)
 80318FB0	engine/e_rmodel.cpp	ported	void ERModel::DrawHierarchical(ERC *, EMat4 *, EACNodeState *, int)	ERModel	void DrawHierarchical(ERC *, EMat4 *, EACNodeState *, int)
-80319214	engine/e_rmodel.cpp	stub	void ERModel::GetWeldPos(EWeldVert *)	ERModel	void GetWeldPos(EWeldVert *)
-803192C0	engine/e_rmodel.cpp	stub	void ERModel::SetWeldPos(EWeldVert *, EVec3 &)	ERModel	void SetWeldPos(EWeldVert *, EVec3 &)
-80319350	engine/e_rmodel.cpp	stub	void ERModel::WeldSharedVerts(ERModel *, float)	ERModel	void WeldSharedVerts(ERModel *, float)
-80319E84	engine/e_rmodel.cpp	stub	void ERModel::RebuildAfterWelding()	ERModel	static void RebuildAfterWelding()
+80319214	engine/e_rmodel.cpp	ported	void ERModel::GetWeldPos(EWeldVert *)	ERModel	void GetWeldPos(EWeldVert *)
+803192C0	engine/e_rmodel.cpp	ported	void ERModel::SetWeldPos(EWeldVert *, EVec3 &)	ERModel	void SetWeldPos(EWeldVert *, EVec3 &)
+80319350	engine/e_rmodel.cpp	ported	void ERModel::WeldSharedVerts(ERModel *, float)	ERModel	void WeldSharedVerts(ERModel *, float)
+80319E84	engine/e_rmodel.cpp	ported	void ERModel::RebuildAfterWelding()	ERModel	static void RebuildAfterWelding()
 80319E88	engine/e_rmodel.cpp	ported	void ERModel::GenerateMorphTargetDeltas(ERModel *)	ERModel	void GenerateMorphTargetDeltas(ERModel *)
 80319F08	engine/e_rmodel.cpp	ported	RET_UNKNOWN ERModel::RegisterMorphTarget(ERModel *, int)	ERModel	RET_UNKNOWN RegisterMorphTarget(ERModel *, int)
 80319FD0	engine/e_rmodel.cpp	ported	RET_UNKNOWN ERModel::RegisterMorphTarget(int, int)	ERModel	RET_UNKNOWN RegisterMorphTarget(int, int)

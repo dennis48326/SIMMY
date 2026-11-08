@@ -1,12 +1,14 @@
 // Port of game/family.cpp (Family, FamilyImpl) and game/playerfamilyimpl.cpp (PlayerFamilyImpl): a
 // family's members, house, money and flags, streamed as the neighbourhood file's 'FAMI' resources.
-// A player family's inventory (BBI::InventoryItems), goals and unlocks (GoalUnlock) and clothing
-// unlocks (CasClothingUnlocks) are kept as their streamed data; their classes are not ported.
+// A player family's inventory (BBI::InventoryItems) and goals and unlocks (GoalUnlock) are kept as their
+// streamed data; their classes are not ported. The clothing unlocks are a CasClothingUnlocks.
 // Not ported: putting the family on the lot (CreateFamilyInLot: the object module's people), friend
 // counts and net worth.
 #include "simmy/types_gen.hpp"
 #include "simmy/unported_globals.hpp"
 
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 namespace {
@@ -213,12 +215,9 @@ int FamilyImpl::GetStatRef(int, short**) { return 0; }
 // PlayerFamilyImpl
 
 // 8012CF68
-// GC: the clothing unlocks start at 2 (CasClothingUnlocks::ClearUnlocks, then UnlockGroup(0), not
-// ported).
-PlayerFamilyImpl::PlayerFamilyImpl(int number) : FamilyImpl(number) {
-  std::memset(m_clothingUnlocks, 2, sizeof m_clothingUnlocks);
-  std::memset(m_tattooUnlocks, 2, sizeof m_tattooUnlocks);
-}
+// (The clothing unlocks start all clear, CasClothingUnlocks' constructor; ClearFamily sets the starting
+// set.)
+PlayerFamilyImpl::PlayerFamilyImpl(int number) : FamilyImpl(number) {}
 
 // 8012CFD0
 PlayerFamilyImpl::~PlayerFamilyImpl() {}
@@ -229,8 +228,7 @@ void PlayerFamilyImpl::ClearFamily() {
   std::memset(m_goals, 0, sizeof m_goals);  // GoalUnlock::ClearGoalsAndUnlocks
   for (bool& h : m_haveItem) h = false;     // BBI::InventoryItems::Clear
   for (InventoryItem& i : m_items) i = InventoryItem();
-  std::memset(m_clothingUnlocks, 2, sizeof m_clothingUnlocks);  // CasClothingUnlocks::ClearUnlocks
-  std::memset(m_tattooUnlocks, 2, sizeof m_tattooUnlocks);
+  m_clothingUnlocks.ClearUnlocks();
   std::memset(m_stats, 0, sizeof m_stats);
   m_totalAspirationScore = 0;
 }
@@ -269,14 +267,41 @@ void PlayerFamilyImpl::DoStream(ReconBuffer* b, int version) {
   } else {
     b->Recon16(m_goals, 0x40);
   }
-  if (version < 0x10) {
-    if (read) {
-      std::memset(m_clothingUnlocks, 2, sizeof m_clothingUnlocks);
-      std::memset(m_tattooUnlocks, 2, sizeof m_tattooUnlocks);
+  m_clothingUnlocks.DoStream(b, version);
+  // PC: saves the port wrote before CasClothingUnlocks was ported. A family the port cleared has every
+  // style locked and never ran ClearUnlocks' UnlockGroup(0); and fashion goals (GoalUnlock kind 1) were
+  // granted while TryCompleteGoal could not unlock their group. On GC a granted fashion goal's group is
+  // always unlocked and group 0 is never locked again, so this changes nothing in a GC-made state: the
+  // starting set comes back, and each granted group with a style still locked is unlocked, marked "new"
+  // (GC leaves the marks until CAS shows the style).
+  if (read) {
+    int fixed = 0;
+    if (m_clothingUnlocks.IsUnportedPortSave()) {
+      m_clothingUnlocks.UnlockGroup(0, false);
+      ++fixed;
     }
-  } else {
-    for (auto& g : m_clothingUnlocks) b->Recon8(g, 0x500);
-    for (auto& g : m_tattooUnlocks) b->Recon8(g, 0xf0);
+    GoalUnlock goals(m_goals);
+    bool locked[0x100];
+    bool scanned = false;
+    for (short i = 0; i < goals.GetUnlockCount(IGoalUnlock__UnlockType{1}); ++i) {
+      if (!goals.IsUnlocked(IGoalUnlock__UnlockType{1}, i)) continue;
+      if (!scanned) m_clothingUnlocks.GetLockedGroups(locked), scanned = true;
+      if (!locked[i]) continue;
+      m_clothingUnlocks.UnlockGroup(static_cast<unsigned int>(i), true);
+      ++fixed;
+    }
+    if (fixed)
+      std::printf("[unlocks] family %d: an older port save; %d clothing group(s) unlocked\n", m_number, fixed);
+  }
+  // PC development aid: SIMMY_UNLOCK_CLOTHING=g1,g2 unlocks those clothing groups (marked "new", as a
+  // fashion goal does) in the player family when it is read.
+  static const char* devClothing = std::getenv("SIMMY_UNLOCK_CLOTHING");
+  if (read && devClothing && m_number == 1) {
+    for (const char* c = devClothing; *c;) {
+      m_clothingUnlocks.UnlockGroup(static_cast<unsigned int>(std::atoi(c)), true);
+      while (*c && *c != ',') ++c;
+      if (*c == ',') ++c;
+    }
   }
   b->Recon16(m_stats, 0x19);
   if (version < 0x12) m_totalAspirationScore = 0;
@@ -300,3 +325,6 @@ int PlayerFamilyImpl::GetStatRef(int index, short** ref) {
 
 // 8012D1A4
 short PlayerFamilyImpl::GetResfileStorageId(short number) { return static_cast<short>(number | 0x4000); }
+
+// 8012D1AC
+CasClothingUnlocks* PlayerFamilyImpl::GetClothingUnlocks() { return &m_clothingUnlocks; }

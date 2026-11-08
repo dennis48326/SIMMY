@@ -100,6 +100,11 @@
 ;mouse_zoom_speed = 1
 ;mouse_invert_wheel = off
 
+; Game: the fire-code meter in buy and build mode. on (default): as on the GameCube, the meter fills
+; with the lot's objects and the models they use, warns at two thirds and near full, and refuses new
+; objects once it is full. off: the meter stays empty and the lot has no object limit.
+;fire_code_limit = on
+
 ; Player 1's keys: "action = key, key, ..." ("none" for no key). Key names: a-z, 0-9, f1-f12, space,
 ; return (enter), kp_enter, escape (esc), backspace, tab, lshift, rshift, shift, lctrl, rctrl, ctrl,
 ; lalt, ralt, alt, up, down, left, right, pageup, pagedown, home, end, insert, delete, capslock,

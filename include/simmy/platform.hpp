@@ -171,6 +171,8 @@ void window2_present(bool windows);
 bool window2_open();
 bool window2_pixel_size(unsigned& width, unsigned& height);
 bool dev_two_player();
+// fire_code_limit= in simmy.ini (pc_settings.cpp): the GameCube's lot object limit (fire-code meter) is on.
+bool settings_fire_code_limit();
 
 // ---- Widescreen (pc_splitscreen.cpp, pc_hud.cpp; settings in pc_settings.cpp) ----
 // aspect=16:9 (single player): the frame fills the window (aurora's "stretch" viewport policy) and

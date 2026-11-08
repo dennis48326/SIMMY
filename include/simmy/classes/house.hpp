@@ -48,3 +48,7 @@ extern HouseImpl* Globs_pHouse;  // Globs::pHouse (GC: a House*)
 // PC: GlobalDispatch (800B42BC) to the house, the one Commander the port has for these messages
 // (HouseImpl::DoCommand: 0xEC, 0xED, 0xEF, 0xD8, 0xD9, 0xDE, 0xFE, 0x100).
 void HouseDispatch(short message, int param);
+// PC: the object module as a listener (ObjectModuleImpl::DoCommand 800F6AB4, its 0xEE case only: an
+// object's graphics or room changed, so its room's lighting is recomputed, GlobalDispatch 0xED). Called
+// where the port broadcasts 0xEE (TryUpdate).
+void ObjectModuleDispatch(short message, int param);

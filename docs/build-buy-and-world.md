@@ -51,7 +51,11 @@ time of day's bonus); the inside area goes to simulator global 0x1B. Windows add
 ambient level (`GetOutsideAmbientLevel` 80136FB4) reads `Globs::pLightingParameters`, which nothing on GC
 writes (0). Recomputed when dirty from `ELiveMode::Update` (`UpdateRooms` 80136800, then the house's lot
 data), on the world's room change (GlobalDispatch 0xEC), an object with a room impact changing rooms (0xEF:
-both rooms) and primitive 0x07 TryUpdate 2. The person's room motive is its current room's score
+both rooms) and primitive 0x07 TryUpdate 2. Primitive 0x07 TryUpdate (801058E0) also covers 1 (GlobalDispatch
+0xEE: the object module re-sends 0xED with the object's room, which marks that room's statistics and light
+stale: a lamp a tree switches changes its room's light; PC: `ObjectModuleDispatch` in house.cpp, the 0xEE
+case of `ObjectModuleImpl::DoCommand` 800F6AB4), 3 (the object's model placed again, `SetObjOrient`) and 4
+(the lot data, `HouseImpl::ComputeAndStoreLotData`). The person's room motive is its current room's score
 (simulation.md). `SIMMY_ROOM_TRACE=1` prints the constants and each recomputed room.
 
 **The house** (`HouseImpl`, house.cpp): its family (the family living in the house, else family 0, set
@@ -82,6 +86,7 @@ is its tile's object again at load.
 | `EHouse` | livemode.cpp, houserecalc.cpp | Build, cleanup, wall modes (up / cut-away / down: `SIMMY_WALLS`), room lights, weather, `Update`/`Draw` |
 | `ERLevel::Draw` 80234C98 | [`e_rlevel.cpp`](../src/game/e_rlevel.cpp) | Sky, terrain, per-room shadows/objects/particles, the order table, fades |
 | Walls `ERoom`/`ERoomWall`/`EIWallPart`, fences `EIFenceWall` | [`eroom.cpp`](../src/game/eroom.cpp) | Wall model from the portal on its tile (`GetWallModelId` 8002BD58, via `ObjectIterator`); diagonal walls (`ERoom::ProcDiagonalWalls` 8002EF04) |
+| Object models `ISimsObjectModel` and kin | [`isimsobjectmodel.cpp`](../src/game/isimsobjectmodel.cpp), [`iobjectman.cpp`](../src/game/iobjectman.cpp) | `EIObjectMan::AllocSimsObjectInstance` (800550C0) picks the class from the definition: wall objects, counter tops (ResData +6), the "boxwood_hedge" model, multi-tile, plain. A **counter top** (`ISimsCounterTopObject`, 80052190) with a sink (ResData +7) on its tile draws the counter model table's cut-out model plus the table's sink model as an owned sub-object (`ECntrMdlLkupTable` in the SimsObjects quickdata: counter, sink, cut-out; `OrentSubObject` 80050F14; sub-objects take the counter's cursor flags, `PropigateFlagsToSubModels`). The **hedge** (`IShrubObject`, 800526EC) stretches 1.32 along an axis with a hedge beside it; no object on the disc uses that model (its id is not in the SimsObjects quickdata), so it never shows. `ApplyMatrix` (80052E3C) gives portals their two rooms (`PortalRoom`), notes whether the tile is outside (`m_objFlags` bit 29; no reader found on GC) and honours the simulator's render position override (`cXObjectImpl::OverrideRenderPosition` 800E2FF8; nothing sets it in the release). Still stubbed there: the height on a counter (data 4 bit 0x20, `GetHeightOffset`) |
 | Floors `EIFloor` | [`ifloor.cpp`](../src/game/ifloor.cpp) | Strips incl. diagonal half tiles; per-vertex lighting (`DoLightingCalculation` 80046614) |
 | Wall/object fades | [`interestfade.cpp`](../src/engine/interestfade.cpp), `SetupInterestFade` (livemode.cpp) | Trapezoid fade on walls, pyramid/line fades on objects so windows fade with their wall |
 | Lights | [`e_lightgrid.cpp`](../src/game/e_lightgrid.cpp), [`roomlights.cpp`](../src/game/roomlights.cpp), [`e_ipointlight.cpp`](../src/game/e_ipointlight.cpp) | 63x63 light grid, lamps, window portal lights; see [rendering.md](rendering.md) |
@@ -122,11 +127,33 @@ slot of a matching height where `CanPlace` allows; the container's "placed" tree
 papers rooms by script ([testing.md](testing.md)). A tool's change is made in the world, checked (`ERoom::PreviewWallBuild`,
 `EIFloor::TestCreateFloors`; undone from a copy on failure), then rooms are recomputed and the house
 rebuilt. There is no undo stack (GC has none). Selling refunds through the catalogue callbacks.
+After a placement or pickup (`UpdateAllObjectsInWorldAfterFirstPickupOrFinalPlace` 80212390) the rooms are
+recomputed and every object model placed again (`EIObjectMan::ReOrientHouse`: a counter sees a new sink);
+a portal, a light source (object data 0x10 = 1) or a zero-extent-override object (`CheckForZeroExtentOverride`
+80041F98: definition flags 6) rebuilds the house. A new light source in hand, a cancelled placement of one and
+a sold one rebuild it too (`RecomputeLightingGrid` 80212458: the light grid). `UserCanPlace` (800E1E30)
+refuses container slots of types 5..7 (`ObjectSlotHeight`; error 0xB) unless the move-objects cheat. A wall
+edit makes every person plan its routes again (`InvalidateAllRoutes`, `WallManipulator::HandleFinalizeRequest`
+80221028).
 
 HUD: `BBHTarget` ([`bbhtarget.cpp`](../src/game/bbhtarget.cpp), screen 0x29: mode, price, money, sell
 pig), `FCMTarget` fire code meter ([`fcmtarget.cpp`](../src/game/fcmtarget.cpp); level from
-`GetFireCodeValue`, PC: 0, `SIMMY_FIRE_CODE`), the 3D preview `UI3D` + `CUnlockDisplay`
+`GetFireCodeValue`, see below), the 3D preview `UI3D` + `CUnlockDisplay`
 ([`ui3d.cpp`](../src/game/ui3d.cpp), [`unlockdisplay.cpp`](../src/game/unlockdisplay.cpp)).
+
+**Fire code (lot object limit).** `GetFireCodeValue` (800427A8, pcttarget.cpp) polls the memory meter
+(`EMemoryMeterWin::PollMemoryLevels` 80057A1C over `EIObjectMan::CountObjects` 80055404): the house's object
+instances that are not people, without the grid tiles (GUID 0x437) and the first 15 objects whose definition
+has flag 0x10 (+0xB6), give three shares: objects / 300, weighted objects / 500 (each 1 + its animated
+character's nodes / 6.75) and model memory (KB - 420) / 1190, where the memory is the summed data sizes of
+the different models they draw (`EResource` +0x10 >> 8, the MODL size recorded at load, the same disc data
+as on GC) plus the house's own model (EHouse +0x20). The fill is the largest share + 0.3 x the middle one +
+0.1 x the smallest, kept in 0..1 (`_gd.m_memoryMeter`, GameData +0x04). Buying warns above 0.66 and 0.95
+(`firecode_text_1/2`) and `on_PCT_EnterPlaceMode` refuses an object at 1. Lot 9 at the story start reads
+0.617 (106 objects 0.353, weighted 170 0.341, models 987 KB 0.477). The EOR config's fire code switch
+(EGlobal +0x39C, off in the release) would cap a full meter at 0.97. PC: `fire_code_limit=off` in simmy.ini
+(default on) makes it 0 (empty meter, no limit); `SIMMY_FIRE_CODE=<0..1>` forces a value,
+`SIMMY_FIRE_CODE_TRACE=1` prints each poll.
 
 Lot value: `HouseImpl::ComputeAndStoreLotData` (800BBAE8): `cFixedWorldImpl::ComputeArchValue` (80150414)
 + objects (`ObjectModuleImpl::ComputeStats`: a stand-in in `lotsave.cpp`), also the family's phone / baby

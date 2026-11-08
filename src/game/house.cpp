@@ -142,3 +142,15 @@ void HouseDispatch(short message, int param) {
   if (Globs_pHouse) Globs_pHouse->DoCommand(message, param);
 }
 
+// ObjectModuleImpl::DoCommand's 0xEE: the object (by id) in a room (not 0xFFFB) has its room's lighting
+// recomputed (GlobalDispatch 0xED: HouseImpl::DoCommand -> RoomManager::RoomLightingChanged).
+void ObjectModuleDispatch(short message, int param) {
+  if (message != 0xee || !Globs_pObjectModule) return;
+  cXObject* x = Globs_pObjectModule->GetObjectFromID(param);
+  cXObjectImpl* o = x ? x->GetObjectImplementation() : nullptr;
+  if (!o) return;
+  const int room = static_cast<int>(o->GetRoom());
+  if (room == 0xfffb) return;
+  HouseDispatch(0xed, room);
+}
+

@@ -8,7 +8,6 @@ void EInstance::Read(EStream &) { SIMMY_STUB("EInstance::Read(EStream &)", 0x802
 void EInstance::GetBoundSphere(EBoundSphere &) { SIMMY_STUB("EInstance::GetBoundSphere(EBoundSphere &)", 0x802287F4); }
 RET_UNKNOWN CompareIntensity(void *, void *) { SIMMY_STUB("CompareIntensity(void *, void *)", 0x80228EA8); return {}; }
 void LightArray::Init() { SIMMY_STUB("LightArray::Init(void)", 0x80228EF4); }
-void EInstance::CalcLights4(EVec3 &, ELights &, bool) { SIMMY_STUB("EInstance::CalcLights4(EVec3 &, ELights &, bool)", 0x8022907C); }
 void EInstance::RegisterType(unsigned short) { SIMMY_STUB("EInstance::RegisterType(unsigned short)", 0x802293E8); }
 void EInstance::CreateCopy() const { SIMMY_STUB("EInstance::CreateCopy(void) const", 0x8022943C); }
 void EInstance::GetOtherSide(short &, short &) { SIMMY_STUB("EInstance::GetOtherSide(short &, short &)", 0x80229574); }

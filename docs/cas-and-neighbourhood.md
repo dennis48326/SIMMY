@@ -60,7 +60,36 @@ fields, as on GC). Done path: `SaveSimToFamilySlot` -> `GameData::ReplaceSimData
 `Neighbor::LoadFromCharacter` (personality, look into the user selector, portrait) ->
 `NeighborhoodImpl::Save` -> the save prompt (M2M) -> live mode. After a declined save, `M2MTarget`
 re-enables CAS input (`CASTarget::SetHandleInput(1)`). `SIMMY_CAS_ACCEPT=<frames>` auto-accepts CAS
-(`SIMMY_CAS_ACCEPT_WARDROBE` for the wardrobe's).
+(`SIMMY_CAS_ACCEPT_WARDROBE` for the wardrobe's): it runs `SaveCASDataToNeighborhood` as Done does, then
+skips the memory card screens. (Before mL it skipped the save too, so a quick co-op start kept the disc's
+placeholder sims: player 1 "Chris", player 2 "Pat", neighbour 60, whose face morphs are all 0 on the
+disc. With the real Done path, or now the hook, player 2 is the sim made in its CAS.)
+
+**Camera and turning** (`CasScene::UpdateCamera` 801665A8, `RepositionCamera` 801660D0, `InitCamera`
+80166478, `CasSimRendererDynamic::Update` 8016FF08). A camera move stores its destination in the CAS
+tweak tool (`_gCasTweakTool`, `CasTweakTool::GetCamera/SetCamera` 801753B0/801753EC, castweaktool.cpp);
+each camera also has an alternative (`m_altCameraAngles` 803DFB0C, mostly camera 0's wide shot). At rest
+the C-stick's y zooms between the two (C-down: out; smoothstep, motion blur while moving; let go, the
+camera stays where the stick left it, read back from the tweak tool), and its x turns the sim (90
+degrees a second at full deflection) unless rotation is locked. The pad is the CAS player's mapped pad,
+else the active pad unless it is player 1's (`CasPad` in cas.cpp).
+
+**Clothing and tattoo unlocks** (`CasClothingUnlocks`, 8015E9D4..8015F21C, casclothingunlocks.cpp; kept
+at `PlayerFamilyImpl` +0xC8, streamed in `FAMI` from version 0x10). A byte per gender, body part and
+style (2 x 32 x 40) and per gender, tattoo type and texture (2 x 8 x 30): flag 2 locked, flag 4 "new".
+`ClearFamily` -> `ClearUnlocks` locks everything, then unlocks group 0 (each style's group is
+`CasSimPartsS2C::GetUnlockGroupNum`; 1000: never offered). The disc's player families hold GC's starting
+set (1726 open, 834 locked). `CasSimRendererDynamic::GetIndexes` (8016FD00/8016FE04) gives CAS the flags
+of family 1's unlocks for the edited sim's gender: the selection grid shows a padlock on locked styles
+(they cannot be picked) and an open padlock on new ones; picking a style clears its "new" mark in the
+family too (`CASSelectionTarget::ClearRecentlyUnlockedBitFlag` 80199974). Fashion goals
+(`TryCompleteGoal` kind 1, objectsim.cpp) unlock group n marked new: the car pool's "Unlocks - Career
+Outfits" (career promotions, 61 sites), the global "Adjust Relationship" (group 6, with the reward
+dialog), and cheat 5's gnome interaction "Cheat - Unlock - Clothing" (all groups). **PC save fix-up**
+(`PlayerFamilyImpl::DoStream`): a family the port's old `ClearFamily` made (every byte 2) gets group 0;
+any fashion goal already granted whose group still has a locked style gets that group (new). Neither can
+happen in a GC-made state, so GC saves are untouched. `SIMMY_UNLOCK_CLOTHING=g1,g2` (dev aid) unlocks
+groups in family 1 at load.
 
 ## A sim's look in the game ([`simmodel.cpp`](../src/game/simmodel.cpp), [`skincompositor.cpp`](../src/game/skincompositor.cpp))
 
@@ -69,7 +98,35 @@ lattice morphs (body, arms, legs, head shape), `ApplyAllMorphTargets` (the face 
 its middle registers and weights its two head morph targets), then `SimModel::UpdateReweld(true)`
 (80072CBC), which applies the head's pending morph (`ERModel::ApplyMorph`), morphs the other parts
 (`SimRenderer::MorphParts(.., false)`) and frees the morph data (`DeallocateMorphResources`: the parts keep
-their shapes and count as shared). CAS uses `UpdateReweldCAS` (80072D3C, `MorphParts(.., true)`). The skin
+their shapes and count as shared). CAS uses `UpdateReweldCAS` (80072D3C, `MorphParts(.., true)`).
+
+Welding: `SimModel::ChangeModelPart` (8007115C) asks `CasSimPartsS2C::GetWeldableBodyPartConnections`
+(8016D560) for up to 7 parts the new part meets (head-hair-hat, torso-sleeve-lower body, shoes-boot top,
+...) and `WeldSharedVertices` (80071558) each pair that is loaded and not shared: `ERModel::WeldSharedVerts`
+(80319350, tolerance 0.001 in this model's units, `GetWeldPos`/`SetWeldPos` 80319214/803192C0) moves the
+vertices of both models that lie together to their mean and gives them the first model's mean normal
+(as GC: the second model's normals are ignored). Only models with load flag 2 (weldable) take part. The
+arrays are big-endian and drawn by reference, so `RebuildAfterWelding` stays empty as on GC; the result is
+no lighting crease where parts meet (shoulders, neck, waist). `RebuildModified` (80072E30) clears the
+changed marks.
+
+`SimModel::UpdateBelt` (80073EDC) leaves the belt off when the mid top (`MidLayerTorsoHidesBelt`
+8016CF78) or the outer top (`OuterLayerTorsoHidesBelt` 8016CFF8) hides it: the GC's four per-gender
+tables (803E1403/803E1487/803E14F9/803E1527, by top style and its torso option; males never hide belt 2).
+On the disc some neighbours have one (e.g. Bill: belt 8 under mid top 2, option 3).
+
+`CasSimDescriptionS2C::Verify` (8016850C, with `VerifyBodyPartNoTexture`/`WithNoOptions`/`WithOneOption`
+80169468/80169578/8016977C, `GetNumBodyPartOptions` 8016D730, `GetBodyPartName` 8016D820, `AssertWithInfo`
+80168408) repairs a description when a sim is built, dressed or edited: indices, textures and options in
+range and with models/textures, the hat-driven hair-bottom flag, the torso layers' styles, the boot-top
+flag, tattoos, morphs (body 0..2, head 0..7, face 0..3), personality (0..10, else Aries'), aspiration
+and names. GC passes the int options of hair, hat, lower body and arm accessory as `signed char&`, so on
+the big-endian GC only their high byte is checked: kept. PC logs each repair as `[desc] Verify: ...`
+(GC's assert text). No disc description needed one in the runs made. `ReadOldDescription` (80167B7C, a
+description without the 0xFEED mark) was logged once in an old free-play run (lot 13) and never since
+(free play lot 13, story start, saves): not ported.
+
+The skin
 is composited per map quadrant (`SkinCompositor`): base skin, the quadrant's tattoo (locations 0, 1, 2 =
 `CasSimDescriptionS2C::m_tattoos[0..2]` through `CasSimPartsS2C::GetTattooTextureID` 8016C850; the
 game state uses the `_GAME` texture), then each part's texture.

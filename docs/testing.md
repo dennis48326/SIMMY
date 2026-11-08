@@ -91,11 +91,12 @@ Development only: the launcher removes all of them except `SIMMY_INI` from the g
 | `SIMMY_BACKEND`, `SIMMY_SPLIT` | Older aliases for `backend=` / `split=` |
 | `SIMMY_SKIP_INTRO=1` | Skip the EA and intro movies |
 | `SIMMY_TWO_PLAYER=1` | Start new games as two-player |
-| `SIMMY_CAS_ACCEPT=<frames>` / `SIMMY_CAS_ACCEPT_WARDROBE=<frames>` | Auto-accept CAS / the wardrobe's CAS |
+| `SIMMY_CAS_ACCEPT=<frames>` / `SIMMY_CAS_ACCEPT_WARDROBE=<frames>` | Auto-accept CAS / the wardrobe's CAS (the sim is saved into the neighbourhood as Done does; the memory card screens are skipped) |
 | `SIMMY_DEV_MENU=1` | The main menu's development menu (lot lists) |
 | `SIMMY_STORY=0` | Keep the story scenario and tutorial objects still |
 | `SIMMY_TUTORIAL_FROM=<tree hex>` | Start the tutorial's level tree at the node calling that tree |
 | `SIMMY_UNLOCK_LOTS=2,3` | Count those locations as unlocked |
+| `SIMMY_UNLOCK_CLOTHING=g1,g2` | Unlock those clothing groups (marked new) in family 1 when it is read |
 | `SIMMY_VIRTUAL_PADS=N` | Attach N virtual SDL gamepads |
 | `SIMMY_IO_STATS=1` | File opens/reads summary at exit |
 | `SIMMY_LOG_LOADS=1` | Every resource load |
@@ -158,7 +159,8 @@ Development only: the launcher removes all of them except `SIMMY_INI` from the g
 | `SIMMY_ING_TEST=<frames>[,<level>[,<object>]]` | Open food creation for player 1 |
 | `SIMMY_RECIPES_UNLOCKED=1\|2` | Show every recipe unlocked (2: also new) |
 | `SIMMY_FAM_TRACE=1` | Free-play lots and families |
-| `SIMMY_FIRE_CODE=<0..1>` | Fire code meter value |
+| `SIMMY_FIRE_CODE=<0..1>` | Fire code meter value (overrides the GC meter and `fire_code_limit`) |
+| `SIMMY_FIRE_CODE_TRACE=1` | Each fire code poll: objects, weighted objects, models, model memory and the fill |
 
 ### Simulation and control
 
@@ -190,11 +192,11 @@ Development only: the launcher removes all of them except `SIMMY_INI` from the g
 | `SIMMY_SAVE_SELFTEST=<tick>` | Write and re-read every object's stream at that tick |
 | `SIMMY_RECON_TRACE=1` | Report streams not read to their end; person data as read |
 | `SIMMY_DUMP_WORLD=1` | Dump tiles, rooms, walls and objects at house load |
-| `SIMMY_BUILD_TRACE=1\|2` | Build tools / house rebuild; 2 also wall segments |
+| `SIMMY_BUILD_TRACE=1\|2` | Build tools / house rebuild; 2 also wall segments; counters with a sink, hedges |
 | `SIMMY_ROOM_TRACE=1` | The room score constants and every room recomputed (area, floor, walls, objects, impact, light, score) |
 | `SIMMY_PLACE_TRACE=1` | Placement event trees run (placed, picked up, user placed / picked up, wall adjacency) |
-| `SIMMY_PLACE_TEST="<tick>:<action>;..."` | At sim ticks: `<guid hex>@x,y[,dir]` buy-place a new object, `grab#<id>` grab and put back, `wall@x,y,seg` delete a wall segment, `chain@x,y` print a tile's object chain, `paperroom@x,y,i[,sell]` paper (strip) the room with WallSet entry i ([`placemanipulator.cpp`](../src/game/placemanipulator.cpp)) |
-| `SIMMY_CTL_TRACE=1`, `SIMMY_COOP_TRACE=1`, `SIMMY_SWITCH_TRACE=1`, `SIMMY_CAM_TRACE=1` | Classic cursor; both players; sim switching; the lot intro camera's steps |
+| `SIMMY_PLACE_TEST="<tick>:<action>;..."` | At sim ticks: `<guid hex or object file name>@x,y[,dir]` buy-place a new object, `model#<hex>` list the object files drawing that model, `grab#<id>` grab and put back, `wall@x,y,seg` delete a wall segment, `chain@x,y` print a tile's object chain, `paperroom@x,y,i[,sell]` paper (strip) the room with WallSet entry i ([`placemanipulator.cpp`](../src/game/placemanipulator.cpp)) |
+| `SIMMY_CTL_TRACE=1`, `SIMMY_COOP_TRACE=1`, `SIMMY_SWITCH_TRACE=1`, `SIMMY_CAM_TRACE=1` | Classic cursor (and its Go Here tile); both players; sim switching; the lot intro camera's steps |
 | `SIMMY_HL_TRACE=1` | Direct control's highlights every 60 frames: the objects the influence map lists at the sim's tile, the lit ones, the sim's location and facing |
 | `SIMMY_KBM_TRACE=1`, `SIMMY_KBM_NOPICK=1` | Keyboard/mouse input made; floor-only mouse picking |
 | `SIMMY_LEAVE_LOT_TEST=<frames>[,<mode>[,<house>]]` | Leave the lot (mode 5 to a house, 4 the story end) |

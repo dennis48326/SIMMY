@@ -276,7 +276,7 @@ All GC code: [`person.cpp`](../src/game/person.cpp) (the primitive), [`xrouting.
 | Failure | | A failed path: the sim retries if it moved; else `AskOthersToMove` (a person on the path, not player-steered, gets the "move out of the way" object GUID 0x7C4's entry 3, `MoveOutOfWay`) with the "sg_route ask to move" / "waiting" animations, retries once; then the target's "gl_route failure feedback" tree (slot flag 0x4000). Codes in person data 0x3E (2 no portal, 3 no path, 4 interrupted, 5 seat, 6 could not stand, 8 object, 9 seat taken, 0xB wall, 0xD person) |
 
 `HouseImpl::EnterLiveMode` (800BC0E0, from `LiveModeInitState`) clears the partitions and portal scores
-(`InvalidateAllRoutes`). The walk is GC's: `BeginFollow` picks the first follow mode (1 turn on the
+(`InvalidateAllRoutes`); so does every finished wall edit (the wall tool). The walk is GC's: `BeginFollow` picks the first follow mode (1 turn on the
 spot, 2 side step for a short sideways leg, 3 walk), `followWalkUpdate` / `moveTowardsDestination` walk
 the destination list (`m_destList` = the person's `m_path`) with acceleration, the walk/run blend and
 fades (`getUseSpeed`, `EnableWalkFade`), side steps (`initSidestep`, `advanceAlongNode`), the end turn

@@ -1043,9 +1043,24 @@ void CASSelectionTarget::GetLockStateString(char* out) {
 }
 
 // 80199974
-// GC: also the neighbourhood's clothing unlocks (CasClothingUnlocks::ClearRecentlyUnlocked).
+// The slot's "new" mark, here and in the player family's clothing unlocks (for the edited sim's gender).
 void CASSelectionTarget::ClearRecentlyUnlockedBitFlag(int option) {
   if (option < 0 || option >= m_count) return;
+  const unsigned char index = m_indexes[option];
+  NeighborhoodImpl* hood = Globs_pNeighborhood;
+  FamilyImpl* family = hood ? hood->GetFamily(1) : nullptr;
+  CasSimDescriptionS2C* desc = m_mediator ? m_mediator->GetEditSimDescription() : nullptr;
+  const bool male = desc && desc->m_male != 0;
+  if (family) {
+    // PC: GC calls the family's vtable slot 0x164 unchecked; family 1 is the player family.
+    auto* player = dynamic_cast<PlayerFamilyImpl*>(family);
+    eTattooTextureTypeS2C type;
+    eBodyPartS2C part;
+    if (player && ConvertUiFocusToBodyTextureType(static_cast<unsigned int>(m_focus), &type))
+      player->GetClothingUnlocks()->ClearRecentlyUnlocked(male, type, index);
+    else if (player && ConvertUiFocusToBodyPart(static_cast<unsigned int>(m_focus), &part))
+      player->GetClothingUnlocks()->ClearRecentlyUnlocked(male, part, index);
+  }
   m_lockFlags[option] &= ~4;
 }
 

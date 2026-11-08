@@ -57,6 +57,9 @@ struct GraphicsSettings {
   bool mouseInvertX = false;      // mouse_invert_x: drag left/right turns the other way
   bool mouseInvertY = false;      // mouse_invert_y: drag up/down zooms the other way
   bool mouseInvertWheel = false;  // mouse_invert_wheel: the wheel zooms the other way
+  // Not graphics: fire_code_limit (pcttarget.cpp GetFireCodeValue): on (default) the buy/build fire-code
+  // meter fills and limits the lot's objects as on the GameCube; off: the meter stays empty, no limit.
+  bool fireCodeLimit = true;
   // The [keys] section: "action = key, key" lines as read (pc_kbm.cpp parses and warns).
   struct KeyLine {
     std::string action, keys, where;  // where: "file:line"

@@ -3,6 +3,7 @@
 // @class ESubModelShader
 // @class ESubModel
 // @class ERModel
+// @class EWeldVert
 // Models (engine/e_rmodel.cpp, e_submodel.cpp, e_submodelshader.cpp). An ERModel is a list of
 // sub-models, each a list of ESubModelShaders: one shader (ERShader) and the triangle strips drawn
 // with it. At load time each ESubModelShader records its strips into a deferred display list (EDL);
@@ -179,6 +180,15 @@ struct ESubModel {
   ERModel* m_model = nullptr; // +0x14
 };
 
+// One vertex of a strip while ERModel::WeldSharedVerts runs (0xC bytes on the GameCube): its position
+// (s16 or f32, big-endian, in the strip's array), its normal (s8 x, y, z, pad) or none, and whether a
+// weld already moved it.
+struct EWeldVert {
+  void* m_pos = nullptr;          // +0x00
+  signed char* m_normal = nullptr;  // +0x04
+  int m_welded = 0;               // +0x08
+};
+
 // A model resource (0x180 bytes on the GameCube).
 struct ERModel : public EResource {
   ERModel();  // 80317DEC
@@ -209,9 +219,12 @@ struct ERModel : public EResource {
   // The submodels on the node matrices (each submodel's node: +0x0C, -1 none), those whose node is
   // hidden left out; sorted along the view (m_field1C) in a 3D window.
   void DrawHierarchical(ERC* rc, EMat4* matrices, EACNodeState* states, int count);  // 80318FB0
-  void GetWeldPos(EWeldVert *);  // 80319214
-  void SetWeldPos(EWeldVert *, EVec3 &);  // 803192C0
-  void WeldSharedVerts(ERModel *, float);  // 80319350
+  // The vertex's position (raw: s16 units when m_field18, the model's fixed-point flag).
+  EVec3 GetWeldPos(EWeldVert* v);  // 80319214
+  void SetWeldPos(EWeldVert* v, EVec3& pos);  // 803192C0
+  // Vertices of `other` and of this model closer than `tolerance` (world units) are moved to one place
+  // with this model's normal (sims' body parts, where they meet).
+  void WeldSharedVerts(ERModel* other, float tolerance);  // 80319350
   static void RebuildAfterWelding();  // 80319E84
   void GenerateMorphTargetDeltas(ERModel *);  // 80319E88
   int RegisterMorphTarget(ERModel* target, int slot);  // 80319F08
@@ -263,7 +276,7 @@ struct ERModel : public EResource {
 
   // MdfData (+0x14): flags from the load-flags byte (FinishLoad) and the file.
   int m_hierarchical = 0;        // +0x14 load flag 0x01
-  int m_field18 = 0;             // +0x18
+  int m_field18 = 0;             // +0x18 positions are fixed point (s16; WeldSharedVerts reads this)
   int m_field1C = 0;             // +0x1C
   int m_weldable = 0;            // +0x20 load flag 0x02
   int m_dontFrontPlaneFade = 0;  // +0x24 load flag 0x04

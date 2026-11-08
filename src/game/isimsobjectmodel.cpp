@@ -8,6 +8,7 @@
 #include "simmy/unported_globals.hpp"
 #include "simmy/classes/epointlight.hpp"
 #include "simmy/classes/psystem.hpp"
+#include "simmy/roomresolve.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -182,9 +183,12 @@ void ISimsObjectModel::CleanupStuff(ERLevel* level) {
 }
 
 // 8004C644
-// Its lights out of the house's level (CleanupStuff), then its references released.
+// Its lights out of the house's level (CleanupStuff), its sub-objects deleted, then its references
+// released.
 ISimsObjectModel::~ISimsObjectModel() {
   if (m_house) CleanupStuff(m_house->m_level);
+  for (EInstance* sub : m_subModels) delete sub;  // owned (+0x458); each leaves its level (~EInstance)
+  m_subModels.clear();
   for (EILight* light : m_animLights) delete light;  // GC: TArray<EILight*>::~TArray (owning)
   m_animLights.clear();
   if (m_stateShader) {  // PC: released (GC kept the reference)
@@ -201,6 +205,13 @@ ISimsObjectModel::~ISimsObjectModel() {
 // 8004C91C
 void ISimsObjectModel::InsertSubModelsInHouse(ERLevel* level) {
   for (EInstance* sub : m_subModels) level->InsertInstance(sub, nullptr);
+}
+
+// 8004C96C
+// The sub-objects take its cursor flags (highlight, placement error): a counter's sink lights with it.
+void ISimsObjectModel::PropigateFlagsToSubModels() {
+  for (EInstance* sub : m_subModels)
+    if (auto* model = dynamic_cast<ISimInstance*>(sub)) model->SetCursFlags(m_cursFlags);
 }
 
 // 8004E55C
@@ -494,6 +505,16 @@ void ISimsObjectModel::Update() {
     if (dynamic) CalcDynamicOrient();
     else CalcOrient();
   }
+}
+
+// 80050C38
+// A portal's side (ApplyMatrix): `data` is the room there; the second room its lighting group (the
+// room's +2) when it is a room of the manager (not 0xFFFB and up).
+void PortalRoom(unsigned int data, bool, short& room, short& level) {
+  const unsigned short id = static_cast<unsigned short>(data);
+  room = level = static_cast<short>(id);
+  if (Globs_pRoomManager && id < 0xfffb)
+    if (Room* r = Globs_pRoomManager->GetRoom(id)) level = static_cast<short>(r->m_lightingGroup);
 }
 
 // 8004E710
@@ -1135,23 +1156,54 @@ void ISimsObjectModel::SetObjOrient() {
 
 // 80052E3C
 // The orientation: scaled, turned by `angle` about z and moved to `pos` in tile space (x along the
-// tile's x), then the axes swapped into the world's (x and y exchange). GC: also the rooms either
-// side of a portal, whether it stands outside (RoomManager), the simulator's render position
-// override, the height on a counter (data 4 bit 0x20) or in its container's slot, the bounds of
-// animated models, sub-objects and the lamp's light.
+// tile's x), then the axes swapped into the world's (x and y exchange). A portal (door, window) first
+// takes the rooms half a tile either side of it along its turned y axis (ResolveRoomID) as its two
+// sides (PortalRoom); every object notes whether its tile is outside (m_objFlags bit 29: no room, or an
+// outside room) and may be drawn where the simulator overrides it (cXObjectImpl::OverrideRenderPosition).
+// GC: also the height on a counter (data 4 bit 0x20); the shadow sub-instance follows (+0x44C).
 void ISimsObjectModel::ApplyMatrix(float angle, EVec3& pos, EVec3& scale) {
   if (!m_model) return;
+  if (IsPortalObject(m_xob)) {  // cXObjectImpl::IsPortal (800EAD18): type 8, a cXPortal
+    EMat4 p;
+    p.Id();
+    p.PostRotateZ(angle);
+    p.PostTranslate(pos);
+    EVec3 plus(p.m[1][0] * 0.5f + p.m[3][0], p.m[1][1] * 0.5f + p.m[3][1], p.m[1][2] * 0.5f + p.m[3][2]);
+    EVec3 minus(p.m[1][0] * -0.5f + p.m[3][0], p.m[1][1] * -0.5f + p.m[3][1], p.m[1][2] * -0.5f + p.m[3][2]);
+    const CTilePt a(plus), b(minus);
+    // CTilePt::ToFTilePt (800B4C60): y << 4 | 8, x << 4 | 8.
+    const int fa[2] = {a.GetY() << 4 | 8, a.GetX() << 4 | 8};
+    const int fb[2] = {b.GetY() << 4 | 8, b.GetX() << 4 | 8};
+    const unsigned short thisRoom = static_cast<unsigned short>(ResolveRoomID(fa, 1));
+    const unsigned short otherRoom = static_cast<unsigned short>(ResolveRoomID(fb, 1));
+    m_otherSideData = otherRoom;
+    m_thisSideData = thisRoom;
+    m_otherSideFn = PortalRoom;
+    m_thisSideFn = PortalRoom;
+  }
   m_matrixAngle = angle;
   m_scale[0] = scale.x;
   m_scale[1] = scale.y;
   m_scale[2] = scale.z;
-  SIMMY_STUB("ISimsObjectModel::ApplyMatrix: portal rooms, outside flag (RoomManager), OverrideRenderPosition",
-             0x80052E3C);
+  EVec3 at = pos;
+  {
+    // Outside: the room of its tile (the house's position taken off; level 1; tiles 1..size-1).
+    const float hx = m_house ? m_house->m_posY : 0.0f, hy = m_house ? m_house->m_posX : 0.0f;
+    CTilePt tile(static_cast<int>(at.x - hx), static_cast<int>(at.y - hy), 1);
+    cFixedWorldImpl* w = Globs_pFixedWorld;
+    unsigned int roomId = 0;
+    if (w && 0 < tile.GetX() && tile.GetX() <= w->GetXSize() - 1 && 0 < tile.GetY() && tile.GetY() <= w->GetYSize() - 1)
+      roomId = w->GetRoom(tile);
+    Room* room = Globs_pRoomManager ? Globs_pRoomManager->GetRoom(static_cast<unsigned short>(roomId)) : nullptr;
+    if (!room) m_objFlags |= 0x20000000u;
+    else m_objFlags = (room->IsOutside() ? 0x20000000u : 0u) | (m_objFlags & ~0x20000000u);
+  }
+  if (cXObjectImpl* impl = m_xob->GetObjectImplementation()) impl->OverrideRenderPosition(at.x, at.y);
   EMat4 m;
   m.Id();
   m.Scale(scale);
   m.PostRotateZ(angle);
-  m.PostTranslate(pos);
+  m.PostTranslate(at);
   for (auto& row : m.m) {
     const float t = row[1];
     row[1] = row[0];
@@ -1540,4 +1592,211 @@ int ISimsObjectModel::PreloadAnimation(short anim) {
   m_preloadAnim = id;
   _animman.AddRefAsync(id);
   return 0;
+}
+
+// ---------------------------------------------------------------------------------------------------
+// Sub-objects (a counter's sink)
+
+// 80050EB4
+// Each sub-object told of the object (ISimInstance::OrentSubObject(cXObject*), vtable 0x174: empty for
+// the plain models a counter's sink is, so the sink stays where its counter's SetObjOrient put it).
+void ISimsObjectModel::OrientSubObjects() {
+  for (EInstance* sub : m_subModels)
+    if (auto* model = dynamic_cast<ISimInstance*>(sub)) model->OrentSubObject(m_xob);
+}
+
+// 80050F14
+// A sub-object at its own object's tile (the house's position added), turned by that object's
+// direction (data 1, eighths of a turn), the axes swapped into the world's.
+void ISimsObjectModel::OrentSubObject() {
+  const float angle = static_cast<float>(m_xob->GetData(1)) * 3.1415927f * 0.25f;
+  const CTilePt tile = m_xob->GetCTilePt();
+  EMat4 m;
+  m.Id();
+  m.RotateZ(angle);
+  EVec3 pos(static_cast<float>(tile.GetX()) + m_house->m_posY, static_cast<float>(tile.GetY()) + m_house->m_posX, 0.0f);
+  m.PostTranslate(pos);
+  for (auto& row : m.m) {
+    const float t = row[1];
+    row[1] = row[0];
+    row[0] = t;
+  }
+  SetOrient(m);
+  Init();
+}
+
+// ---------------------------------------------------------------------------------------------------
+// ISimsCounterTopObject
+
+// 80054280 ISimsCounterTopObject::GetTypeInfo
+// 8005428C ISimsCounterTopObject::GetTypeName
+// 80054298 ISimsCounterTopObject::GetTypeKey
+// 800542A4 ISimsCounterTopObject::GetTypeVersion
+// 80054240 ISimsCounterTopObject::SafeDelete
+// 800541A8 ISimsCounterTopObject::New
+// 800541FC ISimsCounterTopObject::Construct
+// 8005421C ISimsCounterTopObject::Destruct
+// 800542B0 ISimsCounterTopObject::GetTypeInfoStatic
+// 800542BC ISimsCounterTopObject::GetReadVersion
+SIMMY_STORABLE_IMPL(ISimsCounterTopObject, "ISimsCounterTopObject", 0, ISimsObjectModel)
+
+// 800520AC
+ISimsCounterTopObject::ISimsCounterTopObject() {}
+// 800520F4
+ISimsCounterTopObject::~ISimsCounterTopObject() {}
+
+// 80052154
+void ISimsCounterTopObject::Create(cXObject* xob, EHouse* house) {
+  m_xob = xob;
+  m_house = house;
+  SetObjOrient();
+  SetInitalObjectState();
+}
+
+// 800548E0
+int ISimsCounterTopObject::IsSinkId(cXObject* xob) {
+  const ObjDefinition* def = xob ? xob->GetDef() : nullptr;
+  const unsigned char* res = def ? objdef::ResData(def) : nullptr;
+  return res && res[7] != 0 ? 1 : 0;
+}
+
+const void* GetCounterModelTable();  // 80041758 (sprites.cpp)
+
+// 80052190
+// The sub-objects of the last time go (out of the level, deleted). The model of its state's graphic
+// (data 0; past the ObjAnimDefs: the first); the counter model table's row for its first ObjAnimDef's
+// model. On the lot, the first sink among the objects at its tile (ObjectIterator) gets a plain model
+// instance of the row's sink model at the sink's place (ISimsObjectModel::OrentSubObject), kept as a
+// sub-object (flag 0x10000000: Update leaves it alone) and put in the level with the counter, and the
+// counter takes the row's cut-out model. Then placed as a plain object (ISimsObjectModel::SetObjOrient).
+// GC quirk kept: a sink on a counter whose model has no row reads a null row (PC: no cut-out, logged).
+void ISimsCounterTopObject::SetObjOrient() {
+  if (m_level) RemoveSubModelsFromHouse(m_level);
+  for (EInstance* sub : m_subModels) delete sub;  // owned (+0x458)
+  m_subModels.clear();
+  const unsigned char* defs = objdef::AnimDefs(objdef::ResData(m_xob->GetDef()));
+  const int count = static_cast<int>(objdef::AnimDefCount(defs));
+  int graphic = m_xob->GetData(0);
+  if (count <= graphic) graphic = 0;
+  unsigned int model = ERQuickdata::U32(defs, static_cast<unsigned int>(graphic) * 0x20);
+  // The table's one row holds the entry array (its count at -4).
+  const void* table = GetCounterModelTable();
+  const unsigned char* first = table ? ERQuickdata::TableRows(table) : nullptr;
+  const unsigned char* rows = first ? static_cast<const unsigned char*>(ERQuickdata::Ptr(first, 0)) : nullptr;
+  const int rowCount = rows ? static_cast<int>(ERQuickdata::U32(rows - 4, 0)) : 0;
+  const unsigned char* row = nullptr;
+  for (int i = 0; i < rowCount; ++i)
+    if (ERQuickdata::U32(rows, static_cast<unsigned int>(i) * 0x10) == ERQuickdata::U32(defs, 0)) {
+      row = rows + i * 0x10;
+      break;
+    }
+  CTilePt tile = m_xob->GetCTilePt();
+  cFixedWorldImpl* w = Globs_pFixedWorld;
+  if (!w || tile.GetX() < 0 || tile.GetX() > w->GetXSize() || tile.GetY() < 0 || tile.GetY() > w->GetYSize()) {
+    ISimsObjectModel::SetObjOrient();
+    return;
+  }
+  ObjectIterator it;
+  it.init(tile, ObjectIterator__IterateType{0});
+  for (; it.m_current; ++it) {
+    if (!IsSinkId(it.m_current)) continue;
+    if (!row) {  // PC: GC reads the row's fields through a null pointer here
+      static bool logged = false;
+      if (!logged) std::printf("[counter] no ECntrMdlLkupTable row for model 0x%08x\n", ERQuickdata::U32(defs, 0));
+      logged = true;
+      break;
+    }
+    auto* sink = new ISimsObjectModel;  // GC: 0x4C0 bytes, 16-aligned, cleared, from the main heap
+    sink->m_house = m_house;
+    sink->SetXOb(it.m_current);
+    sink->m_thisSideData = static_cast<unsigned short>(it.m_current->GetID());  // GC: the cXObject (PC: its id)
+    sink->m_thisSideFn = ThisSide;
+    sink->SetSOMModel(ERQuickdata::U32(row, 4));
+    sink->OrentSubObject();
+    m_subModels.push_back(sink);
+    sink->m_objFlags |= 0x10000000u;
+    if (m_level) InsertSubModelsInHouse(m_level);
+    model = ERQuickdata::U32(row, 8);
+    static const bool trace = std::getenv("SIMMY_BUILD_TRACE") != nullptr;  // PC dev aid
+    if (trace)
+      std::printf("[counter] #%d at %d,%d: sink #%d, sink model 0x%08x, cut-out 0x%08x\n", m_xob->GetID(), tile.GetX(),
+                  tile.GetY(), it.m_current->GetID(), ERQuickdata::U32(row, 4), model);
+    break;
+  }
+  SetSOMModel(model);
+  ISimsObjectModel::SetObjOrient();
+  Init();
+}
+
+// ---------------------------------------------------------------------------------------------------
+// IShrubObject
+
+// 80054414 IShrubObject::GetTypeInfo
+// 80054420 IShrubObject::GetTypeName
+// 8005442C IShrubObject::GetTypeKey
+// 80054438 IShrubObject::GetTypeVersion
+// 800543D4 IShrubObject::SafeDelete
+// 8005433C IShrubObject::New
+// 80054390 IShrubObject::Construct
+// 800543B0 IShrubObject::Destruct
+// 80054444 IShrubObject::GetTypeInfoStatic
+// 80054450 IShrubObject::GetReadVersion
+SIMMY_STORABLE_IMPL(IShrubObject, "IShrubObject", 0, ISimsObjectModel)
+
+// 800525E4
+IShrubObject::IShrubObject() {}
+// 8005262C
+IShrubObject::~IShrubObject() {}
+
+// 8005268C
+void IShrubObject::Create(cXObject* xob, EHouse* house) {
+  m_xob = xob;
+  m_house = house;
+  SetObjOrient();
+  SetInitalObjectState();
+  if (m_model) Init();
+}
+
+namespace {
+// A boxwood hedge among the objects at (x, y) on level 1: an object whose first ObjAnimDef's model is
+// "boxwood_hedge" (0xBFB9EE2A).
+bool HedgeAt(int x, int y) {
+  CTilePt tile(x, y, 1);
+  ObjectIterator it;
+  it.init(tile, ObjectIterator__IterateType{0});
+  for (; it.m_current; ++it) {
+    const ObjDefinition* def = it.m_current->GetDef();
+    const unsigned char* res = def ? objdef::ResData(def) : nullptr;
+    if (!res) continue;
+    const unsigned char* defs = objdef::AnimDefs(res);
+    if (defs && objdef::AnimDefCount(defs) > 0 && ERQuickdata::U32(defs, 0) == 0xbfb9ee2au) return true;
+  }
+  return false;
+}
+}  // namespace
+
+// 800526EC
+// On the lot: stretched 1.32 times across x with a hedge to the north or south (y + 1, y - 1) and
+// across y with one to the west or east (x - 1, x + 1), so a row of hedges closes up; then at its tile
+// (the house's position added), a quarter turn round (its direction is not used).
+void IShrubObject::SetObjOrient() {
+  const CTilePt tile = m_xob->GetCTilePt();
+  float sx = 1.0f, sy = 1.0f;
+  cFixedWorldImpl* w = Globs_pFixedWorld;
+  if (w && tile.GetX() >= 0 && tile.GetX() <= w->GetXSize() && tile.GetY() >= 0 && tile.GetY() <= w->GetYSize()) {
+    // GC: also reads the tile's walls (cFixedWorld vtable 0xAC), unused.
+    const int x = tile.GetX(), y = tile.GetY();
+    bool alongY = false, alongX = false;
+    if (HedgeAt(x - 1, y)) alongX = true;
+    if (HedgeAt(x, y + 1)) alongY = true;
+    if (HedgeAt(x + 1, y)) alongX = true;
+    if (HedgeAt(x, y - 1)) alongY = true;
+    if (alongY) sx = 1.32f;
+    if (alongX) sy = 1.32f;
+  }
+  EVec3 pos(static_cast<float>(tile.GetX()) + m_house->m_posY, static_cast<float>(tile.GetY()) + m_house->m_posX, 0.0f);
+  EVec3 scale(sx, sy, 1.0f);
+  static const bool trace = std::getenv("SIMMY_BUILD_TRACE") != nullptr;  // PC dev aid
+  if (trace) std::printf("[shrub] #%d at %d,%d: scale %.2f %.2f\n", m_xob->GetID(), tile.GetX(), tile.GetY(), sx, sy);
+  ApplyMatrix(1.5707963705062866f, pos, scale);
 }

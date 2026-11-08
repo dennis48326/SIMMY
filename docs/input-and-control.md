@@ -99,7 +99,9 @@ highlighted objects keep the full flash.
 
 Z toggles. The stick moves a cursor over the lot (tile square, fading trail, beam in the player's
 colour); objects near it light up (`UpdateObjectHighlights`); A opens their menu there (empty floor:
-immediate Go Here); Y brings the cursor back to the sim. The mode is remembered per player in EGlobal
+immediate Go Here: the go-here object at the cursor's nearest tile corner, moved to the nearest place the
+sim can stand in that room, `FlashPiMenu::CreateGoHereObjectForMenu` 8003A7F8 with the person's
+`FindGoodLocation`); Y brings the cursor back to the sim. The mode is remembered per player in EGlobal
 +0xB8 (`m_usedSimInteractor`) across pause, build/buy and lot changes, cleared by `PreGameState` on each game
 start (not saved; GC). The action queue widget shows only in classic control. While a player is in
 classic control `PlayerDirectInteractor(p)` is null, so autonomy may take that player's idle sim (GC).

@@ -6,6 +6,5 @@ RET_UNKNOWN EIObjectMan::Find(ISimInstance *) { SIMMY_STUB("EIObjectMan::Find(IS
 bool EIObjectMan::AllPlayersActiveInputInteractors() { SIMMY_STUB("EIObjectMan::AllPlayersActiveInputInteractors(void)", 0x80054B88); return {}; }
 void EIObjectMan::GetObjects(TNodeList<ISimInstance *> &) { SIMMY_STUB("EIObjectMan::GetObjects(TNodeList<ISimInstance *> &)", 0x80054D08); }
 bool EIObjectMan::IsEmpty() { SIMMY_STUB("EIObjectMan::IsEmpty(void)", 0x800550B0); return {}; }
-void EIObjectMan::CountObjects(float &, float &, float &, float &) { SIMMY_STUB("EIObjectMan::CountObjects(float &, float &, float &, float &)", 0x80055404); }
 RET_UNKNOWN GetHandleFromISimInstance(ISimInstance *) { SIMMY_STUB("GetHandleFromISimInstance(ISimInstance *)", 0x800559FC); return {}; }
 RET_UNKNOWN GetObjectInstance(unsigned int) { SIMMY_STUB("GetObjectInstance(unsigned int)", 0x80055A5C); return {}; }

@@ -69,31 +69,40 @@ disc's movies use either exist in the PC runtime or are absent from the GC binar
   (800DAC94). Left: the rest of `Reset(true)` (data 0x3A from the definition +0x62).
 
 **World, building and lighting**
-- Sinks set in counters draw on a solid top; shrubs and hedges don't vary with neighbours
-  (`ISimsCounterTopObject`, `IShrubObject`). iobjectman.cpp:101–110. M.
-- Lights: a lamp switched by a tree may not change room lighting (objectsim.cpp:418/425); placing a lamp
-  does not recompute the lighting grid (placemanipulator.cpp:244); walls are lit from their first end
-  only (`CalcLights4` merge, eroom.cpp:1008). S–M each.
-- Sims keep routes planned through walls built since (no `InvalidateAllRoutes` after a wall edit).
-  wallmanipulator.cpp:274. S.
-- `ApplyMatrix` drops portal rooms, the outside flag and the render-position override (door, window
-  and outdoor lighting). isimsobjectmodel.cpp:1088. M.
-- Buy mode does not refuse slot types 5–7 (`UserCanPlace`). objectplace.cpp:1020. S.
-- Classic "Go Here" targets the tile centre instead of the nearest free spot. flashpimenu.cpp:238. S.
-- Fire-code meter is always empty, so the lot object limit and its warning never happen
-  (`GetFireCodeValue` 80057A1C). pcttarget.cpp:154. M — a design choice for PC: keep the GC limit or not.
+- **Done** (mW): counter tops with a sink draw the cut-out counter and the sink sub-model
+  (`ISimsCounterTopObject` 800520AC..80052190, `IsSinkId` 800548E0, `EGlobal::GetCounterModelTable` 80041758,
+  `OrientSubObjects` / `OrentSubObject` 80050EB4 / 80050F14, `PropigateFlagsToSubModels` 8004C96C); the
+  hedge (`IShrubObject` 800525E4..800526EC) is ported, but no object on the disc uses its model.
+- **Done** (mW): lights. Primitive 0x07 TryUpdate 1 / 3 / 4 (801058E0: room lighting via 0xEE -> 0xED, the
+  model placed again, the lot data); `RecomputeLightingGrid` 80212458 and the rest of
+  `UpdateAllObjectsInWorldAfterFirstPickupOrFinalPlace` 80212390 (`ReOrientHouse`, `ReCalcHouse`;
+  `CheckForZeroExtentOverride` 80041F98) with their callers (place cancel, sell); walls lit from both ends
+  (`CalcLights4` 8022907C, the merge in `EIWallPart::Draw` 8002A4C0).
+- **Done** (mW): `InvalidateAllRoutes` after a wall edit (`HandleFinalizeRequest` 80221028).
+- **Done** (mW): `ApplyMatrix` portal rooms (`PortalRoom` 80050C38), the outside flag and the render-position
+  override (`cXObjectImpl::OverrideRenderPosition` 800E2FF8..800E3044). Left: the counter height
+  (`GetHeightOffset` 8004C7F0).
+- **Done** (mW): `UserCanPlace` (800E1E30) refuses slot types 5..7.
+- **Done** (mW): classic Go Here uses the person's nearest free spot (8003A7F8); also fixed: the house offset
+  floats were read as integers, so Go Here never placed its object at all.
+- **Done** (mW): the fire-code meter and lot limit (`GetFireCodeValue` 800427A8,
+  `EMemoryMeterWin::PollMemoryLevels` 80057A1C, `EIObjectMan::CountObjects` 80055404), default on;
+  `fire_code_limit=off` in simmy.ini turns it off.
 
 **Sims' looks and Create-A-Sim**
-- Clothing and tattoo unlocks are ignored: everything is open from the start and fashion goal rewards
-  unlock nothing (`CasClothingUnlocks`, 21 functions). M. **Save trap:** saves the port wrote mark
-  everything locked and never ran `UnlockGroup(0)`; unlock group 0 at load when this is ported.
-- Body parts are not welded after part changes (`WeldSharedVertices` 80071558): seams at neck, waist,
-  wrists. simmodel.cpp:837. M.
-- Belts show through jackets and long tops (`UpdateBelt`). simmodel.cpp:1455. S.
-- Sim descriptions are never repaired (`CasSimDescriptionS2C::Verify`): bad part/style combinations stay.
-  simmodel.cpp:343. M.
-- CAS: no camera zoom on the C stick (cas.cpp:681, comment only) and no turning the sim with it
-  (cas.cpp:370). S.
+- **Done** (mL): clothing and tattoo unlocks (`CasClothingUnlocks` 8015E9D4..8015F21C, `GetIndexes`
+  8016FD00/8016FE04, `ClearRecentlyUnlockedBitFlag` 80199974, fashion goals in `TryCompleteGoal`); the save
+  trap is handled at load (port-cleared families get group 0, granted fashion goals their groups).
+- **Done** (mL): welding (`WeldSharedVertices` 80071558, `ERModel::WeldSharedVerts` 80319350, `GetWeldPos`/
+  `SetWeldPos`, `GetWeldableBodyPartConnections` 8016D560, `RebuildModified`).
+- **Done** (mL): belts under tops (`MidLayerTorsoHidesBelt` 8016CF78, `OuterLayerTorsoHidesBelt` 8016CFF8).
+- **Done** (mL): description repair (`Verify` 8016850C and helpers 80168408, 80169468, 80169578,
+  8016977C, 8016D730, 8016D820).
+- **Done** (mL): CAS C-stick zoom and turning (`UpdateCamera` 801665A8, `RepositionCamera`, `InitCamera`,
+  `CasTweakTool::GetCamera/SetCamera` 801753B0/801753EC, 8016FF08).
+- Checked (mL): player 2's zero face morphs were the disc's placeholder "Pat", shown only because
+  `SIMMY_CAS_ACCEPT` skipped CAS's save; the hook now saves as Done does. `ReadOldDescription` (80167B7C)
+  was not reproduced (left).
 
 **Interface**
 - **Done** (mI): the button-code cheats (`ESimsApp::UpdateCheats` 80005448, `PlayerCheats` 80005D40–80005FFC,

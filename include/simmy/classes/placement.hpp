@@ -95,6 +95,9 @@ bool ObjCanIntersectPeople(cXObjectImpl* o);
 int ObjTestIntersection(cXObjectImpl* o, const int pos[2], int level);         // 800DEBB8
 int ObjTestAndPlace(cXObjectImpl* o, PlaceSpec& spec, bool place);         // 800DD6E8
 int ObjCanPlace(cXObjectImpl* o, const int pos[2], int level, cXObjectImpl* container, int slot);  // 800DE340 / 800C6044
+// cXObjectImpl::FindGoodLocation (800E0F40; objectsim.cpp): the nearest tile from `start` (FTilePt words)
+// `object` can stand on, in the start's room with `sameRoom`, free of objects with `emptyTile`.
+bool ObjFindGoodLocation(cXObjectImpl* object, const int start[2], int level, bool sameRoom, bool emptyTile, int out[2]);
 void ObjPlace(cXObjectImpl* o, const int pos[2], int level, cXObjectImpl* container, int slot);    // 800DE3C4 / 800C61E4
 void ObjPickup(cXObjectImpl* o);                                               // 800DE144 / 800C63E4
 int ObjUserCanPlace(cXObjectImpl* o, const int pos[2], int level, cXObjectImpl* container, int slot);  // 800E1E30 / 800C64B8

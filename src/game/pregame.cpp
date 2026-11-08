@@ -13,11 +13,10 @@ extern int g_loadedGameSlot;   // DAT_80476214 (game/memcardscreens.cpp)
 extern int g_loadedGameSlot2;  // DAT_80476218
 
 namespace {
-// PC development aid: the CAS Apt commands that end Create-a-Sim (CASTarget::HandleNav -> GotoGame,
-// then the memory card screens saving the new game) are not hooked up yet. With SIMMY_CAS_ACCEPT=
-// <frames> set, that many frames after the CAS UI comes up the family is taken as done and saved
-// (MEM_result 1, then the memory card screens' "ingame"); the wardrobe's CAS uses
-// SIMMY_CAS_ACCEPT_WARDROBE instead.
+// PC development aid: with SIMMY_CAS_ACCEPT=<frames> set, that many frames after the CAS UI comes up
+// the sim or family is taken as done (CASTarget::SaveCASDataToNeighborhood, as the "Done" button's
+// GotoGame) and the memory card screens are skipped (MEM_result 1, then their "ingame"); the
+// wardrobe's CAS uses SIMMY_CAS_ACCEPT_WARDROBE instead.
 int s_autoAcceptFrames = -1;  // reset for each CAS (CreateASimBaseState::Reset)
 bool DebugAutoAccept() {
   int& s_frames = s_autoAcceptFrames;
@@ -32,6 +31,10 @@ bool DebugAutoAccept() {
   if (s_frames < 0) s_frames = std::atoi(env);
   if (s_frames > 0 && --s_frames == 0) {
     std::printf("[cas] SIMMY_CAS_ACCEPT: CAS taken as done\n");
+    // As the CAS "Done" button does (CASTarget::HandleNav 0x102 -> GotoGame): the sim (or family) goes
+    // into the neighbourhood. Without it the family kept the disc's placeholder looks (player 2's
+    // "Pat", neighbour 60, has every face morph 0).
+    _gd.m_casTarget->SaveCASDataToNeighborhood();
     UIDB::UIDBSetInt(const_cast<char*>("MEM_result"), 1);
     UIObjectBase::UIRouter_FlowGoto(const_cast<char*>("ingame"));
     return true;

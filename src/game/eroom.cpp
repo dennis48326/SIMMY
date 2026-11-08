@@ -1124,13 +1124,42 @@ unsigned int EIWallPart::VisibilityTest(E3DWindow& win) {
 }
 
 // 8002A4C0
-// Lit at its first point; while fading (all five parts) through the order table, otherwise its parts
-// drawn now (the top and caps unlit) with the wallpaper shader.
+// Lit from both ends: the room's ambient and sun and the point lights at its first point (CalcLights4),
+// then the level's point lights at its second point (ERLevel::GetLightsAtLocation, its room's lighting
+// group); point lights of range 0.01 or less or with no colour channel over 1/255 are left out, and
+// the second point's only when not already there (same position), at most four in all. While fading
+// (all five parts) through the order table, otherwise its parts drawn now (the top and caps unlit)
+// with the wallpaper shader.
 void EIWallPart::Draw(ELevelDrawData& data) {
   if (!m_model) return;
-  CalcLights(*reinterpret_cast<EVec3*>(m_worldA), m_lights, false);
-  // GC: CalcLights4 here, and the level's lights at the second point (ERLevel::GetLightsAtLocation)
-  // merged in, up to four point lights.
+  ELights first, second;
+  CalcLights4(*reinterpret_cast<EVec3*>(m_worldA), first, false);
+  short side = 0, group = 0;
+  if (m_thisSideFn) m_thisSideFn(m_thisSideData, false, side, group);
+  m_level->GetLightsAtLocation(*reinterpret_cast<EVec3*>(m_worldB), group, second);
+  for (int i = 0; i < 4; ++i) m_lights.m_ambient[i] = first.m_ambient[i];
+  m_lights.m_numDir = first.m_numDir;
+  if (first.m_numDir) m_lights.m_dir[0] = first.m_dir[0];
+  const float epsilon = 0.003921569f;  // lightColorEpsilon (804FD9A4: 1/255)
+  auto lit = [epsilon](const ELightsPoint& p) {
+    return 0.01f < p.m_range && (epsilon < p.m_color[0] || epsilon < p.m_color[1] || epsilon < p.m_color[2]);
+  };
+  int n = 0;
+  for (unsigned int i = 0; i < first.m_numPoint; ++i)
+    if (lit(first.m_point[i])) m_lights.m_point[n++] = first.m_point[i];
+  for (unsigned int i = 0; n < 4 && i < second.m_numPoint; ++i) {
+    const ELightsPoint& p = second.m_point[i];
+    if (!lit(p)) continue;
+    bool there = false;
+    for (int k = 0; k < n; ++k)
+      if (m_lights.m_point[k].m_pos[0] == p.m_pos[0] && m_lights.m_point[k].m_pos[1] == p.m_pos[1] &&
+          m_lights.m_point[k].m_pos[2] == p.m_pos[2]) {
+        there = true;
+        break;
+      }
+    if (!there) m_lights.m_point[n++] = p;
+  }
+  m_lights.m_numPoint = static_cast<unsigned int>(n);
   const int context = GetContext();
   if (m_parts[context] == 0x1f) {
     EOrderTableData otd;

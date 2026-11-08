@@ -23,6 +23,7 @@
 #include "simmy/classes/buildtools.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -227,16 +228,27 @@ int FinalUserPlaceObject(cXObjectImpl* o) {
 }
 
 // 80212390
-// The rooms recomputed (the world's vtable 0x114 ComputeRooms(0)). GC: also the house's object models
-// re-oriented (EIObjectMan::ReOrientHouse) and, for structural objects, light sources and zero-extent
-// overrides, the house recalculated (EHouse::ReCalcHouse).
+// The rooms recomputed (the world's vtable 0x114 ComputeRooms(0)) and the house's object models placed
+// again (EIObjectMan::ReOrientHouse: counters see their sinks, hedges their neighbours); for a portal
+// (door, window), a light source (cXObjectImpl::GetObjectLightSource 1) or an object with a zero
+// extent override (EGlobal::CheckForZeroExtentOverride: definition flags 6) the house is rebuilt
+// (EHouse::ReCalcHouse: walls, floors and the lighting grid).
 void UpdateAllObjectsInWorldAfterFirstPickupOrFinalPlace(cXObjectImpl* o) {
   if (cFixedWorldImpl* w = Globs_pFixedWorld) w->ComputeRooms(0);
-  (void)o;
+  EHouse* house = _globals.m_house;  // DAT_80475E94
+  if (house && house->m_objectMan) house->m_objectMan->ReOrientHouse(false);
+  if (!IsPortalObject(o) && o->GetObjectLightSource() != 1 && !_globals.CheckForZeroExtentOverride(o)) return;
+  if (house) house->ReCalcHouse();
 }
 
-// 80212458: GC EHouse::ReCalcHouse for light sources (the lighting grid). PC: not ported.
-void RecomputeLightingGrid(cXObjectImpl*) {}
+// 80212458
+// A light source (or none named) rebuilds the house (EHouse::ReCalcHouse), whose lights' locations are
+// the lighting grid.
+void RecomputeLightingGrid(cXObjectImpl* o) {
+  EHouse* house = _globals.m_house;  // DAT_80475E94
+  if (o && o->GetObjectLightSource() != 1) return;
+  if (house) house->ReCalcHouse();
+}
 
 // 802124B4 InteractorModule::SetDirection
 // Turned (a step at a time, at most 8) until it faces `dir`, then put back where it was if it fits.
@@ -634,11 +646,15 @@ void PlaceManipulator::TryPlacingCurrentObject() {
 }
 
 // GC 8021A9EC
+// The callback told (3); the object in hand destroyed; a light source's going rebuilds the lighting
+// grid (RecomputeLightingGrid(0)).
 void PlaceManipulator::CancelSession() {
   m_active = false;
   SetIsCursorModelEnabled(true);
   Report(3);
+  const bool light = m_placement.m_object && m_placement.m_object->GetObjectLightSource() == 1;
   m_placement.Destroy();
+  if (light) RecomputeLightingGrid(nullptr);
 }
 
 // The catalogue's GrabManipulatorCallback (GC: the callback +0xB8 with its data: 0 dropped, 1 grab
@@ -1006,11 +1022,12 @@ bool UpdatePlaceManipulator(int player, float dt) {
 
 // PC development aid: SIMMY_PLACE_TEST="<tick>:<action>;..." runs buy/build actions when the simulator
 // reaches each tick (from SimulateOneTick), as the place / grab manipulators and the wall tool do:
-//   <guid hex>@x,y[,dir]  a new object of that GUID put at the tile's middle (facing dir, eighths) through
+//   <guid hex>@x,y[,dir]  a new object of that GUID (or object file name) put at the tile's middle (facing dir, eighths) through
 //                         the placement path (Place where legal, then FinalUserPlaceObject: UserPlace)
 //   grab#<id>             the object picked up by the player (UserPickup) and put back (ResetLocation)
 //   wall@x,y,seg          the wall segment deleted (ERoom::DeleteWallAtTile), the rooms and house redone
 //   chain@x,y             the tile's object chain printed (the tile map's object and its siblings)
+//   model#<hex>           the object files whose first ObjAnimDef draws that model printed
 //   paperroom@x,y,i[,sell] the room at the tile papered with WallSet entry i (or stripped), wallpainter.cpp
 void WallPainterRoomTest(int x, int y, int index, bool sell);  // wallpainter.cpp
 void PlacementTestTick(int ticks) {
@@ -1037,6 +1054,16 @@ void PlacementTestTick(int ticks) {
       _globals.RecalcHouse();
       std::printf("[place] tick %d wall %d,%d seg %d: %s (guid 0x%x)\n", ticks, x, y, z,
                   Globs_pFixedWorld->GetWall(t).HasWall(z) ? "kept" : "deleted", static_cast<unsigned int>(guid));
+    } else if (std::strncmp(a, "model#", 6) == 0 && Globs_pObjectFolder) {
+      // The object files whose first ObjAnimDef draws that model (hex id).
+      const unsigned int model = static_cast<unsigned int>(std::strtoul(a + 6, nullptr, 16));
+      for (ObjSelector* first : Globs_pObjectFolder->m_selectors)
+        for (ObjSelector* sel = first; sel; sel = sel->m_next) {
+          const unsigned char* res = sel->m_def ? objdef::ResData(sel->m_def) : nullptr;
+          const unsigned char* defs = res ? objdef::AnimDefs(res) : nullptr;
+          if (defs && objdef::AnimDefCount(defs) > 0 && ERQuickdata::U32(defs, 0) == model)
+            std::printf("[place] model 0x%08x: %s (guid 0x%08x)\n", model, sel->m_fileName, static_cast<unsigned int>(sel->GetGUID()));
+        }
     } else if (std::strncmp(a, "grab#", 5) == 0) {
       PlacementObject po;
       const int ok = po.GrabExistingObjectInstanceFromId(static_cast<short>(std::atoi(a + 5)));
@@ -1046,8 +1073,15 @@ void PlacementTestTick(int ticks) {
         po.DestroyGridObject();
       }
     } else {
-      const unsigned int guid = static_cast<unsigned int>(std::strtoul(a, nullptr, 16));
+      unsigned int guid = static_cast<unsigned int>(std::strtoul(a, nullptr, 16));
       const char* at = std::strchr(a, '@');
+      if (at && !std::isxdigit(static_cast<unsigned char>(*a)) && Globs_pObjectFolder) {
+        // An object file's name instead of the GUID (e.g. scenery_tree_boxwood@10,4).
+        const std::string name(a, at);
+        for (ObjSelector* first : Globs_pObjectFolder->m_selectors)
+          for (ObjSelector* sel = first; sel; sel = sel->m_next)
+            if (sel->m_fileName && name == sel->m_fileName && !sel->GetIsMultiTileSubObject()) guid = static_cast<unsigned int>(sel->GetGUID());
+      }
       int dir = 0;
       if (!at || std::sscanf(at + 1, "%d,%d,%d", &x, &y, &dir) < 2) continue;
       PlacementObject po;

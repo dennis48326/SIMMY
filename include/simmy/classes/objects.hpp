@@ -730,6 +730,8 @@ struct cXObjectImpl : public cXObject {
   ObjSelector* m_selector = nullptr;      // +0x8C
   RelMatrixImpl* m_relations = nullptr;   // +0x60 its relationships to objects (from the save; RelMatrix::CreateInstance)
   std::vector<short> m_slotContents;      // +0x90 its object slots' contents (ObjectSlot +4: the id held; ReconSlots)
+  int m_overrideRender = 0;               // +0xCC the render position is overridden (SetOverrideRenderPosition)
+  float m_overrideRenderPos[2] = {};      // +0xD0 x, y
   int m_graphicsTagged = 0;               // +0xE8 the model must restart its animation (HaveGraphicsBeenTagged)
   ISimInstance* m_instance = nullptr;     // TreeSim +0x10: its 3D instance (EGlobal::AllocInstance)
   std::vector<SpriteSlot> m_spriteSlots;  // +0xB0 its sprite slots (people: one; sprites.hpp)

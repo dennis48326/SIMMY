@@ -80,11 +80,17 @@ struct CasSimDescriptionS2C {
   Sim__SimPartsS2CParam GetBodyPartParam(eBodyPartS2C part) const;  // 801679E4
   void ReadOldDescription(ReconBuffer *);  // 80167B7C
   void DoStream(ReconBuffer* buffer, int version);  // 80167F00
-  void AssertWithInfo(char *);  // 80168408
+  void AssertWithInfo(const char* message);  // 80168408
+  // Out-of-range or inconsistent indices, styles, flags, morphs, personality, aspiration and names
+  // set back to defaults (see the function).
   void Verify();  // 8016850C
-  void VerifyBodyPartNoTexture(CasSimPartsS2C &, eBodyPartS2C, signed char &, signed char, bool);  // 80169468
-  RET_UNKNOWN VerifyBodyPartWithNoOptions(CasSimPartsS2C &, eBodyPartS2C, signed char &, signed char &, signed char, signed char, bool);  // 80169578
-  RET_UNKNOWN VerifyBodyPartWithOneOption(CasSimPartsS2C &, eBodyPartS2C, signed char &, signed char &, signed char &, signed char, signed char, signed char, bool);  // 8016977C
+  void VerifyBodyPartNoTexture(CasSimPartsS2C& parts, eBodyPartS2C part, signed char& index, signed char def,
+                               bool modelOptional);  // 80169468
+  void VerifyBodyPartWithNoOptions(CasSimPartsS2C& parts, eBodyPartS2C part, signed char& index, signed char& texture,
+                                   signed char defIndex, signed char defTexture, bool modelOptional);  // 80169578
+  void VerifyBodyPartWithOneOption(CasSimPartsS2C& parts, eBodyPartS2C part, signed char& index, signed char& texture,
+                                   signed char& option, signed char defIndex, signed char defTexture,
+                                   signed char defOption, bool modelOptional);  // 8016977C
   void SetInnerLayerTorsoStyle(CasSimPartsS2C &);  // 801699FC
   void SwitchInnerLayerTorso(bool);  // 80169A40
   void SwitchMidLayerTorso(bool);  // 80169A5C
@@ -198,8 +204,9 @@ struct CasSimPartsS2C {
   int OuterLayerCollarIsAHood(unsigned int index, Sim__OuterLayerCollarStyleS2C style) const;  // 8016CDD8
   int OuterLayerTorsoIsAHood(unsigned int index, Sim__OuterLayerTorsoStyleS2C style) const;  // 8016CE80
   int CanBeWornSleeveless(eBodyPartS2C, unsigned int, Sim__SimPartsS2CParam) const;  // 8016CED8
-  RET_UNKNOWN MidLayerTorsoHidesBelt(unsigned int, Sim__MidLayerTorsoStyleS2C, unsigned int) const;  // 8016CF78
-  RET_UNKNOWN OuterLayerTorsoHidesBelt(unsigned int, Sim__OuterLayerTorsoStyleS2C, unsigned int) const;  // 8016CFF8
+  // Whether the top (style `index`, its option `style`) hides belt `belt` (GC tables by gender).
+  int MidLayerTorsoHidesBelt(unsigned int index, signed char style, unsigned int belt) const;  // 8016CF78
+  int OuterLayerTorsoHidesBelt(unsigned int index, signed char style, unsigned int belt) const;  // 8016CFF8
   int GetUnlockGroupNum(eBodyPartS2C, unsigned int) const;  // 8016D078
   int GetUnlockGroupNum(eTattooTextureTypeS2C, unsigned int) const;  // 8016D294
   int GetTattoosForLocation(eTattooTextureTypeS2C, unsigned char *) const;  // 8016D388
@@ -207,9 +214,10 @@ struct CasSimPartsS2C {
   void GetIndexFromResId(eBodyPartS2C, int, Sim__SimPartsS2CParam, int *);  // 8016D460
   unsigned int GetGameStateModelID(unsigned int id) const;  // 8016D508
   unsigned int GetGameStateTextureID(unsigned int id) const;  // 8016D534
-  RET_UNKNOWN GetWeldableBodyPartConnections(eBodyPartS2C, unsigned int *, unsigned int);  // 8016D560
-  RET_UNKNOWN GetNumBodyPartOptions(eBodyPartS2C);  // 8016D730
-  RET_UNKNOWN GetBodyPartName(eBodyPartS2C);  // 8016D820
+  // The parts `part` meets (26: none) into out[0..count-1], for welding.
+  void GetWeldableBodyPartConnections(eBodyPartS2C part, unsigned int* out, unsigned int count);  // 8016D560
+  unsigned int GetNumBodyPartOptions(eBodyPartS2C part);  // 8016D730
+  const char* GetBodyPartName(eBodyPartS2C part);  // 8016D820
   void VerifyBodyPartsData();  // 8016D8B4
 
   // The texture id at entry `texture` of the id array at `field` of `rec` (GetTextureIDFromVector).
@@ -258,7 +266,7 @@ struct SimModel {
   void FlushLoadingModels();  // 80071460
   RET_UNKNOWN VerifyRequiredModels() const;  // 800714C4
   void WeldAllSharedVertices();  // 800714CC
-  void WeldSharedVertices(eBodyPartS2C, eBodyPartS2C, bool);  // 80071558
+  void WeldSharedVertices(eBodyPartS2C part, eBodyPartS2C other, bool rebuild);  // 80071558
   void ApplyAllLatticeMorphing();  // 80071620
   void ApplyLatticeMorphingToModelPart(eBodyPartS2C);  // 8007172C
   void ApplyAllMorphTargets();  // 80071B1C

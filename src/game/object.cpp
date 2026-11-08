@@ -116,6 +116,30 @@ ObjSelector* cXObjectImpl::GetSelector() const { return m_selector; }
 cXObjectImpl* cXObjectImpl::GetObjectImplementation() { return this; }
 // 800EB1D0
 bool cXObjectImpl::IsRoof() { return objdef::Type(GetDef()) == 0xe; }
+// 800E2FF8
+// Where the simulator wants the object drawn instead of its tile (ISimsObjectModel::ApplyMatrix): x, y
+// replaced when an override is set. (No caller of SetOverrideRenderPosition is known in the release.)
+RET_UNKNOWN cXObjectImpl::OverrideRenderPosition(float& x, float& y) {
+  if (m_overrideRender) {
+    x = m_overrideRenderPos[0];
+    y = m_overrideRenderPos[1];
+  }
+  return m_overrideRender;
+}
+// 800E301C
+void cXObjectImpl::SetOverrideRenderPosition(float x, float y) {
+  m_overrideRenderPos[0] = x;
+  m_overrideRender = 1;
+  m_overrideRenderPos[1] = y;
+}
+// 800E3030
+void cXObjectImpl::GetOverrideRenderPosition(float& x, float& y) {
+  x = m_overrideRenderPos[0];
+  y = m_overrideRenderPos[1];
+}
+// 800E3044
+void cXObjectImpl::ClearOverrideRenderPosition() { m_overrideRender = 0; }
+
 // 800E3050
 bool cXObjectImpl::IsVehicle() { return GetType() == 0xc; }
 // 800EB8C4

@@ -2628,6 +2628,9 @@ struct CTGMicroTimer {
 #include "simmy/classes/objects.hpp"  // hand-written
 #include "simmy/classes/treesim.hpp"  // hand-written
 #include "simmy/classes/wantfear.hpp"  // hand-written
+#include "simmy/classes/simmodel.hpp"  // hand-written
+#include "simmy/classes/casenums.hpp"  // hand-written
+#include "simmy/classes/casclothingunlocks.hpp"  // hand-written
 #include "simmy/classes/neighborhood.hpp"  // hand-written
 #include "simmy/classes/routing.hpp"  // hand-written
 #include "simmy/classes/person.hpp"  // hand-written
@@ -2669,30 +2672,6 @@ struct Career {
 };
 #include "simmy/classes/careers.hpp"  // hand-written
 #include "simmy/classes/careers.hpp"  // hand-written
-struct CasClothingUnlocks {
-    CasClothingUnlocks();  // 8015E9D4
-    ~CasClothingUnlocks();  // 8015EAB8
-    void Unlock(bool, eBodyPartS2C, unsigned int, bool);  // 8015EB20
-    void Unlock(bool, eTattooTextureTypeS2C, unsigned int, bool);  // 8015EBA4
-    void Lock(bool, eBodyPartS2C, unsigned int);  // 8015EC28
-    void Lock(bool, eTattooTextureTypeS2C, unsigned int);  // 8015ECA0
-    void ClearRecentlyUnlocked(bool, eBodyPartS2C, unsigned int);  // 8015ED18
-    void ClearRecentlyUnlocked(bool, eTattooTextureTypeS2C, unsigned int);  // 8015ED80
-    RET_UNKNOWN GetFlags(bool, eBodyPartS2C, unsigned int) const;  // 8015EDE4
-    RET_UNKNOWN GetFlags(bool, eTattooTextureTypeS2C, unsigned int) const;  // 8015EE4C
-    RET_UNKNOWN IsLocked(bool, eBodyPartS2C, unsigned int) const;  // 8015EEB0
-    RET_UNKNOWN IsLocked(bool, eTattooTextureTypeS2C, unsigned int) const;  // 8015EF1C
-    RET_UNKNOWN IsRecentlyUnlocked(bool, eBodyPartS2C, unsigned int) const;  // 8015EF84
-    RET_UNKNOWN IsRecentlyUnlocked(bool, eTattooTextureTypeS2C, unsigned int) const;  // 8015EFF0
-    bool CheckBodyIndex(unsigned int) const;  // 8015F058
-    bool CheckTextureIndex(unsigned int) const;  // 8015F068
-    void ClearUnlocks();  // 8015F078
-    void DoStream(ReconBuffer *, int);  // 8015F0D4
-    void UnlockGroup(unsigned int, bool);  // 8015F1CC
-    void LockGroup(unsigned int);  // 8015F1F4
-    void MarkGroup(unsigned int, bool, bool);  // 8015F21C
-    void PrintUnlocks(CasSimDescriptionS2C *) const;  // 8015F390
-};
 #include "simmy/classes/cascostumes.hpp"  // hand-written
 #include "simmy/classes/cas.hpp"  // hand-written
 #include "simmy/classes/cas.hpp"  // hand-written
@@ -2755,14 +2734,7 @@ struct CasScenePersonal : public CasScene {
 #include "simmy/classes/cas.hpp"  // hand-written
 #include "simmy/classes/cas.hpp"  // hand-written
 #include "simmy/classes/cas.hpp"  // hand-written
-struct CasTweakTool {
-    CasTweakTool();  // 801752A4
-    virtual ~CasTweakTool();  // 801752CC
-    void GetLights(ELights &);  // 80175300
-    void SetLights(ELights &);  // 80175358
-    void GetCamera(EVec3 &, EVec3 &);  // 801753B0
-    void SetCamera(EVec3 &, EVec3 &);  // 801753EC
-};
+#include "simmy/classes/castweaktool.hpp"  // hand-written
 struct CatalogResource {
     CatalogResource() = default;  // generated: lets derived stubs construct the base
     static void CreateInstance();  // 800B1C44
@@ -4297,9 +4269,7 @@ struct ETweak {
 #include "simmy/classes/eanimdecomp.hpp"  // hand-written
 #include "simmy/classes/eaudio.hpp"  // hand-written
 #include "simmy/classes/eaudio.hpp"  // hand-written
-struct EWeldVert {
-    EWeldVert() = default;  // generated: lets derived stubs construct the base
-};
+#include "simmy/classes/ermodel.hpp"  // hand-written
 struct EYETarget {
     using eState = ::EYETarget__eState;
     EYETarget() = default;  // generated: lets derived stubs construct the base
@@ -5145,43 +5115,8 @@ struct INVTarget__eInteractorMode {
     INVTarget__eInteractorMode() = default;  // generated: lets derived stubs construct the base
 };
 #include "simmy/classes/isimsobjectmodel.hpp"  // hand-written
-struct IShrubObject : public ISimsObjectModel {
-    IShrubObject();  // 800525E4
-    virtual ~IShrubObject();  // 8005262C
-    virtual void Create(cXObject *, EHouse *);  // 8005268C
-    void SetObjOrient();  // 800526EC
-    static void New();  // 8005433C
-    void Construct(IShrubObject *);  // 80054390
-    static void Destruct(IShrubObject *);  // 800543B0
-    virtual void SafeDelete();  // 800543D4
-    virtual ETypeInfo* GetTypeInfo() const;  // 80054414
-    virtual const char* GetTypeName() const;  // 80054420
-    virtual unsigned int GetTypeKey() const;  // 8005442C
-    virtual unsigned short GetTypeVersion() const;  // 80054438
-    static RET_UNKNOWN GetTypeInfoStatic();  // 80054444
-    static RET_UNKNOWN GetReadVersion();  // 80054450
-    static void RegisterType(unsigned short);  // 8005445C
-    void CreateCopy() const;  // 800544B0
-};
-struct ISimsCounterTopObject : public ISimsObjectModel {
-    ISimsCounterTopObject();  // 800520AC
-    virtual ~ISimsCounterTopObject();  // 800520F4
-    virtual void Create(cXObject *, EHouse *);  // 80052154
-    void SetObjOrient();  // 80052190
-    static void New();  // 800541A8
-    void Construct(ISimsCounterTopObject *);  // 800541FC
-    static void Destruct(ISimsCounterTopObject *);  // 8005421C
-    virtual void SafeDelete();  // 80054240
-    virtual ETypeInfo* GetTypeInfo() const;  // 80054280
-    virtual const char* GetTypeName() const;  // 8005428C
-    virtual unsigned int GetTypeKey() const;  // 80054298
-    virtual unsigned short GetTypeVersion() const;  // 800542A4
-    static RET_UNKNOWN GetTypeInfoStatic();  // 800542B0
-    static RET_UNKNOWN GetReadVersion();  // 800542BC
-    static void RegisterType(unsigned short);  // 800542C8
-    void CreateCopy() const;  // 8005431C
-    static RET_UNKNOWN IsSinkId(cXObject *);  // 800548E0
-};
+#include "simmy/classes/isimsobjectmodel.hpp"  // hand-written
+#include "simmy/classes/isimsobjectmodel.hpp"  // hand-written
 #include "simmy/classes/isimsobjectmodel.hpp"  // hand-written
 #include "simmy/classes/isimsobjectmodel.hpp"  // hand-written
 struct ISmartDataFactory {
@@ -7327,13 +7262,11 @@ struct cXPortalImpl {
 };
 #include "simmy/classes/eanimcontroller.hpp"  // hand-written
 #include "simmy/classes/simmodel.hpp"  // hand-written
-#include "simmy/classes/simmodel.hpp"  // hand-written
 struct eInvFullDialogType {
     eInvFullDialogType() = default;  // generated: lets derived stubs construct the base
 };
 #include "simmy/classes/simmodel.hpp"  // hand-written
 #include "simmy/classes/simmodel.hpp"  // hand-written
-#include "simmy/classes/casenums.hpp"  // hand-written
 #include "simmy/classes/eanimcontroller.hpp"  // hand-written
 struct fontFXcommand {
     fontFXcommand() = default;  // generated: lets derived stubs construct the base

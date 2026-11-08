@@ -12,11 +12,6 @@ summary and the deliberate GC behaviour.
 
 - Stale header comments (they say "not ported" for ported code): livemode.cpp, hudtarget.hpp,
   aptviewer.cpp, `thesims.cpp`'s NewState comment.
-- Two-player story start: player 2's sim (neighbour 60) has every morph value 0.0 (head shape and the
-  four face regions; a description's defaults are 1.0 and head 3.0). Since `SimModel::UpdateReweld` is
-  ported these zeros show (minimum face sliders). Check whether that is the GC data or a port default.
-- `SimModel::RebuildModified` (80072E30) only clears the changed flags; GC also rebuilds welded models
-  (`ERModel::RebuildAfterWelding`), which matters only once vertex welding is ported.
 
 ## Simulation
 
@@ -46,8 +41,15 @@ summary and the deliberate GC behaviour.
 - `cXPersonImpl`: `Reset` (8011EB78), motive curves from a string set file (no definition on the disc
   names one).
 - GlobalDispatch has no listener list: the house's messages go to `HouseImpl::DoCommand` through
-  `HouseDispatch` where the port broadcasts them (0xEC, 0xED, 0xEF, 0xDE, and the simulator's 0xD8 / 0xD9).
-  Other Commanders (the world, the object module, families) are not listeners.
+  `HouseDispatch` where the port broadcasts them (0xEC, 0xED, 0xEF, 0xDE, and the simulator's 0xD8 / 0xD9);
+  the object module hears only 0xEE (TryUpdate 1, `ObjectModuleDispatch`). Other Commanders (the world,
+  families) are not listeners, and the wall tool's 0x91 / 0xFC / 0xEC are not sent.
+- Object models: the height of an object on a counter (`ISimsObjectModel::GetHeightOffset`, data 4 bit
+  0x20) is not ported. The boxwood hedge (`IShrubObject`) is ported but no object on the disc draws its
+  model. Go Here's nearest free spot uses the port's `FindGoodLocation` stand-in (ring order and
+  `ObjectCanPlaceAt` instead of the person's `CanPlace`).
+- Fire code: the meter's model memory share is the summed MODL data sizes of the lot's models, as GC
+  measures it; `fire_code_limit=off` (simmy.ini) turns the limit off.
 - `HouseImpl` loading and saving (`Initialize`, `LoadFile`, `SaveFile`: the score curves, the name) are
   the world side's stand-ins (livemode.cpp `BGExec_LoadHouse`, lotsave.cpp); `ObjectModuleImpl::ComputeStats`
   is a stand-in (lotsave.cpp). People are added to the object module and saved with it.
@@ -66,7 +68,11 @@ summary and the deliberate GC behaviour.
 - `HUDTarget`: `ActionQueueHUD` (the PC queue widget is `ACTTarget` via H2D: same behaviour) and
   `AttachControllers` (a filter for commands nothing reads on PC).
 - `O2TTarget`: the screen-position wizard (`UseOptionsScreenAdjustXY`; the PC scales the picture itself).
-- CAS: representation shaders (EyeToy), the generating sound, saved grandparents (dev-tool data only).
+- CAS: representation shaders (EyeToy), the generating sound, saved grandparents (dev-tool data only),
+  the tweak tool's lights (dev), the costume-number/`PrintUnlocks` dev prints, `ReadOldDescription`
+  (a description without the 0xFEED mark: logged once in an old run, never reproduced). Clothing
+  unlocks, welding, belts under tops, description repair and the C-stick zoom/turn are ported
+  ([cas-and-neighbourhood.md](cas-and-neighbourhood.md)).
 - Mouse: no clicking on individual buttons (the game has no pointer); build/buy cursors are stick-driven.
 
 ## Rendering and camera

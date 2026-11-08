@@ -1,13 +1,13 @@
-// @class Neighborhood after CasSimDescriptionS2C ReconBuffer
-// @class NeighborhoodImpl after CasSimDescriptionS2C ReconBuffer
-// @class Neighbor after CasSimDescriptionS2C ReconBuffer WantFear__Bookmark
-// @class RelMatrix after CasSimDescriptionS2C ReconBuffer
-// @class RelMatrixImpl after CasSimDescriptionS2C ReconBuffer
-// @class RelArray after CasSimDescriptionS2C ReconBuffer
-// @class Family after CasSimDescriptionS2C ReconBuffer
-// @class FamilyImpl after CasSimDescriptionS2C ReconBuffer
-// @class PlayerFamilyImpl after CasSimDescriptionS2C ReconBuffer
-// @class UserDataSaveLoad after CasSimDescriptionS2C ReconBuffer
+// @class Neighborhood after CasSimDescriptionS2C ReconBuffer CasClothingUnlocks
+// @class NeighborhoodImpl after CasSimDescriptionS2C ReconBuffer CasClothingUnlocks
+// @class Neighbor after CasSimDescriptionS2C ReconBuffer WantFear__Bookmark CasClothingUnlocks
+// @class RelMatrix after CasSimDescriptionS2C ReconBuffer CasClothingUnlocks
+// @class RelMatrixImpl after CasSimDescriptionS2C ReconBuffer CasClothingUnlocks
+// @class RelArray after CasSimDescriptionS2C ReconBuffer CasClothingUnlocks
+// @class Family after CasSimDescriptionS2C ReconBuffer CasClothingUnlocks
+// @class FamilyImpl after CasSimDescriptionS2C ReconBuffer CasClothingUnlocks
+// @class PlayerFamilyImpl after CasSimDescriptionS2C ReconBuffer CasClothingUnlocks
+// @class UserDataSaveLoad after CasSimDescriptionS2C ReconBuffer CasClothingUnlocks
 // The neighbourhood (game/neighborhood.cpp, Globs::pNeighborhood): its neighbours (game/neighbor.cpp:
 // every sim the game knows, by id, each with its person data, motives, relationships
 // (game/relmatrix.cpp) and wants and fears), its families (game/family.cpp, game/playerfamilyimpl.cpp:
@@ -253,8 +253,8 @@ struct FamilyImpl : public Family {
   unsigned int m_flags = 0;       // +0x34
 };
 
-// 0xD68 bytes. PC: the parts kept as their streamed data (BBI::InventoryItems, GoalUnlock,
-// CasClothingUnlocks are not ported as classes).
+// 0xD68 bytes. PC: the parts kept as their streamed data (BBI::InventoryItems, GoalUnlock are not
+// ported as classes).
 struct PlayerFamilyImpl : public FamilyImpl {
   // An inventory slot (BBI::InventoryItem's streamed part: category, subcategory, two bytes, a word).
   struct InventoryItem {
@@ -269,7 +269,7 @@ struct PlayerFamilyImpl : public FamilyImpl {
   int GetStatValue(int index) const override;  // 8012D140
   int GetStatRef(int index, short** ref) override;  // 8012D160
   short GetResfileStorageId(short number) override;  // 8012D1A4
-  virtual RET_UNKNOWN GetClothingUnlocks();  // 8012D1AC
+  virtual CasClothingUnlocks* GetClothingUnlocks();  // 8012D1AC
   RET_UNKNOWN GetInventory() override;  // 8012D1B4
   RET_UNKNOWN GetGoalAndUnlockData() override;  // 8012D1BC
   virtual RET_UNKNOWN GetTotalAspirationScore() const;  // 8012D1C4
@@ -279,8 +279,7 @@ struct PlayerFamilyImpl : public FamilyImpl {
 
   bool m_haveItem[36] = {};                       // +0x38 BBI::InventoryItems (36 item pointers)
   InventoryItem m_items[36];
-  signed char m_clothingUnlocks[2][0x500] = {};   // +0xC8 CasClothingUnlocks: per gender 32 x 40
-  signed char m_tattooUnlocks[2][0xF0] = {};      //        then 8 x 30
+  CasClothingUnlocks m_clothingUnlocks;           // +0xC8
   short m_stats[0x19] = {};                       // +0xCA8
   short m_goals[0x40] = {};                       // +0xCDC GoalUnlock (+4)
   int m_totalAspirationScore = 0;                 // +0xD60

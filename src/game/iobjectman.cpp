@@ -1,8 +1,8 @@
 // Port of game/iobjectman.cpp (EIObjectMan, partial): the house's 3D object instances, one per
 // simulation object, by handle. Ported: making an object's instance (the model class from its
-// definition), putting it in the house's level, orienting them and taking them out again. Still
-// stubbed: the bound-rectangle display list, the room-visibility callbacks, portal lights, counting
-// and the rectangle queries.
+// definition), putting it in the house's level, orienting them and taking them out again, counting
+// them for the fire code. Still stubbed: the bound-rectangle display list, the room-visibility
+// callbacks and the rectangle queries.
 #include "simmy/types_gen.hpp"
 #include "simmy/unported_globals.hpp"
 
@@ -116,17 +116,15 @@ ISimInstance* EIObjectMan::AllocSimsObjectInstance(cXObject* object) {
     if (res[5] == 1) {
       instance = new ISimsWallObjectModel();
     } else {
-      if (res[6] == 1) SIMMY_STUB("EIObjectMan::AllocSimsObjectInstance: ISimsCounterTopObject (as a plain object)", 0x800550C0);
-      else if (model == EResourceManager::CalcId(const_cast<char*>("boxwood_hedge")))
-        SIMMY_STUB("EIObjectMan::AllocSimsObjectInstance: IShrubObject (as a plain object)", 0x800550C0);
-      instance = new ISimsObjectModel();
+      if (res[6] == 1) instance = new ISimsCounterTopObject();
+      else if (model == EResourceManager::CalcId(const_cast<char*>("boxwood_hedge"))) instance = new IShrubObject();
+      else instance = new ISimsObjectModel();
     }
   } else {
     object->IsMultiTile();  // (GC: called, its result unused)
     if (res[5] == 1) instance = new ISimsWallObjectModel();
     else if (res[6] == 1) {
-      SIMMY_STUB("EIObjectMan::AllocSimsObjectInstance: ISimsCounterTopObject (as a multi-tile object)", 0x800550C0);
-      instance = new ISimsMultiTileObjectModel();
+      instance = new ISimsCounterTopObject();  // GC: a counter top even as a multi-tile part
     } else {
       instance = new ISimsMultiTileObjectModel();
     }
@@ -138,6 +136,52 @@ ISimInstance* EIObjectMan::AllocSimsObjectInstance(cXObject* object) {
 
 // 800553E0
 void EIObjectMan::PostLoad() { ReOrientHouse(false); }
+
+// 80055404
+// The fire-code meter's counts (EMemoryMeterWin::PollMemoryLevels) over the instances that are not
+// people: the first 15 objects whose definition has flag 0x10 (+0xB6) are free; the grid tiles (GUID
+// 0x437) are not counted. `objects` counts the rest; `weighted` adds 1 + the animated model's nodes /
+// 6.75 for each; `models` is the number of different models they draw and `memory` those models'
+// sizes summed (bytes: EResource +0x10 >> 8, the MODL data size as loaded; once per model).
+// PC: the instances in handle order (GC: the manager's list).
+void EIObjectMan::CountObjects(float& models, float& objects, float& weighted, float& memory) {
+  models = 0.0f;
+  objects = 0.0f;
+  weighted = 0.0f;
+  memory = 0.0f;
+  struct ModelData {
+    unsigned int size = 0;  // model_dat +0x00
+    int count = 0;          // +0x04
+    float weight = 0.0f;    // +0x08
+  };
+  std::map<ERModel*, ModelData> seen;  // GC: _Rb_tree<ERModel*, model_dat> (pointer order; only summed)
+  int free = 0;
+  for (auto& item : m_items) {
+    ISimInstance* instance = item.second;
+    if (instance->GetIsPerson()) continue;
+    if (free < 0xf && instance->GetXOb()) {
+      const ObjDefinition* def = instance->GetXOb()->GetDef();
+      if (def && (objdef::Flags(def) & 0x10)) {
+        ++free;
+        continue;
+      }
+    }
+    ObjSelector* selector = instance->GetXOb() ? instance->GetXOb()->GetSelector() : nullptr;
+    if (!selector || selector->GetGUID() == 0x437) continue;
+    // The controller's character (+0x358): its node count (+0x18).
+    const double weight = static_cast<double>(static_cast<float>(instance->m_anim.NodeCount())) / 6.75 + 1.0;
+    if (ERModel* model = instance->m_model) {
+      ModelData& d = seen[model];
+      d.size = model->m_flags >> 8;
+      ++d.count;
+      d.weight = static_cast<float>(weight);
+    }
+    objects = objects + 1.0f;
+    weighted = static_cast<float>(static_cast<double>(weighted) + weight);
+  }
+  models = static_cast<float>(seen.size());
+  for (auto& entry : seen) memory = memory + static_cast<float>(static_cast<int>(entry.second.size));
+}
 
 // 80055990
 // Every object instance (not people) placed again from its object.

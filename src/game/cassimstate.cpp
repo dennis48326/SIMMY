@@ -406,6 +406,103 @@ int CasSimPartsS2C::GetUnlockGroupNum(eTattooTextureTypeS2C type, unsigned int i
   return rec ? static_cast<int>(ERQuickdata::F32(rec, 0x10)) : 0;
 }
 
+namespace {
+// femaleMidLayerTorsoHidesBeltMatrix 803E1403 (22 mid tops x 6 options), maleMidLayerTorsoHidesBeltMatrix
+// 803E1487 (19 x 6), femaleOuterLayerTorsoHidesBeltMatrix 803E14F9 (23 outer tops x 2),
+// maleOuterLayerTorsoHidesBeltMatrix 803E1527 (21 x 2).
+const unsigned char kFemaleMidHidesBelt[22][6] = {
+    {0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0}, {1, 0, 0, 1, 0, 0}, {1, 0, 0, 1, 0, 0}, {0, 0, 0, 0, 0, 0},
+    {0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0},
+    {0, 0, 0, 0, 0, 0}, {1, 0, 0, 1, 0, 0}, {0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0},
+    {0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0},
+    {0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0}};
+const unsigned char kMaleMidHidesBelt[19][6] = {
+    {0, 0, 0, 0, 0, 0}, {1, 0, 0, 1, 0, 0}, {1, 0, 0, 1, 0, 0}, {0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0},
+    {0, 1, 0, 0, 1, 0}, {0, 0, 0, 0, 0, 0}, {0, 1, 0, 0, 1, 0}, {1, 0, 0, 1, 0, 0}, {0, 1, 0, 0, 1, 0},
+    {0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0}, {1, 0, 1, 1, 0, 1}, {0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0},
+    {0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0}};
+const unsigned char kFemaleOuterHidesBelt[23][2] = {
+    {0, 0}, {0, 0}, {0, 0}, {0, 1}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0},
+    {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}};
+const unsigned char kMaleOuterHidesBelt[21][2] = {
+    {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 1}, {0, 1}, {0, 0}, {0, 0}, {0, 1}, {0, 0}, {0, 0},
+    {0, 1}, {0, 0}, {0, 0}, {0, 1}, {0, 0}, {0, 0}, {0, 1}, {0, 0}, {0, 0}, {0, 1}};
+}  // namespace
+
+// 8016CF78
+// (GC indexes the flat table by style + index * 6, so a style outside 0..5 reads a neighbouring row.)
+int CasSimPartsS2C::MidLayerTorsoHidesBelt(unsigned int index, signed char style, unsigned int belt) const {
+  if (!m_male) {
+    if (index < 0x16) return (&kFemaleMidHidesBelt[0][0])[style + static_cast<int>(index) * 6] != 0;
+  } else if (belt != 2 && index < 0x13) {
+    return (&kMaleMidHidesBelt[0][0])[style + static_cast<int>(index) * 6] != 0;
+  }
+  return 0;
+}
+
+// 8016CFF8
+int CasSimPartsS2C::OuterLayerTorsoHidesBelt(unsigned int index, signed char style, unsigned int belt) const {
+  if (!m_male) {
+    if (index < 0x17) return (&kFemaleOuterHidesBelt[0][0])[style + static_cast<int>(index) * 2] != 0;
+  } else if (belt != 2 && index < 0x15) {
+    return (&kMaleOuterHidesBelt[0][0])[style + static_cast<int>(index) * 2] != 0;
+  }
+  return 0;
+}
+
+// 8016D560
+// head: hair 0..3, inner torso, hat; hair pieces, hat: head (hat also hair-hat); inner torso: lower body,
+// head, inner sleeve; inner sleeve: inner torso; mid torso: mid collar, mid sleeve; mid collar/sleeve:
+// mid torso; outer torso: outer collar, outer sleeve; outer collar/sleeve: outer torso; lower body:
+// inner torso, boot top, shoes; shoes: boot top, lower body; boot top: lower body, shoes. Unused slots
+// 26 (none).
+void CasSimPartsS2C::GetWeldableBodyPartConnections(eBodyPartS2C part, unsigned int* out, unsigned int count) {
+  if (!count || !out) return;
+  for (unsigned int i = 0; i < count; ++i) out[i] = 0x1a;
+  switch (static_cast<int>(part)) {
+    case 1:
+      out[0] = 2, out[1] = 3, out[2] = 4, out[3] = 5, out[4] = 6, out[5] = 7, out[6] = 0x13;
+      break;
+    case 2: case 4: case 5: case 6: out[0] = 1; break;
+    case 3: out[0] = 1, out[1] = 0x13; break;
+    case 7: out[0] = 0xf, out[1] = 1, out[2] = 8; break;
+    case 8: out[0] = 7; break;
+    case 9: out[0] = 10, out[1] = 11; break;
+    case 10: case 11: out[0] = 9; break;
+    case 12: out[0] = 0xd, out[1] = 0xe; break;
+    case 13: case 14: out[0] = 0xc; break;
+    case 15: out[0] = 7, out[1] = 0x11, out[2] = 0x10; break;
+    case 16: out[0] = 0x11, out[1] = 0xf; break;
+    case 17: out[0] = 0xf, out[1] = 0x10; break;
+    case 19: out[0] = 3, out[1] = 1; break;
+    default: break;
+  }
+}
+
+// 8016D730
+// How many style options the part has: hair 4, inner torso 2 / sleeve 4, mid torso 6 / collar 2 / sleeve
+// 4, outer torso 2 / collar 4 / sleeve 3, lower body 4, hat 4, arm accessory 3; the rest none.
+unsigned int CasSimPartsS2C::GetNumBodyPartOptions(eBodyPartS2C part) {
+  static const unsigned char kOptions[0x1a] = {0, 0, 4, 4, 4, 4, 4, 2, 4, 6, 2, 4, 2, 4, 3, 4,
+                                               0, 0, 0, 4, 0, 3, 0, 0, 0, 0};
+  const int p = part;
+  return p >= 0 && p < 0x1a ? kOptions[p] : 0;
+}
+
+// 8016D820
+// The part's name for Verify's messages (the table at 803E11F0; GC's entry 24 runs into the next
+// string and entry 25 is null).
+const char* CasSimPartsS2C::GetBodyPartName(eBodyPartS2C part) {
+  static const char* const kNames[0x1a] = {
+      "Glasses", "Head", "Hair-Top", "Hair-Bottom", "Hair-Accessory-1", "Hair-Accessory-2", "Hair-Accessory-3",
+      "Inner-Layer-Torso", "Inner-Layer-Torso-Sleeve", "Mid-Layer-Torso", "Mid-Layer-Torso-Collar",
+      "Mid-Layer-Torso-Sleeve", "Outer-Layer-Torso", "Outer-Layer-Torso-Collar", "Outer-Layer-Torso-Sleeve",
+      "Lower-Body", "Shoes", "Shoes-Boottop", "Facial-Feature", "Hat", "Necklace-Earring", "Arm-Accessory", "Belt",
+      "Belt-Music-Player", "Belt-Ear-BudsVest-Scarf", "(null)"};
+  const unsigned int p = static_cast<unsigned char>(static_cast<int>(part));
+  return p < 0x1a ? kNames[p] : "";  // GC: DAT_803E0700, an empty string
+}
+
 // ---------------------------------------------------------------------------------------------------
 // CasSimState
 
@@ -915,16 +1012,29 @@ unsigned int CasSimRenderer::GetIconTattooTextureId(eTattooTextureTypeS2C type, 
   return m_model.m_simParts ? m_model.m_simParts->GetIconTattooTextureId(type, index) : 0;
 }
 
+namespace {
+// The player family's clothing unlocks (GC: Globs::pNeighborhood->GetFamily(1)->GetClothingUnlocks()).
+CasClothingUnlocks* StoryFamilyClothingUnlocks() {
+  NeighborhoodImpl* hood = Globs_pNeighborhood;
+  auto* family = hood ? dynamic_cast<PlayerFamilyImpl*>(hood->GetFamily(1)) : nullptr;
+  return family ? family->GetClothingUnlocks() : nullptr;
+}
+}  // namespace
+
 // 8016FD00
-// The styles CAS offers (unlock group 1000: never) and their unlock flags. GC: the flags come from the
-// neighbourhood's clothing unlocks (CasClothingUnlocks::GetFlags); PC: all unlocked.
+// The styles CAS offers (unlock group 1000: never) and their unlock flags (2 locked, 4 new) from the
+// player family's clothing unlocks for the edited sim's gender. GC: with the dev "all clothing"
+// switch (DAT_80476194, set only by the dev cheat file) every style is offered, unflagged.
 int CasSimRendererDynamic::GetIndexes(eBodyPartS2C part, unsigned char* indexes, unsigned char* flags) {
   const unsigned int count = GetNumBodyModels(part);
   int n = 0;
+  CasClothingUnlocks* unlocks = StoryFamilyClothingUnlocks();
+  CasSimDescriptionS2C* desc = m_mediator ? m_mediator->GetEditSimDescription() : nullptr;
+  const bool male = desc && desc->m_male != 0;
   for (unsigned int i = 0; i < count && i < 0x100; ++i) {
     if (m_model.m_simParts && m_model.m_simParts->GetUnlockGroupNum(part, i) == 1000) continue;
     indexes[n] = static_cast<unsigned char>(i);
-    flags[n] = 0;
+    flags[n] = unlocks ? unlocks->GetFlags(male, part, i) : 0;  // PC: no player family, nothing locked
     ++n;
   }
   return n;
@@ -934,10 +1044,13 @@ int CasSimRendererDynamic::GetIndexes(eBodyPartS2C part, unsigned char* indexes,
 int CasSimRendererDynamic::GetIndexes(eTattooTextureTypeS2C type, unsigned char* indexes, unsigned char* flags) {
   const unsigned int count = GetNumTattooTextures(type);
   int n = 0;
+  CasClothingUnlocks* unlocks = StoryFamilyClothingUnlocks();
+  CasSimDescriptionS2C* desc = m_mediator ? m_mediator->GetEditSimDescription() : nullptr;
+  const bool male = desc && desc->m_male != 0;
   for (unsigned int i = 0; i < count && i < 0x100; ++i) {
     if (m_model.m_simParts && m_model.m_simParts->GetUnlockGroupNum(type, i) == 1000) continue;
     indexes[n] = static_cast<unsigned char>(i);
-    flags[n] = 0;
+    flags[n] = unlocks ? unlocks->GetFlags(male, type, i) : 0;
     ++n;
   }
   return n;

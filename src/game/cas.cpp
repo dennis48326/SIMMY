@@ -23,6 +23,14 @@ const float kCameraAngles[10][6] = {
     {0.61f, -1.83f, 1.22f, -1.83f, 3.05f, 0.61f},  {0.61f, -1.83f, 1.83f, -2.13f, 3.11f, 0.91f},
     {0.75f, 1.15f, 1.52f, -1.07f, 3.91f, 1.52f},   {-1.18f, -1.29f, 1.74f, -3.96f, -4.88f, 1.22f},
 };
+// The alternative (C-stick zoom) positions (m_altCameraAngles, 803DFB0C): mostly camera 0's wide shot.
+const float kAltCameraAngles[10][6] = {
+    {0.3f, -3.96f, 1.83f, -0.91f, 1.22f, 0.61f},  {0.3f, -3.96f, 1.83f, -0.91f, 1.22f, 0.61f},
+    {0.3f, -3.96f, 1.83f, -0.91f, 1.22f, 0.61f},  {0.3f, -3.96f, 1.83f, -0.91f, 1.22f, 0.61f},
+    {0.3f, -3.96f, 1.83f, -0.91f, 1.22f, 0.61f},  {0.3f, -3.96f, 1.83f, -0.91f, 1.22f, 0.61f},
+    {0.3f, -3.96f, 1.83f, -0.91f, 1.22f, 0.61f},  {0.3f, -3.96f, 1.83f, -0.91f, 1.22f, 0.61f},
+    {1.83f, -1.22f, 3.96f, -1.22f, 4.27f, -0.61f}, {-0.61f, -1.22f, 3.05f, -3.96f, -4.88f, 1.22f},
+};
 // The level's sun and ambient per light set (kSunDir, kSunDirColor, kSunAmbientColor (bss, set by
 // the static initializer 80166F84), kSunDirIntensity, kSunAmbientIntensity (803DFD1C, 803DFD2C)).
 const float kSunDir[4][3] = {{0.57735f, 0.57735f, -0.57735f}, {0.57735f, 0.57735f, -0.57735f},
@@ -45,6 +53,21 @@ const float kMirrorClothingCorners[12] = {-0.989f, 0.119f, 0.235f, -0.563f, 0.53
 float Smooth(float t) { return t * 0.0f + t * -2.0f * t * t + t * 3.0f * t; }
 EVec3 Lerp(const EVec3& a, const EVec3& b, float t) {
   return EVec3{a.x + t * (b.x - a.x), a.y + t * (b.y - a.y), a.z + t * (b.z - a.z)};
+}
+// The pad CAS's player uses (GC, inlined in CasScene::UpdateCamera and CasSimRendererDynamic::Update):
+// the player's mapped pad; unmapped, the active pad unless it is player 1's; and the player's Apt
+// button filter.
+EController* CasPad(CasMediator* mediator, unsigned int& filter) {
+  const unsigned int player = static_cast<unsigned int>(mediator->m_player);
+  filter = mediator->GetControllerFilterId(player);
+  int index;
+  if (!_pCtrlMan->GetPlayerMapped(player)) {
+    index = _pCtrlMan->FindActiveController();
+    if (index == -1 || index == _pCtrlMan->GetPlayerControllerIndex(0)) return nullptr;
+  } else {
+    index = _pCtrlMan->GetPlayerControllerIndex(player);
+  }
+  return _pCtrlMan->GetController(static_cast<unsigned int>(index));
 }
 }  // namespace
 
@@ -367,7 +390,18 @@ void CasSimRendererDynamic::Update(float) {
   else if (target->IsViewingGenetics()) object = 0;
   else object = m_positionNum + 3;
   m_mediator->m_scene->GetObjectPosition(object, m_pos, m_rotation);
-  if (!m_rotationLocked) SIMMY_STUB("CasSimRendererDynamic::Update: turning the sim with the stick", 0x8016FF08);
+  if (!m_rotationLocked) {
+    // The C-stick's x turns the sim, 90 degrees a second at full deflection.
+    unsigned int filter = 0;
+    EController* pad = CasPad(m_mediator, filter);
+    const double x = pad ? pad->GetStick(1, 0, filter) : 0.0;
+    if (x != 0.0) {
+      float deg = static_cast<float>(x + x) * 45.0f * _dt + m_userRotation * 57.295776f;
+      if (deg > 360.0f) deg -= 360.0f;
+      else if (deg < 0.0f) deg += 360.0f;
+      m_userRotation = deg * 0.017453292f;
+    }
+  }
   if (!CheckPending()) {
     if (m_anim.IsTrackAnimComplete(eTrackFlags{eTrackFlags::kMain})) SelectNextStandingAnimation();
     m_anim.Update(nullptr, nullptr, EVec3{1.0f, 1.0f, 1.0f});
@@ -618,8 +652,9 @@ void CasScene::SetLights(int set) {
 void CasScene::SetSceneLighting(int set, bool) { SetLights(set); }
 
 // 801660D0
-// Moves the camera to `camera` over `duration` seconds after `delay`, from wherever it is (half way
-// back when a move was under way); instantly for no duration. GC: also tells the CAS tweak tool.
+// Moves the camera to `camera` (and its zoomed-out alternative) over `duration` seconds after `delay`,
+// from wherever it is (half way back when a move was under way); instantly for no duration. The
+// destination goes into the tweak tool; a timed move resets the stick's zoom and blurs.
 void CasScene::RepositionCamera(unsigned int camera, float duration, float delay) {
   if (camera >= 10) return;
   const bool moving = m_t < 1.0f && m_delay <= 0.0f;
@@ -627,10 +662,15 @@ void CasScene::RepositionCamera(unsigned int camera, float duration, float delay
   m_prevCamera = m_camera;
   m_camera = camera;
   const float* a = kCameraAngles[camera];
-  const EVec3 eye{a[0], a[1], a[2]}, target{a[3], a[4], a[5]};
+  const float* alt = kAltCameraAngles[camera];
+  EVec3 eye{a[0], a[1], a[2]}, target{a[3], a[4], a[5]};
+  const EVec3 eyeAlt{alt[0], alt[1], alt[2]}, targetAlt{alt[3], alt[4], alt[5]};
+  _gCasTweakTool.SetCamera(eye, target);
   if (duration == 0.0f) {
-    m_eyeTo = m_eye = m_eyeAlt = eye;
-    m_targetTo = m_target = m_targetAlt = target;
+    m_eyeTo = m_eye = eye;
+    m_eyeAlt = eyeAlt;
+    m_targetAlt = targetAlt;
+    m_targetTo = m_target = target;
     m_t = 1.0f;
     return;
   }
@@ -643,9 +683,13 @@ void CasScene::RepositionCamera(unsigned int camera, float duration, float delay
   m_t = t;
   m_eyeFrom = m_eye;
   m_targetFrom = m_target;
-  m_eyeTo = m_eyeAlt = eye;
-  m_targetTo = m_targetAlt = target;
+  m_eyeTo = eye;
+  m_eyeAlt = eyeAlt;
+  m_targetAlt = targetAlt;
+  m_targetTo = target;
   m_duration = duration;
+  m_stickT = 0.0f;
+  _pGfx->SetMotionBlur(0.5f, 0.9f, 1.0f, 0.15f);
 }
 
 // 80166478
@@ -653,14 +697,17 @@ void CasScene::InitCamera(unsigned int camera) {
   if (camera >= 10) return;
   m_camera = camera;
   const float* a = kCameraAngles[camera];
-  m_eyeTo = m_eye = EVec3{a[0], a[1], a[2]};
-  m_targetTo = m_target = EVec3{a[3], a[4], a[5]};
+  EVec3 eye{a[0], a[1], a[2]}, target{a[3], a[4], a[5]};
+  _gCasTweakTool.SetCamera(eye, target);
+  m_eyeTo = m_eye = eye;
+  m_targetTo = m_target = target;
   m_t = 1.0f;
 }
 
 // 801665A8
-// After the delay the camera eases from where it was to where it goes; at rest the stick zooms it
-// towards the alternative (closer) position.
+// After the delay the camera eases from where it was to where it goes. At rest the C-stick's y zooms
+// it between that spot and the camera's alternative (up: out), with motion blur while it moves; let go,
+// it stays where the tweak tool holds it.
 void CasScene::UpdateCamera(float dt) {
   if (m_delay > 0.0f) {
     m_delay -= dt;
@@ -678,7 +725,26 @@ void CasScene::UpdateCamera(float dt) {
     m_targetFrom = m_target;
     return;
   }
-  // GC: the right stick zooms between the position and its alternative (m_stickT), with motion blur.
+  m_prevCamera = m_camera;
+  unsigned int filter = 0;
+  EController* pad = m_mediator ? CasPad(m_mediator, filter) : nullptr;
+  const double y = pad ? pad->GetStick(1, 1, filter) : 0.0;
+  if (y == 0.0) {
+    _gCasTweakTool.GetCamera(m_eye, m_target);
+    _pGfx->SetMotionBlur(0.0f, 0.0f, 1.0f, 0.15f);
+    return;
+  }
+  _pGfx->SetMotionBlur(0.5f, 0.9f, 1.0f, 0.15f);
+  m_stickT = static_cast<float>(-y + -y) * _dt + m_stickT;
+  double t = m_stickT;
+  if (t < 0.0) t = 0.0;
+  else if (t > 1.0) t = 1.0;
+  m_stickT = static_cast<float>(t);
+  const float s = static_cast<float>(t * 0.0 + static_cast<float>(static_cast<float>(t * -2.0) * t) * t +
+                                     static_cast<float>(static_cast<float>(t * 3.0) * t));
+  m_eye = Lerp(m_eyeFrom, m_eyeAlt, s);
+  m_target = Lerp(m_targetFrom, m_targetAlt, s);
+  _gCasTweakTool.SetCamera(m_eye, m_target);
 }
 
 // 80166A9C

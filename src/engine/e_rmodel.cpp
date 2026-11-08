@@ -344,6 +344,171 @@ void ERModel::Draw(ERC* rc) {
 }
 
 // ---------------------------------------------------------------------------------------------------
+// Welding (sims' body parts). The arrays are big-endian (GX reads them), so positions go through
+// these readers and writers.
+
+namespace {
+void PutBe16(void* p, short v) {
+  auto* b = static_cast<unsigned char*>(p);
+  const auto u = static_cast<unsigned short>(v);
+  b[0] = static_cast<unsigned char>(u >> 8);
+  b[1] = static_cast<unsigned char>(u);
+}
+void PutBeFloat(void* p, float f) {
+  unsigned int u;
+  std::memcpy(&u, &f, 4);
+  auto* b = static_cast<unsigned char*>(p);
+  b[0] = static_cast<unsigned char>(u >> 24);
+  b[1] = static_cast<unsigned char>(u >> 16);
+  b[2] = static_cast<unsigned char>(u >> 8);
+  b[3] = static_cast<unsigned char>(u);
+}
+// GC: an EFloatTree per model, keyed by the coordinate on the longest axis; a query inserts a key and
+// walks its in-order neighbours down, then up, while they are within the tolerance. PC: the same
+// entries in a vector sorted by key (stable, so equal keys keep insertion order); the query's place is
+// after the equal keys.
+struct WeldEntry {
+  float key;
+  EWeldVert* vert;
+};
+}  // namespace
+
+// 80319214
+EVec3 ERModel::GetWeldPos(EWeldVert* v) {
+  const auto* p = static_cast<const unsigned char*>(v->m_pos);
+  if (!m_field18) return EVec3(befloat(p), befloat(p + 4), befloat(p + 8));
+  return EVec3(static_cast<float>(static_cast<short>(simmy::be16(p))), static_cast<float>(static_cast<short>(simmy::be16(p + 2))),
+               static_cast<float>(static_cast<short>(simmy::be16(p + 4))));
+}
+
+// 803192C0
+// Fixed point rounds half away from zero.
+void ERModel::SetWeldPos(EWeldVert* v, EVec3& pos) {
+  auto* p = static_cast<unsigned char*>(v->m_pos);
+  if (!m_field18) {
+    for (int c = 0; c < 3; ++c) PutBeFloat(p + c * 4, pos[c]);
+    return;
+  }
+  for (int c = 0; c < 3; ++c) {
+    const float f = pos[c];
+    PutBe16(p + c * 2, static_cast<short>(static_cast<int>(f + (f < 0.0f ? -0.5f : 0.5f))));
+  }
+}
+
+// 80319350
+// Both models weldable: every vertex of both goes in its model's tree. For each vertex of `other` (in
+// strip order): the not-yet-welded vertices of this model, then of `other`, within the tolerance
+// (scaled to this model's units; squared distance below it) are averaged per model. With some in both,
+// all of them move to the mean of the two averages, take this model's average normal (normalised when
+// not zero) where they have normals, and count as welded. The fixed-point flag is this model's for both.
+void ERModel::WeldSharedVerts(ERModel* other, float tolerance) {
+  if (!other || !m_weldable || !other->m_weldable) return;
+  const bool fixed = m_field18 != 0;
+  const float tol = static_cast<float>(static_cast<double>(tolerance) / m_scale);
+  const float tol2 = tol * tol;
+  int axis = 0;
+  float longest = 0.0f;
+  for (int i = 0; i < 3; ++i) {
+    const float extent = m_bounds[i + 3] - m_bounds[i];
+    if (i == 0 || longest < extent) {
+      axis = i;
+      longest = extent;
+    }
+  }
+  ERModel* models[2] = {this, other};
+  std::vector<EWeldVert> verts[2];   // GC: an EAllocGroup of 0xC-byte records
+  std::vector<WeldEntry> trees[2];
+  for (int m = 0; m < 2; ++m) {
+    std::size_t n = 0;
+    for (ESubModel* sub : models[m]->m_subModels)
+      for (ESubModelShader* sh : sub->m_shaders)
+        for (const ESMSStrip& st : sh->m_strips) n += static_cast<std::size_t>(st.m_vertCount > 0 ? st.m_vertCount : 0);
+    verts[m].reserve(n);
+    for (ESubModel* sub : models[m]->m_subModels)
+      for (ESubModelShader* sh : sub->m_shaders)
+        for (ESMSStrip& st : sh->m_strips) {
+          if (!st.m_vertCount) continue;
+          for (int v = 0; v < st.m_vertCount; ++v) {
+            EWeldVert w;
+            auto* pos = static_cast<unsigned char*>(st.m_positions);
+            w.m_pos = fixed ? pos + v * 8 : pos + v * 16;
+            w.m_normal = st.m_normals ? st.m_normals + v * 4 : nullptr;
+            w.m_welded = 0;
+            verts[m].push_back(w);
+          }
+        }
+    trees[m].reserve(verts[m].size());
+    for (EWeldVert& w : verts[m]) {
+      const auto* p = static_cast<const unsigned char*>(w.m_pos);
+      const float key = fixed ? static_cast<float>(static_cast<short>(simmy::be16(p + axis * 2))) : befloat(p + axis * 4);
+      trees[m].push_back({key, &w});
+    }
+    std::stable_sort(trees[m].begin(), trees[m].end(), [](const WeldEntry& a, const WeldEntry& b) { return a.key < b.key; });
+  }
+  // Visits the tree's not-yet-welded vertices around `key`: the lower neighbours (down), then the upper.
+  auto visit = [&](const std::vector<WeldEntry>& tree, float key, auto&& fn) {
+    const auto at = std::upper_bound(tree.begin(), tree.end(), key, [](float k, const WeldEntry& e) { return k < e.key; });
+    for (auto it = at; it != tree.begin();) {
+      --it;
+      if (!(static_cast<float>(key - it->key) <= tol)) break;
+      if (!it->vert->m_welded) fn(*it->vert);
+    }
+    for (auto it = at; it != tree.end(); ++it) {
+      if (!(static_cast<float>(it->key - key) <= tol)) break;
+      if (!it->vert->m_welded) fn(*it->vert);
+    }
+  };
+  for (EWeldVert& q : verts[1]) {
+    const EVec3 qp = GetWeldPos(&q);  // (in this model's format, as GC)
+    const float key = qp[axis];
+    EVec3 posSum[2], nrmSum[2];
+    int count[2] = {0, 0};
+    for (int t = 0; t < 2; ++t) {
+      posSum[t] = EVec3(0, 0, 0);
+      nrmSum[t] = EVec3(0, 0, 0);
+      visit(trees[t], key, [&](EWeldVert& w) {
+        EVec3 wp = GetWeldPos(&w);
+        const float dx = wp.x - qp.x, dy = wp.y - qp.y, dz = wp.z - qp.z;
+        if (!(dx * dx + dy * dy + dz * dz < tol2)) return;
+        posSum[t] = EVec3(posSum[t].x + wp.x, posSum[t].y + wp.y, posSum[t].z + wp.z);
+        if (w.m_normal) {
+          EVec3 n;
+          n.FromS8s(w.m_normal);
+          nrmSum[t] = EVec3(nrmSum[t].x + n.x, nrmSum[t].y + n.y, nrmSum[t].z + n.z);
+        }
+        ++count[t];
+      });
+      if (count[0] == 0) break;
+    }
+    if (count[0] <= 0 || count[1] <= 0) continue;
+    const float f0 = 1.0f / static_cast<float>(count[0]);
+    const float f1 = 1.0f / static_cast<float>(count[1]);
+    EVec3 pos(static_cast<float>((posSum[0].x * f0 + posSum[1].x * f1) * 0.5),
+              static_cast<float>((posSum[0].y * f0 + posSum[1].y * f1) * 0.5),
+              static_cast<float>((posSum[0].z * f0 + posSum[1].z * f1) * 0.5));
+    EVec3 nrm(nrmSum[0].x * f0, nrmSum[0].y * f0, nrmSum[0].z * f0);
+    if (nrm.x != 0.0f || nrm.y != 0.0f || nrm.z != 0.0f) {
+      const float len = std::sqrt(nrm.x * nrm.x + nrm.y * nrm.y + nrm.z * nrm.z);
+      nrm = EVec3(nrm.x / len, nrm.y / len, nrm.z / len);  // PSVECNormalize
+    }
+    for (int t = 0; t < 2; ++t) {
+      visit(trees[t], key, [&](EWeldVert& w) {
+        EVec3 wp = GetWeldPos(&w);
+        const float dx = wp.x - qp.x, dy = wp.y - qp.y, dz = wp.z - qp.z;
+        if (!(dx * dx + dy * dy + dz * dz < tol2)) return;
+        SetWeldPos(&w, pos);
+        if (w.m_normal) nrm.ToS8s(w.m_normal);
+        w.m_welded = 1;
+      });
+    }
+  }
+}
+
+// 80319E84
+// Empty on GC: the welded arrays are drawn by reference.
+void ERModel::RebuildAfterWelding() {}
+
+// ---------------------------------------------------------------------------------------------------
 // Morphing. A model morphs by offsets added up in its shaders' morph strips: ResetMorph clears them
 // (when a weight changed), MorphLattices adds the lattices' moves (BlendVolumes by the lattice
 // weights, then each lattice vertex's move), MorphTargets adds the registered targets' offsets times

@@ -96,6 +96,41 @@ void EInstance::CalcLights(EVec3& pos, ELights& out, bool otherSide) {
   m_level->GetLightsAtLocation(pos, other, out);
 }
 
+// 8022907C
+// The same as CalcLights (the room's ambient and sun, then up to four point lights at `pos`); the
+// wall parts use it for their first point (EIWallPart::Draw).
+void EInstance::CalcLights4(EVec3& pos, ELights& out, bool otherSide) {
+  short room = 0, other = 0;
+  if (!otherSide) {
+    if (m_thisSideFn) m_thisSideFn(m_thisSideData, false, room, other);
+    else room = other = 0;
+  } else {
+    if (m_otherSideFn) m_otherSideFn(m_otherSideData, false, room, other);
+    else room = other = -1;
+  }
+  if (other < 0) other = 0;
+  const ELightGrid__RoomData& r = m_level->m_lightGrid.m_rooms[other];
+  if (!r.m_ambient.m_light) {
+    out.m_ambient[0] = out.m_ambient[1] = out.m_ambient[2] = 0.0f;
+  } else {
+    out.m_ambient[0] = r.m_ambient.m_color.x;
+    out.m_ambient[1] = r.m_ambient.m_color.y;
+    out.m_ambient[2] = r.m_ambient.m_color.z;
+  }
+  if (!r.m_sun.m_light) {
+    out.m_numDir = 0;
+  } else {
+    out.m_dir[0].m_color[0] = r.m_sun.m_color.x;
+    out.m_dir[0].m_color[1] = r.m_sun.m_color.y;
+    out.m_dir[0].m_color[2] = r.m_sun.m_color.z;
+    out.m_dir[0].m_dir[0] = r.m_sun.m_dir.x;
+    out.m_dir[0].m_dir[1] = r.m_sun.m_dir.y;
+    out.m_dir[0].m_dir[2] = r.m_sun.m_dir.z;
+    out.m_numDir = 1;
+  }
+  m_level->GetLightsAtLocation(pos, other, out);
+}
+
 // 802291F8
 void EInstance::InsertInOrderTable(EOrderTableData& data) { m_level->InsertInOrderTable(data); }
 

@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <string>
 
 namespace {
@@ -216,9 +217,9 @@ void FlashPiMenu::CleanupDestinationObject() {
 }
 
 // 8003A7F8
-// A new go-here object (GUID 0x7C4) at the player's interactor, rounded to the nearest tile corner (GC:
-// to the tile's centre when the person cannot use the corner, person vtable 0x194), placed there if it
-// can be (object vtables 0x134 CanPlace / 0x13C Place), else deleted.
+// A new go-here object (GUID 0x7C4) at the player's interactor rounded to the nearest tile corner, moved
+// to the nearest place the player's person can stand (FindGoodLocation; else the tile's centre), placed
+// there if it can be (object vtables 0x134 CanPlace / 0x13C Place), else deleted.
 void FlashPiMenu::CreateGoHereObjectForMenu() {
   InteractorModule__InteractorInfo info;
   if (!GetPlayerInteractorInfo(m_player, info)) return;  // InteractorManager::GetPlayerInteractor
@@ -234,14 +235,31 @@ void FlashPiMenu::CreateGoHereObjectForMenu() {
     if (0.5f <= v - static_cast<float>(i)) ++i;
     return i << 4;
   };
-  int x = round(info.m_x - static_cast<float>(_globals.m_fieldA4));  // DAT_80475E70
-  int y = round(info.m_y - static_cast<float>(_globals.m_fieldA8));  // DAT_80475E74
-  SIMMY_STUB("FlashPiMenu::CreateGoHereObjectForMenu: person vtable 0x194 FindGoodLocation (PC: the tile's centre)",
-             0x8003A7F8);
-  x = (x & ~0xf) | 8;
-  y = (y & ~0xf) | 8;
+  // DAT_80475E70 / DAT_80475E74: floats (0.5) in EGlobal's int fields +0xA4 / +0xA8. (PC fix: they were
+  // converted as integers, 0x3F000000, so the go-here object never went anywhere.)
+  float offX, offY;
+  std::memcpy(&offX, &_globals.m_fieldA4, 4);
+  std::memcpy(&offY, &_globals.m_fieldA8, 4);
+  int x = round(info.m_x - offX);
+  int y = round(info.m_y - offY);
+  // The player's selected person's FindGoodLocation (person vtable 0x194; FindGoodLocationParams: from
+  // that corner on level 1, no direction, the same room, any tile): the nearest place the person can
+  // stand on; failing that the corner's tile centre.
+  int at[2] = {x, y};
+  cXObjectImpl* person = SelectedPersonImpl(m_player);  // DAT_80475E88[player]
+  int found[2];
+  if (person && ObjFindGoodLocation(person, at, 1, true, false, found)) {
+    at[0] = found[0];
+    at[1] = found[1];
+  } else {
+    at[0] = (x & ~0xf) | 8;
+    at[1] = (y & ~0xf) | 8;
+  }
+  static const bool trace = std::getenv("SIMMY_CTL_TRACE") != nullptr;  // PC dev trace
+  if (trace)
+    std::printf("[ctl] player %d go here: corner %d,%d -> tile %d,%d\n", m_player + 1, y >> 4, x >> 4, at[1] >> 4,
+                at[0] >> 4);
   // CanPlace there (level 1), then Place (its location, room id and model), else it goes.
-  const int at[2] = {x, y};
   if (!ObjCanPlace(impl, at, 1, nullptr, 0)) {
     module->KillObject(id);
     m_destination = nullptr;

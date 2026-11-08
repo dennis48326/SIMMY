@@ -2,6 +2,8 @@
 // @class ISimsObjectModel
 // @class ISimsWallObjectModel
 // @class ISimsMultiTileObjectModel
+// @class ISimsCounterTopObject
+// @class IShrubObject
 // The 3D side of a simulation object (game/isiminstance.cpp, game/iobject.cpp): an EIStaticModel
 // with its own EAnimController, tied to its cXObject and house. ISimsObjectModel runs the object's
 // animation (ObjAnimDef: model, animation, shader) with the animation's events (sounds, particle
@@ -161,7 +163,8 @@ struct ISimsObjectModel : public ISimInstance {
   unsigned int m_curShader = 0;       // +0x430
   std::vector<EParticleObj*> m_particles;  // +0x440 ENodeList of EParticleObj (owning)
   EIStaticModel* m_shadow = nullptr;  // +0x44C itself once CreateShadow made it cast a shadow
-  std::vector<EInstance*> m_subModels;  // +0x450 inserted into the level with the object
+  std::vector<EInstance*> m_subModels;  // +0x450 inserted into the level with the object (owned:
+                                        // +0x458 1, deleted with it; a counter's sink)
   std::vector<EILight*> m_animLights; // +0x464 TArray
   float m_matrixAngle = 0.0f;         // +0x470 ApplyMatrix's angle
   float m_scale[3] = {1.0f, 1.0f, 1.0f};  // +0x480 ApplyMatrix's scale
@@ -203,4 +206,30 @@ struct ISimsMultiTileObjectModel : public ISimsObjectModel {
   void SetObjOrient() override;  // 80051B94
   static void RegisterType(unsigned short);  // 80054134
   void CreateCopy() const;  // 80054188
+};
+
+// A counter top (ObjDefinition::ResData +6): with a sink on its tile (ResData +7) it takes the counter
+// model table's cut-out model and draws the table's sink model as a sub-model (0x4C0 bytes).
+struct ISimsCounterTopObject : public ISimsObjectModel {
+  ISimsCounterTopObject();  // 800520AC
+  SIMMY_STORABLE_DECL(ISimsCounterTopObject)
+  ~ISimsCounterTopObject() override;  // 800520F4
+  void Create(cXObject* xob, EHouse* house) override;  // 80052154
+  void SetObjOrient() override;  // 80052190
+  static void RegisterType(unsigned short);  // 800542C8
+  void CreateCopy() const;  // 8005431C
+  // The object is a sink (its ResData +7).
+  static int IsSinkId(cXObject* xob);  // 800548E0
+};
+
+// The boxwood hedge: drawn 1.32 times longer along an axis with another hedge beside it, so a row of
+// hedges joins up (0x4C0 bytes).
+struct IShrubObject : public ISimsObjectModel {
+  IShrubObject();  // 800525E4
+  SIMMY_STORABLE_DECL(IShrubObject)
+  ~IShrubObject() override;  // 8005262C
+  void Create(cXObject* xob, EHouse* house) override;  // 8005268C
+  void SetObjOrient() override;  // 800526EC
+  static void RegisterType(unsigned short);  // 8005445C
+  void CreateCopy() const;  // 800544B0
 };

@@ -45,10 +45,6 @@ RET_UNKNOWN cXObjectImpl::SyncObjectIsReady(signed char) { SIMMY_STUB("cXObjectI
 RET_UNKNOWN cXObjectImpl::SetSyncObject(signed char) { SIMMY_STUB("cXObjectImpl::SetSyncObject(signed char)", 0x800E2D34); return {}; }
 RET_UNKNOWN cXObjectImpl::SyncObjectIsReady() { SIMMY_STUB("cXObjectImpl::SyncObjectIsReady(void)", 0x800E2E04); return {}; }
 void cXObjectImpl::SetDrawLabel(bool) { SIMMY_STUB("cXObjectImpl::SetDrawLabel(bool)", 0x800E2FE4); }
-RET_UNKNOWN cXObjectImpl::OverrideRenderPosition(float &, float &) { SIMMY_STUB("cXObjectImpl::OverrideRenderPosition(float &, float &)", 0x800E2FF8); return {}; }
-void cXObjectImpl::SetOverrideRenderPosition(float, float) { SIMMY_STUB("cXObjectImpl::SetOverrideRenderPosition(float, float)", 0x800E301C); }
-void cXObjectImpl::GetOverrideRenderPosition(float &, float &) { SIMMY_STUB("cXObjectImpl::GetOverrideRenderPosition(float &, float &)", 0x800E3030); }
-void cXObjectImpl::ClearOverrideRenderPosition() { SIMMY_STUB("cXObjectImpl::ClearOverrideRenderPosition(void)", 0x800E3044); }
 bool cXObjectImpl::IsPerson() { SIMMY_STUB("cXObjectImpl::IsPerson(void)", 0x800E3094); return {}; }
 RET_UNKNOWN cXObjectImpl::GetColorIndex() const { SIMMY_STUB("cXObjectImpl::GetColorIndex(void) const", 0x800E30D8); return {}; }
 RET_UNKNOWN cXObjectImpl::SetColorIndex(unsigned char) { SIMMY_STUB("cXObjectImpl::SetColorIndex(unsigned char)", 0x800E3118); return {}; }

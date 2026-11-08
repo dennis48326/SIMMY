@@ -287,6 +287,15 @@ const void* ConvertSpriteIdToResIdNode(unsigned int sprite) {
   return nullptr;
 }
 
+// 80041758
+// The "ECntrMdlLkupTable" of the SimsObjects quickdata (EGlobal +0xEC). Its one row points at the
+// entries (count at -4; 0x10 bytes each: a counter's model, the sink model drawn in it, the counter's
+// cut-out model; ISimsCounterTopObject::SetObjOrient). PC: the table itself (GC: its row data, +4).
+const void* GetCounterModelTable() {
+  if (!s_spriteTable) s_spriteTable = static_cast<ERQuickdata*>(_quickdataman.EResourceManager::AddRef(0x0c33db41u, nullptr, 0));
+  return s_spriteTable ? s_spriteTable->getTable(const_cast<char*>("ECntrMdlLkupTable")) : nullptr;
+}
+
 // ---------------------------------------------------------------------------------------------------
 // ESpriteRender
 

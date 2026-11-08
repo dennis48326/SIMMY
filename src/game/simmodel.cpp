@@ -7,6 +7,7 @@
 #include "simmy/unported_globals.hpp"
 
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <initializer_list>
 #include <vector>
@@ -339,9 +340,387 @@ void CasSimDescriptionS2C::InitializeToDefaultCostume(bool male) {
   }
 }
 
+// 80168408
+// GC builds "<message>  <first name> <last name>" (low bytes of the UTF-16 names) for a debug assert that
+// the release build leaves out. PC: logged.
+void CasSimDescriptionS2C::AssertWithInfo(const char* message) {
+  char text[0x400 + 0x48];
+  std::snprintf(text, 0x400, "%s", message);
+  std::size_t n = std::strlen(text);
+  text[n++] = ' ';
+  text[n++] = ' ';
+  for (int i = 0; i < 0x20 && m_firstName[i]; ++i) text[n++] = static_cast<char>(m_firstName[i] & 0xff);
+  text[n++] = ' ';
+  for (int i = 0; i < 0x20 && m_lastName[i]; ++i) text[n++] = static_cast<char>(m_lastName[i] & 0xff);
+  text[n] = 0;
+  std::printf("[desc] Verify: %s\n", text);
+}
+
+namespace {
+// GC passes the hair, hat, lower body and arm accessory options (ints) where a signed char& is wanted,
+// so on the big-endian GameCube the helpers see and write the int's high byte.
+signed char HighByte(int v) { return static_cast<signed char>(static_cast<unsigned int>(v) >> 24); }
+void SetHighByte(int& v, signed char c) {
+  v = static_cast<int>((static_cast<unsigned int>(v) & 0x00ffffffu) | (static_cast<unsigned int>(static_cast<unsigned char>(c)) << 24));
+}
+}  // namespace
+
+// 80169468
+// The index in range (and, unless optional, a model): else `def`.
+void CasSimDescriptionS2C::VerifyBodyPartNoTexture(CasSimPartsS2C& parts, eBodyPartS2C part, signed char& index,
+                                                   signed char def, bool modelOptional) {
+  char text[0x40];
+  if (index < 0 || parts.GetNumBodyModels(part) <= static_cast<unsigned int>(static_cast<int>(index))) {
+    std::snprintf(text, sizeof text, "bad %s index %d", parts.GetBodyPartName(part), static_cast<int>(index));
+  } else {
+    if (modelOptional) return;
+    const Sim__SimPartsS2CParam param = GetBodyPartParam(part);
+    if (parts.GetModelID(part, static_cast<unsigned int>(GetBodyPartIndex(part)), param)) return;
+    std::snprintf(text, sizeof text, "%s model missing", parts.GetBodyPartName(part));
+  }
+  AssertWithInfo(text);
+  index = def;
+}
+
+// 80169578
+// The index in range, a model (unless optional), a texture list, the texture index in it and a texture:
+// else the defaults.
+void CasSimDescriptionS2C::VerifyBodyPartWithNoOptions(CasSimPartsS2C& parts, eBodyPartS2C part, signed char& index,
+                                                       signed char& texture, signed char defIndex,
+                                                       signed char defTexture, bool modelOptional) {
+  char text[0x40];
+  if (index < 0 || parts.GetNumBodyModels(part) <= static_cast<unsigned int>(static_cast<int>(index))) {
+    std::snprintf(text, sizeof text, "bad %s index %d", parts.GetBodyPartName(part), static_cast<int>(index));
+  } else {
+    const Sim__SimPartsS2CParam param = GetBodyPartParam(part);
+    if (!parts.GetModelID(part, static_cast<unsigned int>(GetBodyPartIndex(part)), param)) {
+      if (modelOptional) return;
+      std::snprintf(text, sizeof text, "%s model is missing", parts.GetBodyPartName(part));
+    } else {
+      const int count = static_cast<int>(parts.GetNumBodyTextures(part, static_cast<unsigned int>(static_cast<int>(index))));
+      if (count == 0) {
+        std::snprintf(text, sizeof text, "%s texture list size is 0", parts.GetBodyPartName(part));
+        AssertWithInfo(text);
+        index = defIndex;
+        texture = defTexture;
+      } else if (texture < 0 || count <= texture) {
+        std::snprintf(text, sizeof text, "bad %s texture index %d", parts.GetBodyPartName(part), static_cast<int>(texture));
+        AssertWithInfo(text);
+        texture = defTexture;
+      }
+      if (parts.GetTextureID(part, this, false)) return;
+      std::snprintf(text, sizeof text, "%s texture is NULL", parts.GetBodyPartName(part));
+    }
+  }
+  AssertWithInfo(text);
+  index = defIndex;
+  texture = defTexture;
+}
+
+// 8016977C
+// The same with a style option (in range of GetNumBodyPartOptions, else its default).
+void CasSimDescriptionS2C::VerifyBodyPartWithOneOption(CasSimPartsS2C& parts, eBodyPartS2C part, signed char& index,
+                                                       signed char& texture, signed char& option,
+                                                       signed char defIndex, signed char defTexture,
+                                                       signed char defOption, bool modelOptional) {
+  char text[0x40];
+  if (index < 0 || parts.GetNumBodyModels(part) <= static_cast<unsigned int>(static_cast<int>(index))) {
+    std::snprintf(text, sizeof text, "bad %s index %d", parts.GetBodyPartName(part), static_cast<int>(index));
+  } else {
+    if (option < 0 || parts.GetNumBodyPartOptions(part) <= static_cast<unsigned int>(static_cast<int>(option))) {
+      std::snprintf(text, sizeof text, "bad %s style index %d", parts.GetBodyPartName(part), static_cast<int>(option));
+      AssertWithInfo(text);
+      option = defOption;
+    }
+    const Sim__SimPartsS2CParam param = GetBodyPartParam(part);
+    if (!parts.GetModelID(part, static_cast<unsigned int>(GetBodyPartIndex(part)), param)) {
+      if (modelOptional) return;
+      std::snprintf(text, sizeof text, "%s model is missing", parts.GetBodyPartName(part));
+    } else {
+      const int count = static_cast<int>(parts.GetNumBodyTextures(part, static_cast<unsigned int>(static_cast<int>(index))));
+      if (count == 0) {
+        std::snprintf(text, sizeof text, "%s texture list size is 0", parts.GetBodyPartName(part));
+        AssertWithInfo(text);
+        index = defIndex;
+        texture = defTexture;
+        option = defOption;
+      } else if (texture < 0 || count <= texture) {
+        std::snprintf(text, sizeof text, "bad %s texture index %d", parts.GetBodyPartName(part), static_cast<int>(texture));
+        AssertWithInfo(text);
+        texture = defTexture;
+      }
+      if (parts.GetTextureID(part, this, false)) return;
+      std::snprintf(text, sizeof text, "%s texture is NULL", parts.GetBodyPartName(part));
+    }
+  }
+  AssertWithInfo(text);
+  index = defIndex;
+  texture = defTexture;
+  option = defOption;
+}
+
 // 8016850C
+// Body type (0..2) and skin (0..10); each part's index, texture and style (glasses, head, hat, hair,
+// the three torso layers with their styles and the models and textures they need, lower body, shoes
+// and the boot-top flag, facial feature, belt, vest/scarf, arm accessory, necklace); the hair bottom
+// flag from the hat's model; the tattoos; the morphs (body 0..2, head 0..7, face 0..3); personality
+// points (each 0..10, else Aries'); the aspiration (0..11); names ending within 32 characters (else
+// player 1's default name).
 void CasSimDescriptionS2C::Verify() {
-  SIMMY_STUB("CasSimDescriptionS2C::Verify (fixes styles a gender or outfit cannot have)", 0x8016850C);
+  CasSimPartsS2C parts;
+  parts.SetGender(m_male != 0);
+  if (static_cast<unsigned char>(m_bodyType) > 2) {
+    AssertWithInfo("bad body type");
+    m_bodyType = 0;
+  }
+  if (static_cast<unsigned char>(m_skinColor) > 10) {
+    AssertWithInfo("bad skin color");
+    m_skinColor = 0;
+  }
+  VerifyBodyPartWithNoOptions(parts, eBodyPartS2C{0}, m_glasses, m_glassesTexture, 0, 0, true);
+  VerifyBodyPartNoTexture(parts, eBodyPartS2C{1}, m_head, 0, false);
+  {
+    signed char option = HighByte(m_hatOption);
+    VerifyBodyPartWithOneOption(parts, eBodyPartS2C{0x13}, m_hat, m_hatTexture, option, 0, 0, 0, true);
+    SetHighByte(m_hatOption, option);
+  }
+  const int hairPart = GetHairBodyPart();
+  if (!parts.GetModelID(eBodyPartS2C{0x13}, static_cast<unsigned int>(GetBodyPartIndex(eBodyPartS2C{0x13})),
+                        GetBodyPartParam(eBodyPartS2C{0x13}))) {
+    if (m_hairUnderHat) {
+      AssertWithInfo("m_bHairBottomDisplayed incorrectly set");
+      m_hairUnderHat = 0;
+    }
+  } else if (!m_hairUnderHat) {
+    AssertWithInfo("m_bHairBottomDisplayed incorrectly set");
+    m_hairUnderHat = 1;
+  }
+  {
+    signed char option = HighByte(m_hairStyle);
+    VerifyBodyPartWithOneOption(parts, eBodyPartS2C{hairPart}, m_hair, m_hairTexture, option, 0, 0, 0, false);
+    SetHighByte(m_hairStyle, option);
+  }
+  // The inner layer.
+  bool innerReset = false;  // the tail: sleeve style 3, the torso style recomputed
+  if (m_innerTop < 0 || parts.GetNumBodyModels(eBodyPartS2C{7}) <= static_cast<unsigned int>(static_cast<int>(m_innerTop))) {
+    AssertWithInfo("bad innerLayerTorso index");
+    m_innerTopTexture = 0;
+    m_innerTop = 0;
+    innerReset = true;
+  } else {
+    if (static_cast<unsigned int>(m_innerOption1) > 1) {
+      AssertWithInfo("Invalid innerLayerTorsoStyle");
+      SetInnerLayerTorsoStyle(parts);
+    }
+    if (static_cast<unsigned int>(m_innerOption2) > 3) {
+      AssertWithInfo("Invalid innerLayerSleeveStyle");
+      m_innerOption2 = 3;
+    }
+    if (!parts.GetModelID(eBodyPartS2C{7}, static_cast<unsigned int>(GetBodyPartIndex(eBodyPartS2C{7})), GetBodyPartParam(eBodyPartS2C{7}))) {
+      AssertWithInfo("innerLayerTorso is NULL");
+      m_innerTopTexture = 0;
+      m_innerTop = 0;
+      m_innerOption2 = 3;
+      SetInnerLayerTorsoStyle(parts);
+    } else {
+      const char* failed = nullptr;
+      if (!parts.GetModelID(eBodyPartS2C{8}, static_cast<unsigned int>(GetBodyPartIndex(eBodyPartS2C{8})), GetBodyPartParam(eBodyPartS2C{8}))) {
+        failed = "innerLayerSleeve is NULL";
+      } else {
+        const int count = static_cast<int>(parts.GetNumBodyTextures(eBodyPartS2C{7}, static_cast<unsigned int>(static_cast<int>(m_innerTop))));
+        if (count == 0) {
+          AssertWithInfo("innerLayerTorso texture list size is 0");
+          m_innerTopTexture = 0;
+          m_innerTop = 0;
+          m_innerOption2 = 3;
+          SetInnerLayerTorsoStyle(parts);
+        } else if (m_innerTopTexture < 0 || count <= m_innerTopTexture) {
+          AssertWithInfo("bad innerLayerTorso texture index");
+          m_innerTopTexture = 0;
+        }
+        if (!parts.GetTextureID(eBodyPartS2C{7}, this, false)) {
+          AssertWithInfo("innerLayerTorso texture is NULL");
+          m_innerTopTexture = 0;
+          m_innerTop = 0;
+          m_innerOption2 = 3;
+          SetInnerLayerTorsoStyle(parts);
+        }
+        if (!parts.GetTextureID(eBodyPartS2C{8}, this, false) && m_innerOption2 != 0) failed = "innerLayerSleeve texture is NULL";
+      }
+      if (failed) {
+        AssertWithInfo(failed);
+        m_innerTopTexture = 0;
+        m_innerTop = 0;
+        innerReset = true;
+      }
+    }
+  }
+  if (innerReset) {
+    m_innerOption2 = 3;
+    SetInnerLayerTorsoStyle(parts);
+  }
+  // The mid layer.
+  if (m_midTop < 0 || parts.GetNumBodyModels(eBodyPartS2C{9}) <= static_cast<unsigned int>(static_cast<int>(m_midTop))) {
+    AssertWithInfo("bad midLayerTorso index");
+    m_midTopTexture = 0;
+    m_midOption2 = 0;
+    m_midOption3 = 3;
+    m_midTop = 0;
+    SetMidLayerTorsoStyle(Sim__MidLayerTorsoStyleS2C{0}, parts);
+    SetInnerLayerTorsoStyle(parts);
+  } else {
+    if (static_cast<unsigned int>(m_midOption1) > 5) {
+      AssertWithInfo("Invalid midLayerTorsoStyle");
+      SetMidLayerTorsoStyle(Sim__MidLayerTorsoStyleS2C{0}, parts);
+    }
+    if (static_cast<unsigned int>(m_midOption2) > 1) {
+      AssertWithInfo("Invalid midLayerCollarStyle");
+      m_midOption2 = 0;
+    }
+    if (static_cast<unsigned int>(m_midOption3) > 3) {
+      AssertWithInfo("Invalid midLayerSleeveStyle");
+      m_midOption3 = 3;
+    }
+    auto resetMid = [&](const char* message) {
+      AssertWithInfo(message);
+      m_midOption2 = 0;
+      m_midTopTexture = 0;
+      m_midOption3 = 3;
+      SetMidLayerTorsoStyle(Sim__MidLayerTorsoStyleS2C{0}, parts);
+      SetInnerLayerTorsoStyle(parts);
+    };
+    if (parts.GetModelID(eBodyPartS2C{9}, static_cast<unsigned int>(GetBodyPartIndex(eBodyPartS2C{9})), GetBodyPartParam(eBodyPartS2C{9}))) {
+      const int count = static_cast<int>(parts.GetNumBodyTextures(eBodyPartS2C{9}, static_cast<unsigned int>(static_cast<int>(m_midTop))));
+      if (count == 0) {
+        resetMid("midLayerTorso texture list size is 0");
+      } else if (m_midTopTexture < 0 || count <= m_midTopTexture) {
+        AssertWithInfo("bad midLayerTorso texture index");
+        m_midTopTexture = 0;
+      }
+      if (!parts.GetTextureID(eBodyPartS2C{9}, this, false)) resetMid("midLayerTorso texture is NULL");
+    }
+    if (parts.GetModelID(eBodyPartS2C{0xb}, static_cast<unsigned int>(GetBodyPartIndex(eBodyPartS2C{0xb})), GetBodyPartParam(eBodyPartS2C{0xb})) &&
+        !parts.GetTextureID(eBodyPartS2C{0xb}, this, false))
+      resetMid("midLayerSleeve texture is NULL");
+  }
+  // The outer layer.
+  auto resetOuter = [&](const char* message) {
+    AssertWithInfo(message);
+    m_outerOption2 = 0;
+    m_outerTop = 0;
+    m_outerTopTexture = 0;
+    m_outerOption1 = 0;
+    m_outerOption3 = 3;
+    SetMidLayerTorsoStyle(Sim__MidLayerTorsoStyleS2C{m_midOption1}, parts);
+    SetInnerLayerTorsoStyle(parts);
+  };
+  if (m_outerTop < 0 || parts.GetNumBodyModels(eBodyPartS2C{0xc}) <= static_cast<unsigned int>(static_cast<int>(m_outerTop))) {
+    AssertWithInfo("bad outerLayerTorso index");
+    m_outerTopTexture = 0;
+    m_outerOption2 = 0;
+    m_outerOption3 = 3;
+    m_outerTop = 0;
+    m_outerOption1 = 0;
+    SetMidLayerTorsoStyle(Sim__MidLayerTorsoStyleS2C{m_midOption1}, parts);
+    SetInnerLayerTorsoStyle(parts);
+  } else {
+    if (static_cast<unsigned int>(m_outerOption1) > 1) {
+      AssertWithInfo("bad outerLayerTorso style index");
+      m_outerOption1 = 0;
+    }
+    if (static_cast<unsigned int>(m_outerOption2) > 3) {
+      AssertWithInfo("bad outerLayerTorso collar style index");
+      m_outerOption2 = 0;
+    }
+    if (static_cast<unsigned int>(m_outerOption3) > 3 || m_outerOption3 == 1) {
+      AssertWithInfo("bad outerLayerTorso sleeve style index");
+      m_outerOption3 = 3;
+    }
+    if (parts.GetModelID(eBodyPartS2C{0xc}, static_cast<unsigned int>(GetBodyPartIndex(eBodyPartS2C{0xc})), GetBodyPartParam(eBodyPartS2C{0xc}))) {
+      const int count = static_cast<int>(parts.GetNumBodyTextures(eBodyPartS2C{0xc}, static_cast<unsigned int>(static_cast<int>(m_outerTop))));
+      if (count == 0) {
+        resetOuter("outerLayerTorso texture list size is 0");
+      } else if (m_outerTopTexture < 0 || count <= m_outerTopTexture) {
+        AssertWithInfo("bad outerLayerTorso texture index");
+        m_outerTopTexture = 0;
+      }
+      if (!parts.GetTextureID(eBodyPartS2C{0xc}, this, false)) resetOuter("outerLayerTorso texture is NULL");
+    }
+    if (parts.GetModelID(eBodyPartS2C{0xe}, static_cast<unsigned int>(GetBodyPartIndex(eBodyPartS2C{0xe})), GetBodyPartParam(eBodyPartS2C{0xe})) &&
+        !parts.GetTextureID(eBodyPartS2C{0xe}, this, false))
+      resetOuter("outerLayerSleeve texture is NULL");
+    if (parts.GetModelID(eBodyPartS2C{0xd}, static_cast<unsigned int>(GetBodyPartIndex(eBodyPartS2C{0xd})), GetBodyPartParam(eBodyPartS2C{0xd})) &&
+        parts.OuterLayerCollarIsAHood(static_cast<unsigned int>(static_cast<int>(m_outerTop)), Sim__OuterLayerCollarStyleS2C{m_outerOption2}) &&
+        !parts.GetTextureID(eBodyPartS2C{0xd}, this, false))
+      resetOuter("outerLayerCollar texture is NULL");
+  }
+  {
+    signed char option = HighByte(m_lowerBodyOption);
+    VerifyBodyPartWithOneOption(parts, eBodyPartS2C{0xf}, m_lowerBody, m_lowerBodyTexture, option, 0, 0, 0, false);
+    SetHighByte(m_lowerBodyOption, option);
+  }
+  VerifyBodyPartWithNoOptions(parts, eBodyPartS2C{0x10}, m_shoes, m_shoesTexture, 0, 0, false);
+  if (m_bootTop != ShouldBootTopBeDisplayed(parts)) {
+    AssertWithInfo("boot top displayed flag incorrectly set");
+    SetShoeBoottopDisplayedFlag(parts);
+  }
+  VerifyBodyPartNoTexture(parts, eBodyPartS2C{0x12}, m_facialFeature, 0, true);
+  VerifyBodyPartWithNoOptions(parts, eBodyPartS2C{0x16}, m_belt, m_beltTexture, 0, 0, true);
+  VerifyBodyPartWithNoOptions(parts, eBodyPartS2C{0x19}, m_vestScarf, m_vestScarfTexture, 0, 0, true);
+  {
+    signed char option = HighByte(m_armAccessoryOption);
+    VerifyBodyPartWithOneOption(parts, eBodyPartS2C{0x15}, m_armAccessory, m_armAccessoryTexture, option, 0, 0, 0, true);
+    SetHighByte(m_armAccessoryOption, option);
+  }
+  VerifyBodyPartWithNoOptions(parts, eBodyPartS2C{0x14}, m_necklace, m_necklaceTexture, 0, 0, true);
+  // Tattoos: below the number of tattoo records (all three places alike).
+  for (int i = 0; i < 3; ++i) {
+    const int t = static_cast<signed char>(m_tattoos[i]);
+    if (t < 0 || static_cast<int>(parts.ArrayLength(4)) <= t) {
+      AssertWithInfo("bad tattoo index");
+      m_tattoos[i] = 0;
+    }
+  }
+  if (m_morphBody < 0.0f || m_morphBody > 2.0f) AssertWithInfo("bad morphTorso value"), m_morphBody = 1.0f;
+  if (m_morphArms < 0.0f || m_morphArms > 2.0f) AssertWithInfo("bad morphArms value"), m_morphArms = 1.0f;
+  if (m_morphLegs < 0.0f || m_morphLegs > 2.0f) AssertWithInfo("bad morphLegs value"), m_morphLegs = 1.0f;
+  if (m_morphHead < 0.0f || m_morphHead > 7.0f) AssertWithInfo("bad morphHead value"), m_morphHead = 3.0f;
+  if (m_morph108 < 0.0f || m_morph108 > 3.0f) AssertWithInfo("bad morphEyes value"), m_morph108 = 1.0f;
+  if (m_morph10C < 0.0f || m_morph10C > 3.0f) AssertWithInfo("bad morphNose value"), m_morph10C = 1.0f;
+  if (m_morph110 < 0.0f || m_morph110 > 3.0f) AssertWithInfo("bad morphLips value"), m_morph110 = 1.0f;
+  if (m_morph114 < 0.0f || m_morph114 > 3.0f) AssertWithInfo("bad morphChin value"), m_morph114 = 1.0f;
+  bool personalityOk = true;
+  for (int i = 0; i < 5; ++i)
+    if (m_personality[i] >= 0xb) personalityOk = false;
+  if (!personalityOk) {
+    AssertWithInfo("personality values out of range");
+    static const unsigned char kAries[5] = {8, 3, 3, 5, 6};  // zodiacPersonalityValues[0]
+    for (int i = 0; i < 5; ++i) m_personality[i] = kAries[i];
+  }
+  if (m_zodiac > 0xb) {
+    AssertWithInfo("bad aspiration value");
+    m_zodiac = 0;
+  }
+  auto terminated = [](const unsigned short* name) {
+    for (int i = 0; i < 0x20; ++i)
+      if (!name[i]) return true;
+    return false;
+  };
+  auto setDefault = [](unsigned short* name, const char* row) {
+    const unsigned short* text = EGlobal::NewUIText(row);
+    int i = 0;
+    for (; i < 0x20 && text && text[i]; ++i) name[i] = text[i];  // wcsncpy 0x20
+    for (; i < 0x20; ++i) name[i] = 0;
+    name[0x1f] = 0;
+  };
+  if (!terminated(m_firstName)) {
+    AssertWithInfo("first name is not null-terminated");
+    setDefault(m_firstName, "default_player1_first_name");
+  }
+  if (!terminated(m_lastName)) {
+    AssertWithInfo("last name is not null-terminated");
+    setDefault(m_lastName, "default_player1_last_name");
+  }
 }
 
 // 8016A670
@@ -834,12 +1213,33 @@ int SimModel::ChangeModelPart(eBodyPartS2C part, unsigned int id, bool lattice, 
   }
   if (m_parts[p] && m_parts[p]->m_model && m_parts[p]->m_model->m_id == id) return 0;
   const int changed = SetModelPart(part, id);
-  SIMMY_STUB("SimModel::ChangeModelPart: welding shared vertices (GetWeldableBodyPartConnections)", 0x8007115C);
+  unsigned int joins[7];
+  m_simParts->GetWeldableBodyPartConnections(part, joins, 7);
+  for (unsigned int other : joins)
+    if (other != eBodyPartS2C::kCount) WeldSharedVertices(part, eBodyPartS2C{static_cast<int>(other)}, false);
   if (lattice) ApplyLatticeMorphingToModelPart(part);
   ApplySkinToModelPart(part);
   RebuildModified();
   if (composite) SIMMY_STUB("SimModel::ChangeModelPart: CompositeSkinPart", 0x8007115C);
   return changed;
+}
+
+// 80071558
+// Both parts loaded and not shared: their shared border vertices welded (tolerance 0.001), both marked
+// changed (with `rebuild`, GC's ERModel::RebuildAfterWelding instead, which is empty).
+void SimModel::WeldSharedVertices(eBodyPartS2C part, eBodyPartS2C other, bool rebuild) {
+  EIStaticModel* a = m_parts[part];
+  EIStaticModel* b = m_parts[other];
+  if (!a || !a->m_model || (m_partFlags[part] & kShared)) return;
+  if (!b || !b->m_model || (m_partFlags[other] & kShared)) return;
+  a->m_model->WeldSharedVerts(b->m_model, 0.001f);
+  if (!rebuild) {
+    m_partFlags[part] |= kChanged;
+    m_partFlags[other] |= kChanged;
+  } else {
+    ERModel::RebuildAfterWelding();
+    ERModel::RebuildAfterWelding();
+  }
 }
 
 // 80071434
@@ -1184,9 +1584,14 @@ void SimModel::UpdateReweldCAS(bool final) {
 }
 
 // 80072E30
-// GC: models whose shared vertices were welded are rebuilt (ERModel::RebuildAfterWelding).
+// Changed (welded) parts' models are rebuilt (ERModel::RebuildAfterWelding, empty on GC: the welded
+// vertex arrays are drawn by reference, on PC too), and the marks cleared.
 void SimModel::RebuildModified() {
-  for (int p = 0; p < eBodyPartS2C::kCount; ++p) m_partFlags[p] &= ~kChanged;
+  for (int p = 0; p < eBodyPartS2C::kCount; ++p) {
+    if (m_parts[p] && m_parts[p]->m_model && (m_partFlags[p] & kChanged) && !(m_partFlags[p] & kShared))
+      ERModel::RebuildAfterWelding();
+    m_partFlags[p] &= ~kChanged;
+  }
 }
 
 // 80072EB8
@@ -1479,8 +1884,17 @@ void SimModel::UpdateNecklaceEarring(bool update, bool composite, bool morph) {
 void SimModel::UpdateBelt(bool update, bool composite, bool morph) {
   if (update) {
     bool show = true;
-    if (Has(this, eBodyPartS2C::kMidTorso) || Has(this, eBodyPartS2C::kOuterTorso))
-      SIMMY_STUB("SimModel::UpdateBelt: Mid/OuterLayerTorsoHidesBelt", 0x80073EDC);
+    const unsigned int belt = static_cast<unsigned int>(m_desc->GetBodyPartIndex(eBodyPartS2C{eBodyPartS2C::kBelt}));
+    if (Has(this, eBodyPartS2C::kMidTorso)) {
+      const Sim__SimPartsS2CParam param = m_desc->GetBodyPartParam(eBodyPartS2C{eBodyPartS2C::kMidTorso});
+      const unsigned int index = static_cast<unsigned int>(m_desc->GetBodyPartIndex(eBodyPartS2C{eBodyPartS2C::kMidTorso}));
+      show = !m_simParts->MidLayerTorsoHidesBelt(index, static_cast<signed char>(param.m_option1), belt);
+    }
+    if (show && Has(this, eBodyPartS2C::kOuterTorso)) {
+      const Sim__SimPartsS2CParam param = m_desc->GetBodyPartParam(eBodyPartS2C{eBodyPartS2C::kOuterTorso});
+      const unsigned int index = static_cast<unsigned int>(m_desc->GetBodyPartIndex(eBodyPartS2C{eBodyPartS2C::kOuterTorso}));
+      if (m_simParts->OuterLayerTorsoHidesBelt(index, static_cast<signed char>(param.m_option1), belt)) show = false;
+    }
     if (show) UpdateModelPart(eBodyPartS2C{22}, false, false);
     else DeallocateModelPart(eBodyPartS2C{22});
     if (m_desc->m_beltExtra == 0) DeallocateModelPart(eBodyPartS2C{24});

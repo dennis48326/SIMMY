@@ -272,7 +272,8 @@ void InteractorModule__WallManipulator::HandleFinalizeRequest() {
       n.m_count = WantFearEvent::kGenericParam;
       Globs_pNeighborhood->NotifyAllResidents(n, nullptr);
     }
-    // GC: Globs::pObjectModule vtable 0x184 InvalidateAllRoutes (the world side's).
+    // Every person plans its routes again (Globs::pObjectModule vtable 0x184).
+    if (Globs_pObjectModule) Globs_pObjectModule->InvalidateAllRoutes();
     play_sound((m_flags & 4) ? 0x80e1a9cd : 0x66dede72);
     m_anchor = m_pos;
     const unsigned int f = m_flags;
