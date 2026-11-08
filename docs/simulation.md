@@ -55,11 +55,44 @@ following), so a tile's object is always where the map says; a stale entry made 
 **A new object** (`ObjectModuleImpl::MakeNewOutOfWorldObject`: buy mode, CreateObject, multi-tile parts)
 gets `cXObjectImpl::Initialize` (800DA3D8: `EdithVariableSet::Initialize` 800E33F4, every used variable's
 default: 3 and 0xE -1, 0xB its id, 0x17 2, 0x31 0x32, 0x43 its slots - 1, the rest 0), `JustBorn`
-(800DAC94: the purchase date 0x2D/0x2E/0x2F and time 0x18/0x15 from the simulator clock), its init tree
-(the `Reset(true)` stand-in) and `UpdateSimFlags` (800E2748: sim flag 2 from data 0x3C `SimIndependent`,
-flag 8 from `CanChooseAutonomously`). PC: GC keeps the non-instance variables in one map per object
-category; the port gives every object its own copy (same values; they are saved with it). For a person
-only the object part of `Initialize` runs there. Writing object data 0 (`EdithVariableSet::WriteVar`,
+(800DAC94: the purchase date 0x2D/0x2E/0x2F and time 0x18/0x15 from the simulator clock), misc flag 0x80,
+then `Reset(true)` (`cXObjectImpl::Reset` 800DA848; a multi-tile group's `cXMTObjectImpl::Reset` 800C6B10
+through its lead; a person's `cXPersonImpl::Reset` 8011EB78), and only then data 0x29 the price. `Reset`:
+the object leaves its site while its data is reset (`EdithVariableSet::Reset` 800E7F64: its own variables
+to 0; kept: 0x1D, 1, 0x29, 0x2D-0x2F, 0x18, 0x15, 0x43; 0xB its id, 0x3A the definition's +0x62),
+attributes and temps 0, the tree sim back to its main tree, its site again (data 2/3 from
+`GetPlacementSpec` 800DCB78), its age (`UpdateAge`), idle status cleared, passive influences gone; not
+a multi-tile part: its init tree at once, **one tick of its main tree** (`Simulate(0)`, when it has one),
+and `UpdateSimFlags` (800E2748: sim flag 2 from data 0x3C `SimIndependent`, flag 8 from
+`CanChooseAutonomously`). A person's reset clears its person data but 0x20 (visitor), 0x22, 0x23, 0x3A and
+0x41, reloads its neighbour's persistent data, resets its suits and animator, clears the social-mode
+waits and idle-animate count and loads its motive effects. Buy mode's `CreateObjectFromGUID` (802113D8)
+adds nothing (the PC loop that simulated a new object until its stack was back to the main tree is gone).
+PC: GC keeps the non-instance variables in one map per object category; the port gives every object its
+own copy (same values; they are saved with it), and `EdithVariableSet::Reset` clears what GC holds per
+instance (forced-instance variables, 0x43, and those whose value differs from the category's). For a
+person made by `MakeNewOutOfWorldObject` only the object part of `Initialize` runs.
+
+**Object age.** Each day (`DayPassed` 800DB9A8) and at a reset, `UpdateAge` (800DBB18) sets data 0x12
+(whole years) and 0x30 (whole months) from the purchase date 0x2D-0x2F to the simulator's date.
+
+**Loading objects** (`ObjectModuleImpl::DoStream` 800F3C94, `Load` 800F30BC): each object's data variables
+get `EdithVariableSet::Initialize`'s defaults before its stream is read (GC initialises the object; a
+save holds only an object's own variables, so one equal to its category's value, e.g. 0x17 = 2,
+0x18 = 7, 0x31 = 0x32, the default purchase date 1997-6-17, is not in a disc lot), misc flag 0x80 after;
+placeholders (GUID 0x3C08965F, an object type the folder lacks) are killed; then `UpdateSimObjects`
+(800F62DC) makes each missing simulation controller (type 7 definitions with +0x54 set) and kills a
+second one of a type. `CheckIntegrity` (800F7F28) only reports to the debug dump and is not done.
+`PostLoad` gives an object without a level level 1 and cleans up a placeholder; the auto-reset branch
+needs `cXObjectImpl::sAutoReset`, which nothing sets in the release game.
+
+**Tree errors** (`HandleError` 800EBB30): the people let go of the object (`CleanupPeople`), then the
+object's `Cleanup(nullptr)`: an object without a cleanup tree (entry 3) is picked up, `Reset(true)` and put
+back where it was (`cXObjectImpl::Cleanup` 800DB16C); one with a cleanup tree runs it (each multi-tile
+part with one), its user count 0x3E and data 8 flag 0x20 cleared, its stack back to its main tree; then
+its idle status and sounds are cleared. A person's is `cXPersonImpl::Cleanup(nullptr)` (it lets go of
+everything; GC does not reset a person's data there). PC: an object failing three times within 300 ticks
+is switched off. Writing object data 0 (`EdithVariableSet::WriteVar`,
 not while a save is read) sets `s_bTaggedGraphicField`; the next assigning Expression tags the model of
 the object it wrote (scope 3 mine, 4 the stack object's: `TagGraphicsField` 800EB8C4) and clears it, so
 `ISimsObjectModel::Update` restarts the state's animation when a tree sets the same state again.
@@ -120,7 +153,18 @@ simulator's seed inside a tick, an outer seed for check trees run from menus.
 the det replay or the soaks; the old PC workaround returned true without running it). Other GC calls
 ported here: `TryNotifyStackObject` 0x40 ends a person's idle-animate (count 0); a queued action that is
 skipped or cancelled (`ActionSkipped` 8012AD98) runs its object's queue-skipped tree (entry 4) with the
-person as the stack object; CreateObject flag 4 runs a visitor's "init visitor" tree at once.
+person as the stack object; CreateObject flag 4 runs a visitor's "init visitor" tree at once (after the
+person's own `Reset(true)`, which ran its init tree, as GC). A dynamic multi-tile object it makes (one
+with a tree for entry 8: flood puddles) is put in its tile's middle and merged with the same objects
+on the four tiles beside it (`cXMTObjectImpl::MergeInPlace` 800C7690: `MergeDynamic` 800C6F2C joins the
+groups under one lead, offsets from the lead's location; then each part's entry-8 tree runs with the
+mask of its eight neighbours that are part of its group, `UpdateDynAdjacency` 800C7434, to pick its
+model). A killed dynamic part leaves its group first (`RemoveFromDynamic` 800C7240; PC: GC's
+`cXMTObjectImpl::Pickup` then also picks up the parts left in the old lead's chain, not done). `TryDialog` skips a modal dialog (temp 0 =
+0) when no family member is awake and visible (`IsFamilyMemberAwakeAndVisible` 800F69BC). Primitive
+`TryFindGoodLocation` action 1 (pick up) closes the object menu of the player whose selected sim it
+picks up. Generic sim call 0x1E swaps the players' selected sims (`EGlobal::SwapSelectedSims` 800420B4:
+the two pointers and globals 3 / 0x20 only; no disc tree uses it).
 
 Check trees run on the person's own temps: `ObjTestSim` (objtestsim.cpp) saves the 8 temps before the
 first one and its destructor (801120A4) puts them back with `cXObjectImpl::SetTemp` (800EAF0C), so a menu
@@ -252,7 +296,8 @@ few is picked at random (sim RNG). `SIMMY_AUTO_TRACE=1` (`=ads` for the ads) tra
   every person on the lot; the event ids are `WantFearEvent::` in wantfear.hpp. `SIMMY_WANTS_TRACE=1`
   (also traces the dialog and the MDI box).
 - **Relationships**: `RelMatrixImpl` per neighbour ([`neighbor.cpp`](../src/game/neighbor.cpp)), primitives
-  0x18/0x1A, read by the relationships page (`R2LTarget`, `PlayerRelatedPeople`). Variable 1 is the
+  0x18/0x1A, read by the relationships page (`R2LTarget`, `PlayerRelatedPeople`; sorted by first name,
+  ties by last name: `sort_records_by_name` 801DA670). Variable 1 is the
   social interest (a fraction of 2^31, 2^31 = 100): each motive tick a sim not in social mode moves it
   toward a target from the daily relationship (variable 0: 0 below 20, up to 0.35 x 2^31 at 70) by the
   tuning "interest increment" (`IncrementSimSocialInterest` 8012BB8C, socialmode.cpp; GC quirk kept: the

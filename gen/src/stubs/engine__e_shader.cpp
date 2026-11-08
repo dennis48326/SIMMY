@@ -1,7 +1,6 @@
 // GENERATED stubs for unported functions of engine/e_shader.cpp. Do not edit.
 #include "simmy/types_gen.hpp"
 
-void EShader::ChangeMaterial(EMaterial &) { SIMMY_STUB("EShader::ChangeMaterial(EMaterial &)", 0x802FA390); }
 RET_UNKNOWN EShader::UseOverrideTexture(unsigned char) { SIMMY_STUB("EShader::UseOverrideTexture(unsigned char)", 0x802FA438); return {}; }
 RET_UNKNOWN EShader::UsesMipMapping() { SIMMY_STUB("EShader::UsesMipMapping(void)", 0x802FA4C4); return {}; }
 void EShader::SetTransform(ERC *) { SIMMY_STUB("EShader::SetTransform(ERC *)", 0x802FA648); }

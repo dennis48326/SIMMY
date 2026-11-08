@@ -432,14 +432,17 @@ void ISimsObjectModel::UpdateShader(ObjAnimDef* def) {
 // Once a frame (the level's update tree): follows its cXObject. The same state (data 0) keeps its
 // animation running (restarted when the simulation tagged the graphics); a new state takes the new
 // ObjAnimDef's model, particles, animation, shader and lamp. Then the particle effects follow the
-// object's hidden flag, the highlight pulses, and objects in a slot or carried follow their holder.
-// GC (not ported): vehicles copy their car body's matrix and recompute their bounds from the pose;
-// objects held by a sim take the sim's hand position (cursor flag 0x40: the container's slot, then
-// CalcOrient / CalcDynamicOrient).
+// object's hidden flag, the highlight pulses, and objects in a slot or carried follow their holder
+// (objects held by a sim take the sim's hand position: cursor flag 0x40, then CalcOrient /
+// CalcDynamicOrient; not ported: an object in another object's slot). Vehicles last: their bounds from
+// the pose and their shadow on the car body.
 void ISimsObjectModel::Update() {
   if ((m_objFlags & 0x10000000u) || !m_xob) return;
   m_dataDir = m_xob->GetData(1);
-  if (m_xob->IsVehicle()) SIMMY_STUB("ISimsObjectModel::Update: vehicles (the car body's matrix, bounds)", 0x8004CBDC);
+  // A vehicle keeps its shadow's previous orientation (EIStaticModel +0xC0) for SlamOrient below.
+  const bool vehicle = m_xob->IsVehicle() != 0;
+  EMat4 shadowPrev;
+  if (vehicle && m_shadow) shadowPrev = m_shadow->m_orient;
   if (m_xob->GetContainer())
     SIMMY_STUB("ISimsObjectModel::Update: carried objects (the holder's hand position)", 0x8004CBDC);
   const int state = m_xob->GetData(0);
@@ -505,6 +508,47 @@ void ISimsObjectModel::Update() {
     if (dynamic) CalcDynamicOrient();
     else CalcOrient();
   }
+  if (vehicle) {
+    // A vehicle (the carpool, the bus) drives by animation: its bounds are the box around its posed
+    // nodes and its sphere the box's; its shadow follows the car body (node 0), moved along the sun's
+    // direction on the ground.
+    EMat4 orient;
+    GetOrient(orient);
+    float box[6];
+    m_anim.CalcTightBoundBox(orient, *reinterpret_cast<EBound3*>(box), nullptr);
+    SetBounds(*reinterpret_cast<EBound3*>(box));
+    reinterpret_cast<EBound3*>(box)->CalcBoundSphere(*reinterpret_cast<EBoundSphere*>(m_sphere));
+    if (m_shadow) {
+      EMat4 body = *m_anim.GetNodeMatrix(0);
+      if (ERLevel* level = GetLevel()) {
+        body.m[3][0] += level->m_sun.m_dir.x;
+        body.m[3][1] += level->m_sun.m_dir.y;
+      }
+      body.m[3][2] = 0.0f;
+      m_shadow->SlamOrient(body, shadowPrev);
+    }
+  }
+}
+
+// 8004C7F0
+// The height of an object on a person (data 2 its holder): the holder's bone 0 height (its ESim's
+// person's animator, GetBonePos), when above 0.001, at most 1; else 0. None for a sub-object (flag
+// 0x10000000). PC: the holder must be a person with an animator (GC reads its instance as an ESim).
+double ISimsObjectModel::GetHeightOffset() {
+  if (m_objFlags & 0x10000000u) return 0.0;
+  cXObjectImpl* self = m_xob ? m_xob->GetObjectImplementation() : nullptr;
+  cXObject* holder = self && Globs_pObjectModule ? Globs_pObjectModule->GetObjectFromID(self->GetData(2)) : nullptr;
+  cXObjectImpl* impl = holder ? holder->GetObjectImplementation() : nullptr;
+  if (!impl || !impl->m_instance || impl == self) return 0.0;
+  auto* person = impl->GetType() == 2 ? dynamic_cast<cXPersonImpl*>(impl) : nullptr;
+  SAnimator2* animator = person ? person->m_animator : nullptr;
+  if (!animator) return 0.0;
+  EVec3 bone(0.0f, 0.0f, 0.0f);
+  animator->GetBonePos(0, bone);
+  const double z = bone.z;
+  if (!(0.0010000000474974513 < z)) return 0.0;
+  if (z < -1.0) return -1.0;
+  return z <= 1.0 ? z : 1.0;
 }
 
 // 80050C38
@@ -1209,8 +1253,25 @@ void ISimsObjectModel::ApplyMatrix(float angle, EVec3& pos, EVec3& scale) {
     row[1] = row[0];
     row[0] = t;
   }
-  if (m_xob->GetData(4) & 0x20)
-    SIMMY_STUB("ISimsObjectModel::ApplyMatrix: the height on a counter (GetHeightOffset)", 0x80052E3C);
+  if (m_xob->GetData(4) & 0x20) {
+    // Its holder (data 2) with an instance: it and what it holds down their slot 0 (GetContainedObject,
+    // vtable 0x2C4) are drawn as carried (cursor flags 0xC0) and oriented again; its height is the
+    // holder's (GetHeightOffset). PC guard: not when data 2 names the object itself.
+    cXObject* holder = Globs_pObjectModule ? Globs_pObjectModule->GetObjectFromID(m_xob->GetData(2)) : nullptr;
+    cXObjectImpl* holderImpl = holder && holder != m_xob ? holder->GetObjectImplementation() : nullptr;
+    if (holderImpl && holderImpl->m_instance) {
+      SetCursFlags(GetCursFlags() | 0xc0);
+      cXObjectImpl* self = m_xob->GetObjectImplementation();
+      for (cXObjectImpl* held = self ? self->GetContainedObject(0) : nullptr; held; held = held->GetContainedObject(0)) {
+        if (ISimInstance* inst = held->m_instance) {
+          inst->SetCursFlags(GetCursFlags() | 0xc0);
+          inst->SetObjOrient();
+        }
+        if (held == self) break;  // PC guard
+      }
+    }
+    m.m[3][2] = static_cast<float>(GetHeightOffset());
+  }
   // In a container's slot (not a multi-tile object): the slot's offset (ObjectSlot +0x14 / +0x18, 1/16
   // tiles, in world axes: the descriptor's y along world x) turned by the container's facing, and its
   // height (+0x1C, altitude units: AltToWorld = x 3 / (2 sqrt 6)), summed up the container chain.

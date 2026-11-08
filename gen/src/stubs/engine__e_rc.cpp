@@ -1,7 +1,6 @@
 // GENERATED stubs for unported functions of engine/e_rc.cpp. Do not edit.
 #include "simmy/types_gen.hpp"
 
-void ERC::TriStrip(int, float *, float *, unsigned char *, signed char *, unsigned char *, bool) { SIMMY_STUB("ERC::TriStrip(int, float *, float *, unsigned char *, signed char *, unsigned char *, bool)", 0x802F68EC); }
 RET_UNKNOWN ERC::TriStripRef(int, float *, float *, unsigned char *, signed char *, unsigned char *, bool) { SIMMY_STUB("ERC::TriStripRef(int, float *, float *, unsigned char *, signed char *, unsigned char *, bool)", 0x802F6A2C); return {}; }
 RET_UNKNOWN ERC::TriStrip(int, short *, short *, unsigned char *, signed char *, unsigned char *, bool) { SIMMY_STUB("ERC::TriStrip(int, short *, short *, unsigned char *, signed char *, unsigned char *, bool)", 0x802F6A60); return {}; }
 RET_UNKNOWN ERC::TriStripRef(int, short *, short *, unsigned char *, signed char *, unsigned char *, bool) { SIMMY_STUB("ERC::TriStripRef(int, short *, short *, unsigned char *, signed char *, unsigned char *, bool)", 0x802F6BAC); return {}; }
@@ -18,7 +17,6 @@ void ERC::LineStreakList(int, EVec4 &, EVec4 &, EGELineStreak *) { SIMMY_STUB("E
 RET_UNKNOWN ERC::ParticleListRot(int, EGEPackedParticle *) { SIMMY_STUB("ERC::ParticleListRot(int, EGEPackedParticle *)", 0x802F7234); return {}; }
 void ERC::ShrinkSmallDisplayList() { SIMMY_STUB("ERC::ShrinkSmallDisplayList(void)", 0x802F740C); }
 void ERC::MipMapSetup(EGEVert *, bool, bool) { SIMMY_STUB("ERC::MipMapSetup(EGEVert *, bool, bool)", 0x802F826C); }
-void ERC::SetMipMap(float, int) { SIMMY_STUB("ERC::SetMipMap(float, int)", 0x802F8270); }
 void ERC::Callback(void (*)(unsigned int, unsigned short, unsigned char), unsigned int, unsigned short, unsigned char) { SIMMY_STUB("ERC::Callback(void (*)(unsigned int, unsigned short, unsigned char), unsigned int, unsigned short, unsigned char)", 0x802F830C); }
 RET_UNKNOWN ERC::Rect(EVec2 &, EVec2 &, EVec4 *, EVec2 &, EVec2 &, float) { SIMMY_STUB("ERC::Rect(EVec2 &, EVec2 &, EVec4 *, EVec2 &, EVec2 &, float)", 0x802F869C); return {}; }
 RET_UNKNOWN ERC::DirectRect(EVec2 &, EVec2 &, EVec4 &, float) { SIMMY_STUB("ERC::DirectRect(EVec2 &, EVec2 &, EVec4 &, float)", 0x802F87A4); return {}; }

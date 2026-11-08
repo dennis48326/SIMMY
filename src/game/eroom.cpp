@@ -443,6 +443,74 @@ int ERoom::DeleteWallAtTile(CTilePt& tile, TileWalls& walls, TileWallsSegment se
   return guid;
 }
 
+// 8002F84C
+// The run is of `segment` and covers both tiles: one tile run that is both, or both met walking from
+// the tile after its start to its end (the start itself is not looked at, as on GC).
+bool ERoomWall::HasSegment(TileWallsSegment segment, CTilePt& a, CTilePt& b) {
+  if (m_segment != static_cast<int>(segment)) return false;
+  if (m_start == m_end && a == b && a == m_start) return true;
+  const int dir = CTilePt::GetTileDirection(m_start, m_end);
+  bool haveA = false, haveB = false;
+  CTilePt cur = m_start + CTilePt::sDirections[dir];
+  while (cur != m_end) {
+    if (!haveA && cur == a) haveA = true;
+    if (!haveB && cur == b) haveB = true;
+    cur = cur + CTilePt::sDirections[dir];
+  }
+  if (!haveA && cur == a) haveA = true;
+  if (!haveB && cur == b) haveB = true;
+  return haveA && haveB;
+}
+
+// 8002FA34
+// The run's wall off `tile` (as ERoom::DeleteWallAtTile: a door or window keeps it); the GUID of the door
+// or window that kept it (0: none).
+int ERoomWall::DeleteWallAtTile(CTilePt& tile) {
+  TileWalls walls = Globs_pFixedWorld->GetWall(tile);
+  return ERoom::DeleteWallAtTile(tile, walls, m_segment);
+}
+
+// 8002FBEC
+// The run's walls off the world, tile by tile from its start to its end.
+void ERoomWall::RemoveWallsFromWorld() {
+  const int dir = CTilePt::GetTileDirection(m_start, m_end);
+  CTilePt cur = m_start;
+  DeleteWallAtTile(cur);
+  cur = cur + CTilePt::sDirections[dir];
+  if (m_start != m_end) {
+    while (cur != m_end) {
+      DeleteWallAtTile(cur);
+      cur = cur + CTilePt::sDirections[dir];
+    }
+    DeleteWallAtTile(cur);
+  }
+}
+
+// 8002FD08
+// The first run of the list that has the segment between the two tiles (HasSegment).
+ERoomWall* ERoom::FindWallContainingSegment(std::vector<ERoomWall*>& list, TileWallsSegment segment, CTilePt& a, CTilePt& b) {
+  for (ERoomWall* wall : list)
+    if (wall->HasSegment(segment, a, b)) return wall;
+  return nullptr;
+}
+
+// 8002FEAC
+// The whole run that holds the segment between the tiles goes from the world (the lists of segments 8,
+// 4, 2, 1 and the diagonals 0x10 / 0x20 at +0x40 / +0x58).
+void ERoom::DeleteERoomWallContainingSegment(TileWallsSegment segment, CTilePt& a, CTilePt& b) {
+  int list;
+  switch (static_cast<int>(segment)) {
+    case 8: list = 0; break;
+    case 4: list = 1; break;
+    case 2: list = 2; break;
+    case 1: list = 3; break;
+    case 0x10: list = 5; break;
+    case 0x20: list = 7; break;
+    default: return;
+  }
+  if (ERoomWall* wall = FindWallContainingSegment(m_walls[list], segment, a, b)) wall->RemoveWallsFromWorld();
+}
+
 // 8002FE18
 // The wall part of segment `segment` at `tile`: in the first of the segment lists whose runs are of it.
 EIWallPart* ERoom::GetWallFromTileAndSegment(TileWallsSegment segment, CTilePt& tile) {

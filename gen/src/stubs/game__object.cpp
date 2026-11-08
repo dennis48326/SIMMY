@@ -7,14 +7,10 @@ RET_UNKNOWN cXObject::GetAutoReset() { SIMMY_STUB("cXObject::GetAutoReset(void)"
 void cXObject::SetAutoReset(bool) { SIMMY_STUB("cXObject::SetAutoReset(bool)", 0x800D9614); }
 RET_UNKNOWN cXObject::GetGlobalInitTreeID() { SIMMY_STUB("cXObject::GetGlobalInitTreeID(void)", 0x800D961C); return {}; }
 RET_UNKNOWN cXObject::GetGlobalMainTreeID() { SIMMY_STUB("cXObject::GetGlobalMainTreeID(void)", 0x800D9624); return {}; }
-void cXObjectImpl::Reset(bool) { SIMMY_STUB("cXObjectImpl::Reset(bool)", 0x800DA848); }
-void cXObjectImpl::Cleanup(cXObject *) { SIMMY_STUB("cXObjectImpl::Cleanup(cXObject *)", 0x800DB16C); }
 RET_UNKNOWN cXObjectImpl::GetHilite() { SIMMY_STUB("cXObjectImpl::GetHilite(void)", 0x800DB5C4); return {}; }
 void cXObjectImpl::SetHilite(int) { SIMMY_STUB("cXObjectImpl::SetHilite(int)", 0x800DB5D0); }
-void cXObjectImpl::UpdateAge() { SIMMY_STUB("cXObjectImpl::UpdateAge(void)", 0x800DBB18); }
 RET_UNKNOWN cXObjectImpl::GetRootObject(FTilePt &, int) { SIMMY_STUB("cXObjectImpl::GetRootObject(FTilePt &, int)", 0x800DCA2C); return {}; }
 RET_UNKNOWN cXObjectImpl::GetPlacementInfo(FTilePt *, int *, cXObject **, short *, bool *) { SIMMY_STUB("cXObjectImpl::GetPlacementInfo(FTilePt *, int *, cXObject **, short *, bool *)", 0x800DCACC); return {}; }
-void cXObjectImpl::GetPlacementSpec(PlacementSpec *) { SIMMY_STUB("cXObjectImpl::GetPlacementSpec(PlacementSpec *)", 0x800DCB78); }
 PlacementSpec::PlacementSpec(cXObjectImpl *) { SIMMY_STUB("PlacementSpec::PlacementSpec(cXObjectImpl *)", 0x800DCDBC); }
 PlacementSpec::PlacementSpec(bool) { SIMMY_STUB("PlacementSpec::PlacementSpec(bool)", 0x800DCDF4); }
 PlacementSpec::PlacementSpec(FTilePt &, int, cXObjectImpl *, int) { SIMMY_STUB("PlacementSpec::PlacementSpec(FTilePt &, int, cXObjectImpl *, int)", 0x800DCE00); }
@@ -55,7 +51,6 @@ RET_UNKNOWN EdithVariableSet::Insert(pair<unsigned int, short> &) { SIMMY_STUB("
 RET_UNKNOWN EdithVariableSet::RemoveInstanceVariable(unsigned char) { SIMMY_STUB("EdithVariableSet::RemoveInstanceVariable(unsigned char)", 0x800E7778); return {}; }
 void EdithVariableSet::ShrinkToExactSize(byte_key_map<72, short, allocator<short>> &) { SIMMY_STUB("EdithVariableSet::ShrinkToExactSize(byte_key_map<72, short, allocator<short> > &)", 0x800E7A5C); }
 void EdithVariableSet::ReconOldFdata(ReconBuffer *, unsigned int) { SIMMY_STUB("EdithVariableSet::ReconOldFdata(ReconBuffer *, unsigned int)", 0x800E7D30); }
-void EdithVariableSet::Reset() { SIMMY_STUB("EdithVariableSet::Reset(void)", 0x800E7F64); }
 RET_UNKNOWN EdithVariableSet::Contains(int) { SIMMY_STUB("EdithVariableSet::Contains(int)", 0x800E806C); return {}; }
 RET_UNKNOWN EdithVariableSet::GetCategoryVariableMap(unsigned short) { SIMMY_STUB("EdithVariableSet::GetCategoryVariableMap(unsigned short)", 0x800E84FC); return {}; }
 RET_UNKNOWN EdithVariableSet::CreateCategoryVariableMap(unsigned short) { SIMMY_STUB("EdithVariableSet::CreateCategoryVariableMap(unsigned short)", 0x800E8794); return {}; }

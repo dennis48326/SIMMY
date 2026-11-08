@@ -376,9 +376,43 @@ void EdithVariableSet::Initialize(cXObjectImpl* object) {
   s_serializing = 0;
 }
 
+namespace {
+// 803DB03C EdithVariableSet::s_IsForcedInstanceVariable: the variables every object keeps its own copy of.
+const unsigned char kForcedInstance[EdithVariableSet::kCount] = {
+    0, 1, 0, 1, 1, 0, 0, 0, 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 1, 0,
+    0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0};
+// The category value Initialize gives a variable that is not per instance (CreateCategoryVariableMap).
+short CategoryDefault(int i) {
+  switch (i) {
+    case 0x17: return 2;
+    case 0x18: return 7;
+    case 0x2d: return 0x7cd;
+    case 0x2e: return 6;
+    case 0x2f: return 0x11;
+    case 0x31: return 0x32;
+    default: return 0;
+  }
+}
+}  // namespace
+
+// 800E7F64
+// Every variable of the object's own map (its instance variables) back to 0. The eight cached ones (0,
+// 1, 8, 0x19, 0x1D, 0x22, 0x27, 0x42: read and written through the cache while not serializing) keep
+// theirs. PC: the port keeps no category map (Initialize sets every variable on the object), so a
+// variable is in GC's own map when it is per instance (s_IsForcedInstanceVariable, or 0x43, which
+// Initialize puts there), not in use, or written with a value other than its category's (WriteVar
+// drops an instance copy equal to the category value); the others read the category value, unchanged.
+void EdithVariableSet::Reset() {
+  for (int i = 0; i < kCount; ++i) {
+    if (i == 0 || i == 1 || i == 8 || i == 0x19 || i == 0x1d || i == 0x22 || i == 0x27 || i == 0x42) continue;
+    const bool instance = kForcedInstance[i] || i == 0x43 || !kVariablesUsed[i] || m_values[i] != CategoryDefault(i);
+    if (instance) m_values[i] = 0;
+  }
+}
+
 // 800E583C
 // Read (version 0x57 on): the 72-bit set of the variables present (two words and a byte), then each
-// one's value in key order. Versions 0x55 and 0x56 give a count and per variable its key and value.
+// one's value in key order, written over the defaults. Versions 0x55 and 0x56 give a count and per variable its key and value.
 // GC: writing first stores the eight cached variables.
 void EdithVariableSet::ReconStream(ReconBuffer* b, int version) {
   if (b->m_mode != ReconBuffer__Mode::kRead) {
@@ -393,8 +427,8 @@ void EdithVariableSet::ReconStream(ReconBuffer* b, int version) {
       if (m_keys[i >> 5] & (1u << (i & 31))) b->Recon16(&m_values[i], 1);
     return;
   }
-  for (unsigned int& k : m_keys) k = 0;
-  for (short& v : m_values) v = 0;
+  // GC: the saved variables go into the object's own map (Insert) over what Initialize put there; the
+  // others keep their defaults (DoStream initialises the object first).
   // GC: s_serializing is set around the whole object read (cXObjectImpl::ReconStream); only the data
   // variables' writes look at it.
   struct Serializing {

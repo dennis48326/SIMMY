@@ -12,6 +12,5 @@ void EBound3::Add(EBound3 &, EMat4 &) { SIMMY_STUB("EBound3::Add(EBound3 &, EMat
 void EBound3::Compute(EVec3 *, int) { SIMMY_STUB("EBound3::Compute(EVec3 *, int)", 0x802C550C); }
 void EBound3::Compute(EVec3 *, int, EMat4 &) { SIMMY_STUB("EBound3::Compute(EVec3 *, int, EMat4 &)", 0x802C55B4); }
 void EBound3::Compute(EBound3 &, EMat4 &) { SIMMY_STUB("EBound3::Compute(EBound3 &, EMat4 &)", 0x802C5754); }
-void EBound3::CalcBoundSphere(EBoundSphere &) { SIMMY_STUB("EBound3::CalcBoundSphere(EBoundSphere &)", 0x802C5858); }
 void EBound3::Compute(EVec3 &, float) { SIMMY_STUB("EBound3::Compute(EVec3 &, float)", 0x802C5930); }
 void EBound3::Compute(EBoundSphere &) { SIMMY_STUB("EBound3::Compute(EBoundSphere &)", 0x802C5980); }

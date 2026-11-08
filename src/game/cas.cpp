@@ -458,14 +458,25 @@ CasScene::~CasScene() {
   }
   delete m_win;
   m_win = nullptr;
+  if (auto* score = static_cast<AmbientScorePlayer*>(m_score)) {
+    score->Stop();
+    delete score;
+    m_score = nullptr;
+  }
 }
 
 // 801653FC
-// GC: also starts the ambient score (AmbientScorePlayer, GetAmbientScoreName).
+// The room, the first camera, and the room's ambient score (GetAmbientScoreName) playing for one
+// listener.
 void CasScene::Init() {
   Reload();
   InitCamera(0);
-  SIMMY_STUB("CasScene::Init: AmbientScorePlayer", 0x801653FC);
+  auto* score = new AmbientScorePlayer(false);  // GC: 0x3C bytes
+  m_score = score;
+  score->SetListenerCount(1);
+  score->Load(const_cast<char*>(GetAmbientScoreName()));
+  score->SetListenerCount(1);
+  score->Start();
 }
 
 // 801654A4
@@ -524,6 +535,7 @@ void CasScene::SetMediator(CasMediator* mediator) { m_mediator = mediator; }
 // 801657E0
 void CasScene::Update(float dt) {
   UpdateCamera(dt);
+  if (m_score) static_cast<AmbientScorePlayer*>(m_score)->Update();  // GC: no check (Init made it)
   if (m_level) m_level->Update();
 }
 
@@ -765,19 +777,28 @@ void CasScene::SetUpWindow(ERC* rc) {
 void CasScene::HandleEventChangeFocus(CasEventChangeFocus& event) {
   const int f = event.m_uiFocus;
   int camera = -1;
+  // The ambient score's listener stands where the sims are looked at (kListenerDir: facing +y).
+  auto listener = [this](const EVec3& at) {
+    static EVec3 kListenerDir{0.0f, 1.0f, 0.0f};  // {anonymous}::kListenerDir 80487834
+    EVec3 pos = at;
+    if (m_score) static_cast<AmbientScorePlayer*>(m_score)->UpdateListener(0, pos, kListenerDir);
+  };
   if (f >= 2 && f < 9) {
     RepositionCamera(8, 1.0f, 0.4f);
     m_lightSet = 2;
+    listener(kSimPosGenetics);
     return;
   }
   if (f == 0x34) {
     RepositionCamera(7, 1.0f, 0.4f);
     m_lightSet = 0;
+    listener(kSimPosDefault);
     return;
   }
   if (f > 0x41 && f <= 0x46 && f != 0x42) {
     RepositionCamera(9, 1.0f, 0.4f);
     m_lightSet = 1;
+    listener(kPosCAR[1]);  // GC: DAT_80487810
     return;
   }
   if (f < 2) return;
@@ -801,6 +822,7 @@ void CasScene::HandleEventChangeFocus(CasEventChangeFocus& event) {
   else return;
   RepositionCamera(static_cast<unsigned int>(camera), 1.0f, 0.4f);
   m_lightSet = 0;
+  listener(kSimPosDefault);
 }
 
 // 80166E94
@@ -832,7 +854,8 @@ E3DWindow* CasScene::Get3DWindow() const { return m_win; }
 // 801672C0
 int CasScene::GetRoomFromCameraAngle(unsigned int) const { return 0; }
 // 801672C8
-const char* CasScene::GetAmbientScoreName() const { return "cas_scene"; }
+// {anonymous}::SCORE_NAME (804FDDCC -> 803DF9E4).
+const char* CasScene::GetAmbientScoreName() const { return "scoreCAS"; }
 
 // 801754D4
 CasSceneDefault::CasSceneDefault() {}

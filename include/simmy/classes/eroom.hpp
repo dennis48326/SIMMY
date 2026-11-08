@@ -39,9 +39,9 @@ struct ERoom {
   void ProcDiagonalWalls(int& walls, int& tiles, bool create);  // 8002EF04
   void ProcessCell(std::vector<ERoomWall*>& list, ERoomWall*& current, CTilePt& tile, TileWallsSegment segment, DiagonalSideSelector side, TileWalls& walls, int splitTest, int& wallCount, int& tileCount, bool create);  // 8002F264
   bool PreviewWallBuild(bool fences);  // 8002F4DC
-  RET_UNKNOWN FindWallContainingSegment(TNodeList<ERoomWall *> &, TileWallsSegment, CTilePt &, CTilePt &);  // 8002FD08
+  ERoomWall* FindWallContainingSegment(std::vector<ERoomWall*>& list, TileWallsSegment segment, CTilePt& a, CTilePt& b);  // 8002FD08
   EIWallPart* GetWallFromTileAndSegment(TileWallsSegment segment, CTilePt& tile);  // 8002FE18
-  static RET_UNKNOWN DeleteERoomWallContainingSegment(TileWallsSegment, CTilePt &, CTilePt &);  // 8002FEAC
+  void DeleteERoomWallContainingSegment(TileWallsSegment segment, CTilePt& a, CTilePt& b);  // 8002FEAC
   static int DeleteWallAtTile(CTilePt& tile, TileWalls& walls, TileWallsSegment segment);  // 8002FF8C
   static int KillArchitecturalObject(CTilePt& tile, TileWallsSegment segment, int& guid, bool kill);  // 80030104
 
@@ -78,8 +78,8 @@ struct ERoomWall {
   int DrawWallpaperPreview(ERC* rc, EVec2& cursor);  // 8002D3C0
   static RET_UNKNOWN GetWallPaperCost(int, unsigned short);  // 8002DE70
   int CountWalls();  // 8002F81C
-  RET_UNKNOWN HasSegment(TileWallsSegment, CTilePt &, CTilePt &);  // 8002F84C
-  RET_UNKNOWN DeleteWallAtTile(CTilePt &);  // 8002FA34
+  bool HasSegment(TileWallsSegment segment, CTilePt& a, CTilePt& b);  // 8002F84C
+  int DeleteWallAtTile(CTilePt& tile);  // 8002FA34
   void RemoveWallsFromWorld();  // 8002FBEC
   EIWallPart* GetWallAtTile(CTilePt& tile);  // 8002FD7C
   ERoomWall();  // 800308A0

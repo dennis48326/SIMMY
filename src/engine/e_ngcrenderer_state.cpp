@@ -870,6 +870,10 @@ void ENgcRenderer::End(EDLEntry*) {
   if (m_returnDepth != 0) m_cursor = m_returnStack[--m_returnDepth];
   else m_done = 1;
 }
+// 8034A718
+// Unused in the release build (only a one-shot warning flag is cleared): the mip-map bias is not applied.
+void ENgcRenderer::SetMipMap(EDLEntry*) {}
+
 // 8034A778
 void ENgcRenderer::NoOp(EDLEntry*) {}
 

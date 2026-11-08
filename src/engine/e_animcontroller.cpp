@@ -1250,6 +1250,112 @@ void EAnimController::ResumeTrack(eTrackFlags flags) {
   if (track && track->m_active == 1) track->m_flags &= ~eTrackFlags::kSuspended;
 }
 
+// 802F0678
+// Node `index`'s matrix this frame; out of range or without matrices a shared identity (GC:
+// unavailable_4020, with a one-shot warning flag).
+EMat4* EAnimController::GetNodeMatrix(int index) {
+  if (m_matrices && index >= 0 && index < NodeCount()) return &m_matrices[index];
+  static EMat4 unavailable;
+  unavailable.Id();
+  return &unavailable;
+}
+
+// 802F0428
+// Node `index`'s pivot (the controller's scale taken out) through its matrix: where the joint is this
+// frame; 0 for an index out of range.
+EVec3 EAnimController::CalcNodePos(int index) {
+  if (index < 0 || index >= NodeCount()) return EVec3{0.0f, 0.0f, 0.0f};
+  const EMat4& m = *GetNodeMatrix(index);
+  const float inv = 1.0f / m_scale;
+  const EVec3& pivot = m_character->m_nodes[static_cast<std::size_t>(index)].m_pivot;
+  const float x = pivot.x * inv, y = pivot.y * inv, z = pivot.z * inv;
+  return EVec3{z * m.m[2][0] + x * m.m[0][0] + y * m.m[1][0] + m.m[3][0],
+               z * m.m[2][1] + x * m.m[0][1] + y * m.m[1][1] + m.m[3][1],
+               z * m.m[2][2] + x * m.m[0][2] + y * m.m[1][2] + m.m[3][2]};
+}
+
+// 802EA53C
+// Poses the character at `root` (Compute for this frame), then the box (min x y z, max x y z) around
+// every node's joint position (only the nodes `use` marks, when given). No node: an empty box at 0.
+void EAnimController::CalcTightBoundBox(EMat4& root, EBound3& box, bool* use) {
+  bool first = true;
+  Compute(root, _framecount);
+  float* b = reinterpret_cast<float*>(&box);
+  for (int i = 0; i < 6; ++i) b[i] = 0.0f;
+  for (int i = 0; i < NodeCount(); ++i) {
+    if (use && !use[i]) continue;
+    const EVec3 p = CalcNodePos(i);
+    if (first) {
+      first = false;
+      b[0] = b[3] = p.x, b[1] = b[4] = p.y, b[2] = b[5] = p.z;
+      continue;
+    }
+    for (int a = 0; a < 3; ++a) {
+      if (b[a] <= p[a]) {
+        if (b[3 + a] < p[a]) b[3 + a] = p[a];
+      } else {
+        b[a] = p[a];
+      }
+    }
+  }
+}
+
+// 802EFFCC
+// The sphere the posed character fills at `root`: the skeleton's own sphere (ERCharacter +0x20),
+// moved towards each animated track's sphere by the track's intensity (clamped to 0..1): the track's
+// root translation now (the axes the track accumulates held at its start) with the animation's radius
+// (ERAnim +0x40), grown around the running sphere for a layered track (flag 0x100); then offset by the
+// root node's pivot, and the radius scaled and the centre carried by `root`.
+void EAnimController::CalcVisibilitySphere(EMat4& root, EBoundSphere& out) {
+  EBoundSphere sphere;
+  if (m_character) {
+    sphere.x = m_character->m_field20.x, sphere.y = m_character->m_field20.y, sphere.z = m_character->m_field20.z;
+    std::memcpy(&sphere.r, &m_character->m_field2C, sizeof(float));
+  }
+  if (NodeCount() != 0) {
+    for (int i = 0; i < m_trackCount && i < static_cast<int>(m_tracks.size()); ++i) {
+      EACTrack& track = m_tracks[static_cast<std::size_t>(i)];
+      if (!track.m_anim) continue;
+      double w = track.m_intensity;
+      if (w < 0.0) w = 0.0;
+      if (1.0 < w) w = 1.0;
+      if (w < 0.0) w = 0.0;
+      if (w == 0.0) continue;
+      const EVec3 trans = GetAnimRootNodeTrans(&track);
+      EBoundSphere s;
+      s.x = trans.x, s.y = trans.y, s.z = trans.z;
+      float* c = &s.x;
+      for (int a = 0; a < 3; ++a)
+        if (track.m_rootFlags & (1u << a)) c[a] = track.m_rootStart[a];
+      std::memcpy(&s.r, &track.m_anim->m_field40, sizeof(float));
+      if (track.m_rootFlags & 0x100) s.Combine(sphere, s);
+      sphere.x += static_cast<float>((s.x - sphere.x) * w);
+      sphere.y += static_cast<float>((s.y - sphere.y) * w);
+      sphere.z += static_cast<float>((s.z - sphere.z) * w);
+      if (w < 0.0) w = -w;
+      sphere.r = static_cast<float>(w * static_cast<float>(static_cast<double>(s.r) - sphere.r) + sphere.r);
+    }
+    const EVec3& pivot = m_character->m_nodes[0].m_pivot;
+    sphere.x += pivot.x, sphere.y += pivot.y, sphere.z += pivot.z;
+  }
+  const float scale = root.GetMaxScale();
+  const float* m0 = root.m[0];
+  const float* m1 = root.m[1];
+  const float* m2 = root.m[2];
+  const float* m3 = root.m[3];
+  out.r = sphere.r * scale;
+  out.x = sphere.z * m2[0] + sphere.x * m0[0] + sphere.y * m1[0] + m3[0];
+  out.y = sphere.z * m2[1] + sphere.x * m0[1] + sphere.y * m1[1] + m3[1];
+  out.z = sphere.z * m2[2] + sphere.x * m0[2] + sphere.y * m1[2] + m3[2];
+}
+
+// 802EF4DC
+// The track's current frame; 0 when it is not active.
+double EAnimController::GetTrackFrame(eTrackFlags flags) {
+  EACTrack* track = FindTrack(flags, false);
+  return track && track->m_active == 1 ? track->m_pos : 0.0;
+}
+
 // 802F055C
 // Node `index`'s matrix this frame (identity without matrices), the controller's scale taken out.
 void EAnimController::CalcNodeMatrix(int index, EMat4& out) {

@@ -1,6 +1,8 @@
 // Port of engine/e_shader.cpp (partial): the shader definition and its accessors. The animated-shader
 // update list, material changes and transforms come with the renderer.
 #include "simmy/types_gen.hpp"
+
+#include <cstring>
 #include "simmy/unported_globals.hpp"
 
 // PC: SHDR data is CopyShedData's byte image of an EShaderDef, big-endian.
@@ -117,6 +119,14 @@ const EShaderDef& EShader::GetShaderDef() const { return *this; }
 void EShader::SetAlphaTestThreshold(float threshold, int layer) { m_layers[layer].m_field14 = threshold; }
 // 802FABD0
 void EShader::UpdateMaterialCoefficients() {}
+// 802FA390
+// The material (12 words at +0x10) replaced, then its coefficients updated. No caller in the release
+// build (the vtable slot of ENgcShader::ChangeMaterial is never called).
+void EShader::ChangeMaterial(EMaterial& material) {
+  std::memcpy(m_material, &material, sizeof m_material);
+  UpdateMaterialCoefficients();
+}
+
 // 802FABD4
 bool EShader::IsValid() { return m_magic == 0x900dbeef; }
 // 802FABF0

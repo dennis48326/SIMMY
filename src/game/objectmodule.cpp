@@ -80,9 +80,48 @@ int ObjectModuleImpl::Load(iResFile* file) {
       o->m_siteTile = tile.GetX() + tile.GetY() * 0x40;
     }
   }
-  if (r == 0) SIMMY_STUB("ObjectModuleImpl::Load: UpdateSimObjects, CheckIntegrity", 0x800F30BC);
+  if (r == 0) {
+    UpdateSimObjects();
+    // GC: then CheckIntegrity (800F7F28, vtable 0xB4), which only reports objects whose slot hierarchy
+    // and tile disagree to the debug dump (CTGDump "Error detected"); it repairs nothing (PC: not done).
+  }
   m_loaded = 1;
   return r;
+}
+
+// 800F62DC
+// The lot's simulation objects (type 7 definitions with +0x54 set: the controllers) are there once each:
+// in the folder's selector order, one missing is made (MakeNewOutOfWorldObject), a second one of the
+// same type killed. GC: also remembers the id of the one of GUID 0x3EEC206C (+0x2054; read only by the
+// animation preview, PreviewAnimation: not kept).
+void ObjectModuleImpl::UpdateSimObjects() {
+  std::vector<cXObjectImpl*> simObjects;
+  for (cXObjectImpl* o = m_first; o; o = o->m_nextObject)
+    if (o->m_def && ERQuickdata::S16(o->m_def, 0x54) != 0) simObjects.push_back(o);
+  ObjectFolderImpl* folder = Globs_pObjectFolder;
+  for (ObjSelector* s = folder ? folder->GetNextSelector(nullptr) : nullptr; s; s = folder->GetNextSelector(s)) {
+    if (!s->m_def || objdef::Type(s->m_def) != 7 || ERQuickdata::S16(s->m_def, 0x54) == 0) continue;
+    short id = 0;
+    for (size_t i = 0; i < simObjects.size();) {
+      if (simObjects[i]->GetSelector() != s) {
+        ++i;
+        continue;
+      }
+      if (id == 0) {
+        id = static_cast<short>(simObjects[i]->GetID());
+        ++i;
+        continue;
+      }
+      const short extra = static_cast<short>(simObjects[i]->GetID());
+      simObjects.erase(simObjects.begin() + static_cast<std::ptrdiff_t>(i));
+      std::printf("[vm] UpdateSimObjects: a second %s (#%d) goes\n", s->m_fileName ? s->m_fileName : "?", extra);
+      KillObject(extra);  // vtable 0x5C
+    }
+    if (id == 0) {
+      MakeNewOutOfWorldObject(s, &id);  // vtable 0x54
+      std::printf("[vm] UpdateSimObjects: %s made (#%d)\n", s->m_fileName ? s->m_fileName : "?", id);
+    }
+  }
 }
 
 // 800F5A98
@@ -99,7 +138,7 @@ void ObjectModuleImpl::DayChanged() {
 // price, else +0x48) down to the limit (+0x4C). A multi-tile object's lead does it for the group, from
 // the master definition.
 void cXObjectImpl::DayPassed() {
-  SIMMY_STUB("cXObjectImpl::DayPassed: UpdateAge (the object's age, data 0x2C)", 0x800DBB18);
+  UpdateAge();
   const ObjDefinition* def = m_def;
   if (IsMultiTile()) {
     auto* mt = dynamic_cast<cXMTObjectImpl*>(this);
@@ -130,9 +169,9 @@ void ObjectModuleImpl::PostLoad(iResFile* file, int version, bool loaded) {
 
 // 800DADBC
 // Old saves' data fixed (version < 0x20: data 0x2A/0x2B flags; < 0x21: the price (data 0x29) from the
-// master definition; < 0x23: data 4 = 1); then, for a house not loaded from a save, the load tree
-// (entry 2) runs at once with param 0 = `loaded`; the sim flags are brought up to date. GC: also the
-// level and location set again (SetLevel / SetLocation: the tile map) and auto-reset objects reset.
+// master definition; < 0x23: data 4 = 1); a placeholder cleaned up; then, for a house not loaded from
+// a save, the load tree (entry 2) runs at once with param 0 = `loaded`; the sim flags are brought up to
+// date. GC: also the location set again (SetLocation: the tile map; PC: the load does it).
 void cXObjectImpl::PostLoad(int version, bool loaded) {
   if (version < 0x20) {
     const int f = m_data[0x2a];
@@ -152,9 +191,16 @@ void cXObjectImpl::PostLoad(int version, bool loaded) {
   if (version < 0x23) m_data.WriteVar(4, 1);
   // GC: first (before the data fixes) SetLevel(1) for an object without a level, then SetLocation at its
   // own location. PC: of SetLocation, the interaction influence map's part (the rest is done by the load).
+  if (m_level == 0) SetLevel(1);
   InfluenceMapObjectLeaving(this);
   InfluenceMapObjectArrived(this);
-  SIMMY_STUB("cXObjectImpl::PostLoad: SetLevel / the rest of SetLocation again, auto-reset objects", 0x800DADBC);
+  // A placeholder (the folder's) is cleaned up: the people let go of it (CleanupPeople, vtable 0x134) and
+  // Cleanup(nullptr). (So are auto-reset objects, definition +0x7C flag 2, when cXObjectImpl::sAutoReset
+  // is set, with their init tree run: it is zero-initialised and nothing sets it in the release game.)
+  if (Globs_pObjectFolder && m_selector && m_selector == Globs_pObjectFolder->GetPlaceholder()) {
+    if (Globs_pObjectModule) Globs_pObjectModule->CleanupPeople(this);
+    Cleanup(nullptr);
+  }
   // GC: unless the house was loaded from a save (DAT_80475C74; PC: never).
   short params[4] = {static_cast<short>(loaded ? 1 : 0), 0, 0, 0};
   if (m_treeSim && GetTreeID(2)) RunTree(2, 0, params);
@@ -223,8 +269,15 @@ void ObjectModuleImpl::DoStream(ReconBuffer* b, int version) {
   for (cXObjectImpl* o = m_first; o; o = o->m_nextObject) {
     const bool placeholderObject = o->GetSelector() == placeholder ||
                                    (o->m_def && objdef::GUID(o->m_def) == kPlaceholderGUID);
+    // Read: the object is initialised first (the cXObjectImpl vtable's Initialize, 0x24), so a data
+    // variable the save does not hold keeps its default (GC saves only an object's own variables: one
+    // equal to its category's value is not written); misc flag 0x80 after. PC: only the data defaults
+    // (EdithVariableSet::Initialize; the slots and tree sim are the constructor's, a person's own
+    // Initialize runs when its family moves in).
+    const bool reading = b->m_mode == ReconBuffer__Mode::kRead;
+    if (reading) o->m_data.Initialize(o);
     o->ReconStream(b, version, placeholderObject);
-    SIMMY_STUB("ObjectModuleImpl::DoStream: the object's behaviour reset and SetMiscFlag(0x80)", 0x800F3C94);
+    if (reading) o->SetMiscFlag(cXObject__MiscFlag{0x80}, true);
     // Its object map entry (sim flags << 16 | idle ticks; before 0x39 only the ticks, flag 1 on).
     if (version > 0x35 && o->m_id > 0) {
       if (m_simFlags.size() < static_cast<size_t>(o->m_id)) m_simFlags.resize(static_cast<size_t>(o->m_id), 0xffffu);
@@ -284,7 +337,18 @@ void ObjectModuleImpl::DoStream(ReconBuffer* b, int version) {
     if (keep && o->m_treeSim && o->m_treeSim->GetStackSize() > 0) o->ResumeBehavior();
     else o->StartBehavior();
   }
-  SIMMY_STUB("ObjectModuleImpl::DoStream: the selected people, object lists, placeholders removed", 0x800F3C94);
+  SIMMY_STUB("ObjectModuleImpl::DoStream: the selected people, object lists", 0x800F3C94);
+  // The placeholders (objects of a type the folder does not have, GUID 0x3C08965F) go (vtable 0x5C),
+  // the list walked again from its start after each.
+  if (b->m_mode == ReconBuffer__Mode::kRead)
+    for (cXObjectImpl* o = m_first; o;) {
+      if (o->m_def && objdef::GUID(o->m_def) == kPlaceholderGUID) {
+        KillObject(static_cast<short>(o->m_id));
+        o = m_first;
+      } else {
+        o = o->m_nextObject;
+      }
+    }
   // The objects in the world take their places on the passive influence map (targets).
   if (PassiveInfluenceSystem* influence = Globs_pSimulator ? Globs_pSimulator->GetPassiveInfluenceSystem() : nullptr)
     for (cXObjectImpl* o = m_first; o; o = o->m_nextObject)
@@ -457,12 +521,13 @@ ObjectIterator& ObjectIterator::operator++() {
 
 // 800F4BD0
 // A new object of `selector` out of the world: added under the next free id, its instance made, born (its
-// main tree), data 0x29 the price, and Reset(true) runs its init tree at once. A multi-tile group's lead
-// selector (sub index -1) makes every part (its sub selectors, in order; the first leads), then the group
-// is reset (each part's init tree; the parts are all there by then); if one cannot be made, the group goes.
-// GC: also the selector's file is loaded first, misc flag 0x80, the module's "new object" event (vtable
-// 0x244) and GlobalDispatch 0xDE (only its people part: the visitor types); a lone part (sub index >= 0) is not made (PC: it is, for buy mode's
-// CreateObjectFromGUID, which makes the parts one by one).
+// purchase date), misc flag 0x80, Reset(true) (its init tree and a tick of its main tree at once), then
+// data 0x29 the price. A multi-tile group's lead selector (sub index -1) makes every part (its sub
+// selectors, in order; the first leads), the lead gets the price, then the group is reset (each part's
+// init tree; the parts are all there by then); if one cannot be made, the group goes. GC: also the
+// selector's file is loaded first, the module's sim flag 1 (vtable 0x244; PC: StartBehavior) and
+// GlobalDispatch 0xDE (only its people part: the visitor types); a lone part (sub index >= 0) is not made
+// (PC: it is, for buy mode's CreateObjectFromGUID, which makes the parts one by one).
 int ObjectModuleImpl::MakeNewOutOfWorldObject(ObjSelector* selector, short* id) {
   if (id) *id = 0;
   if (!selector || !selector->m_def) return 0;
@@ -500,13 +565,12 @@ int ObjectModuleImpl::MakeNewOutOfWorldObject(ObjSelector* selector, short* id) 
     }
     cXMTObjectImpl* lead = parts[0];
     lead->m_linked = true;
-    lead->AssignOffsets();
+    lead->AssignOffsets();  // PC: the chain's offsets before the parts are used (Reset turns them again)
     lead->m_data.WriteVar(0x29, ERQuickdata::S16(selector->m_def, 0x24));
-    // Reset(true) through the last part (cXMTObjectImpl::Reset: the lead resets the group).
-    for (cXMTObjectImpl* p = lead; p; p = p->m_nextPart) {
-      if (p->m_treeSim && p->m_treeSim->HasMainTreeSim()) p->RunTree(0, 0, nullptr);
-      p->UpdateSimFlags();  // vtable 0x84
-    }
+    // Reset(true) through the last part (cXMTObjectImpl::Reset 800C6B10: the lead resets the group,
+    // each part's init tree and a tick of its main tree).
+    parts.back()->Reset(true);
+    for (cXMTObjectImpl* p = lead; p; p = p->m_nextPart) p->SetMiscFlag(cXObject__MiscFlag{0x80}, true);
     if (id) *id = lead->m_id;
     return lead->m_id;
   }
@@ -520,11 +584,12 @@ int ObjectModuleImpl::MakeNewOutOfWorldObject(ObjSelector* selector, short* id) 
   // neighbour and its instance, is not run here).
   impl->cXObjectImpl::Initialize();
   born(impl);
+  impl->SetMiscFlag(cXObject__MiscFlag{0x80}, true);
+  // Reset(true) (through the interface: cXObjectImpl::Reset 800DA848, a person's 8011EB78): its init
+  // tree (entry 0) and a tick of its main tree at once, so what they set is in place before the
+  // creator's tree goes on; then its value (data 0x29) the price.
+  impl->Reset(true);
   impl->m_data.WriteVar(0x29, ERQuickdata::S16(selector->m_def, 0x24));
-  // GC: Reset(true) (800DA848, through the cXObject interface) runs the init tree (entry 0) at once, so
-  // what it sets (its attributes cleared, data) is in place before the creator's tree goes on.
-  if (impl->m_treeSim && impl->m_treeSim->HasMainTreeSim()) impl->RunTree(0, 0, nullptr);
-  impl->UpdateSimFlags();  // Reset's end (vtable 0x84)
   if (id) *id = impl->m_id;
   // GlobalDispatch 0xDE: HouseImpl::DoCommand redoes the people's visitor types for a new person.
   HouseDispatch(0xde, impl->m_id);
@@ -532,8 +597,8 @@ int ObjectModuleImpl::MakeNewOutOfWorldObject(ObjSelector* selector, short* id) 
 }
 
 // 800DAC94
-// A new object starts its behaviour: the main tree (PC: GC's Reset resets the tree sim to it; its init
-// tree is run at once by MakeNewOutOfWorldObject, as GC's Reset(true)).
+// A new object's purchase date. PC: it also starts its behaviour (the tree sim on the main tree, the sim
+// flag on); GC's Reset(true), which MakeNewOutOfWorldObject calls next, resets the tree sim the same way.
 void cXObjectImpl::JustBorn() {
   // The purchase date and time from the simulator's clock (GetSim, vtable 0x3DC; GetGlobal): data 0x2D
   // the year, 0x2E the month, 0x2F the day, 0x18 the hour, 0x15 the minute.
@@ -545,6 +610,23 @@ void cXObjectImpl::JustBorn() {
     m_data.WriteVar(0x15, static_cast<short>(sim->GetGlobal(5)));
   }
   StartBehavior();  // PC
+}
+
+// 800DBB18
+// Its age from its purchase date (data 0x2D year, 0x2E month, 0x2F day) to the simulator's date (GetSim,
+// vtable 0x3DC; globals 8, 7, 1): data 0x12 the whole years, 0x30 the whole months (16-bit sums).
+void cXObjectImpl::UpdateAge() {
+  cSimulatorImpl* sim = Globs_pSimulator;
+  if (!sim) return;  // PC guard
+  short years = static_cast<short>(sim->GetGlobal(8) - m_data[0x2d]);
+  short months = static_cast<short>(sim->GetGlobal(7) - m_data[0x2e]);
+  if (static_cast<short>(sim->GetGlobal(1) - m_data[0x2f]) < 0) months = static_cast<short>(months - 1);
+  if (months < 0) {
+    months = static_cast<short>(months + 12);
+    years = static_cast<short>(years - 1);
+  }
+  m_data.WriteVar(0x12, years);
+  m_data.WriteVar(0x30, static_cast<short>(months + years * 12));
 }
 
 // 800F8214
@@ -570,6 +652,13 @@ void ObjectModuleImpl::KillObject(short id) {
   if (!impl) return;
   static int logged = 0;
   if (logged++ < 20) std::printf("[vm] %s killed\n", impl->DebugName());
+  ObjPortalPartKilled(impl);  // GC: Pickup (vtable 0x12C): a door's or window's wall back to plain
+  // GC: Pickup (cXMTObjectImpl::Pickup 800C63E4): a dynamic part leaves its group first
+  // (RemoveFromDynamic: the rest and it learn their neighbours). PC: GC's Pickup then picks up the parts
+  // left in its old lead's chain too; not done (the other parts stay where they are).
+  if (impl->IsMultiTile())
+    if (auto* mt = dynamic_cast<cXMTObjectImpl*>(impl))
+      if (mt->IsDynamic()) mt->RemoveFromDynamic();
   SeverTile(impl);
   // GC KillOutOfWorldObject (800F50FC): a player's selected person being killed hands the selection on
   // (AdvanceSelectedPerson, vtable 0x124); still the same: the player has none (SetSelectedPerson 0).

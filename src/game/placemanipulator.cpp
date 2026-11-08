@@ -45,19 +45,6 @@ cXObjectImpl* ObjectByID(short id) {
 }
 }  // namespace
 
-namespace {
-// PC stand-in for what GC's ObjectModuleImpl::MakeNewOutOfWorldObject does to a new object and the
-// port's does not (game/objectmodule.cpp, the world side's): Reset(true) (800DA848) runs the init tree
-// at once (RunTree 0, TreeSim vtable 0xA4). The port's JustBorn has pushed the init tree onto the
-// object's stack; it is run here to its end (it would otherwise wait for the simulator, which buy mode
-// pauses), so the object's placement data (0x2A, 4, 0xD, ...) are set before it is placed. (The data
-// defaults come from cXObjectImpl::Initialize, called by MakeNewOutOfWorldObject.)
-void InitNewObject(cXObjectImpl* o) {
-  TreeSimImpl* tree = o->m_treeSim;
-  for (int i = 0; tree && i < 64 && tree->GetStackSize() > 1 && !o->TreeSimError(); ++i) o->Simulate(0);
-}
-}  // namespace
-
 // 802113D8
 // The GUID's master selector made into a new object out of the world (ObjectModule vtable 0x54
 // MakeNewOutOfWorldObject). PC: the port's ObjectModule makes one object per selector, so a multi-tile
@@ -72,8 +59,7 @@ cXObjectImpl* CreateObjectFromGUID(unsigned int guid) {
   if (!master || !master->m_def || !module || !folder) return nullptr;
   if (objdef::MasterID(master->m_def) == 0 || objdef::SubIndex(master->m_def) != -1) {
     short id = 0;
-    module->MakeNewOutOfWorldObject(master, &id);
-    if (cXObjectImpl* o = ObjectByID(id)) InitNewObject(o);
+    module->MakeNewOutOfWorldObject(master, &id);  // Reset(true): its init tree has run
     return ObjectByID(id);
   }
   // The whole group at once (the world side's MakeNewOutOfWorldObject of the lead selector: every part,
@@ -83,12 +69,8 @@ cXObjectImpl* CreateObjectFromGUID(unsigned int guid) {
   std::vector<cXObjectImpl*> parts;
   short leadId = 0;
   module->MakeNewOutOfWorldObject(master, &leadId);
-  for (auto* p = dynamic_cast<cXMTObjectImpl*>(ObjectByID(leadId)); p; p = p->m_nextPart) {
-    InitNewObject(p);
-    parts.push_back(p);
-  }
+  for (auto* p = dynamic_cast<cXMTObjectImpl*>(ObjectByID(leadId)); p; p = p->m_nextPart) parts.push_back(p);
   if (parts.empty()) return nullptr;
-  parts[0]->m_data.WriteVar(0x29, ERQuickdata::S16(master->m_def, 0x24));
   MakePlacementGroup(parts);
   return parts[0];
 }
@@ -553,6 +535,7 @@ struct ObjectManipulator {
   virtual ~ObjectManipulator() = default;
   virtual void OnCommandPressed(int command) = 0;
   void Update(float dt);
+  void UpdateObjectHighlights(EIObjectMan* objects);
   void CursorBesideSim();
 };
 
@@ -684,22 +667,53 @@ void GrabManipulator::OnCommandPressed(int command) {
   }
 }
 
+// GC 80219C74 ObjectManipulator::UpdateObjectHighlights
+// With nothing in hand: every object instance whose bounds meet the square of the selection radius
+// about the cursor (from the floor to 10 up) and that the player may pick up (data 0x22 0,
+// UserCanPickup, vtable 0x15C) is lit in the player's highlight (cursor flag 1, player 2: 8), the others
+// not; while the grab menu is open only its current object is. GC: the lit ones also go to the overlap
+// search (UpdateOverlapIntersection, vtable 0x94: the nearest one's centre, read by nothing here). PC:
+// the cursor is a tile; the square is about its centre.
+void ObjectManipulator::UpdateObjectHighlights(EIObjectMan* objects) {
+  if (m_placement.m_object || !objects) return;
+  ESimsCam* cam = _gd.m_players[m_player & 1].m_cam;
+  const float r = cam ? cam->GetCurZoomRatio() * 0.65f + 0.35f : 0.0f;  // Interactor::GetSelectionRadius (802093F0)
+  const float cx = m_cursor[0] + 0.5f, cy = m_cursor[1] + 0.5f;
+  const float x0 = cx - r, x1 = cx + r, y0 = cy - r, y1 = cy + r, z0 = 0.0f, z1 = 10.0f;
+  cXObjectImpl* selected = GetSelectedActionMenuItem(static_cast<unsigned int>(m_player));
+  const unsigned int flag = m_player == 0 ? ISimInstance::kHighlight : ISimInstance::kHighlight2;
+  for (auto& item : objects->m_items) {
+    ISimInstance* inst = item.second;
+    if (!inst) continue;
+    bool lit = false;
+    const float* b = inst->m_bounds;
+    if (b[0] <= x1 && x0 <= b[3] && b[1] <= y1 && y0 <= b[4] && b[2] <= z1 && z0 <= b[5]) {
+      cXObjectImpl* o = inst->m_xob ? inst->m_xob->GetObjectImplementation() : nullptr;
+      if (o && o->GetData(0x22) == 0 && ObjUserCanPickup(o)) lit = true;
+    }
+    if (selected) lit = inst->m_xob && inst->m_xob->GetObjectImplementation() == selected;
+    inst->SetHighlight(flag, lit);
+  }
+}
+
 // GC 8021A348
-// The objects under the cursor (EIObjectMan::GetObjectsInRect with the interactor's rectangle): one is
-// grabbed; with several the catalogue offers a menu of them (PCTTarget::CreateGrabObjectMenu). PC: the
-// objects whose site is the cursor's tile (people and objects in slots not counted, a multi-tile object
-// once); with several, the first is grabbed.
+// The objects the player lights (EIObjectMan::GetObjectsInRect: UpdateObjectHighlights'): one is
+// grabbed; with several the catalogue offers a menu of them (PCTTarget::CreateGrabObjectMenu, after the
+// input state is reset, vtable 0x7C). PC: the menu gets their objects.
 void GrabManipulator::TryGrabbingWorldObject() {
-  CTilePt tile(static_cast<int>(m_cursor[1]), static_cast<int>(m_cursor[0]), 1);
   std::vector<cXObjectImpl*> found;
-  ObjectModuleImpl* module = Globs_pObjectModule;
-  for (cXObjectImpl* o = module ? module->m_first : nullptr; o; o = o->m_nextObject) {
-    if (o->GetType() == 2 || o->m_data[2] != 0 || !ObjIsInWorld(o)) continue;
-    const CTilePt t = o->GetCTilePt();
-    if (t.GetX() != tile.GetX() || t.GetY() != tile.GetY() || t.GetLevel() != tile.GetLevel()) continue;
-    FindPlacementGroup(o);
-    cXObjectImpl* lead = GetLeadObjectImpl(o);
-    if (std::find(found.begin(), found.end(), lead) == found.end()) found.push_back(lead);
+  EHouse* house = _globals.m_house;
+  if (house && house->m_objectMan) {
+    std::vector<ISimInstance*> lit;
+    house->m_objectMan->GetObjectsInRect(m_player, lit);
+    for (ISimInstance* inst : lit) {
+      cXObjectImpl* o = inst->m_xob ? inst->m_xob->GetObjectImplementation() : nullptr;
+      if (!o) continue;
+      // PC: a multi-tile object once, as its lead (the port's placement moves a group by its lead).
+      FindPlacementGroup(o);
+      cXObjectImpl* lead = GetLeadObjectImpl(o);
+      if (std::find(found.begin(), found.end(), lead) == found.end()) found.push_back(lead);
+    }
   }
   if (found.empty()) return;
   if (found.size() > 1) {
@@ -1011,10 +1025,13 @@ bool UpdatePlaceManipulator(int player, float dt) {
   if (UpdateBuildTool(player, dt)) return true;
   if (s_manipulators[player & 1].m_active) {
     s_manipulators[player & 1].Update(dt);
+    if (EHouse* house = _globals.m_house) s_manipulators[player & 1].UpdateObjectHighlights(house->m_objectMan);
     return true;
   }
   if (s_grabbers[player & 1].m_active) {
     s_grabbers[player & 1].Update(dt);
+    // GC: the interactor manager has the active interactor light its objects after its update.
+    if (EHouse* house = _globals.m_house) s_grabbers[player & 1].UpdateObjectHighlights(house->m_objectMan);
     return true;
   }
   return false;
@@ -1026,10 +1043,12 @@ bool UpdatePlaceManipulator(int player, float dt) {
 //                         the placement path (Place where legal, then FinalUserPlaceObject: UserPlace)
 //   grab#<id>             the object picked up by the player (UserPickup) and put back (ResetLocation)
 //   wall@x,y,seg          the wall segment deleted (ERoom::DeleteWallAtTile), the rooms and house redone
+//   create:<file>@x,y     an object made and put on the tile as TryCreateObject does (dynamic ones merge)
 //   chain@x,y             the tile's object chain printed (the tile map's object and its siblings)
 //   model#<hex>           the object files whose first ObjAnimDef draws that model printed
 //   paperroom@x,y,i[,sell] the room at the tile papered with WallSet entry i (or stripped), wallpainter.cpp
 void WallPainterRoomTest(int x, int y, int index, bool sell);  // wallpainter.cpp
+int TestCreateObjectAt(const char* fileName, int x, int y);     // objectsim.cpp
 void PlacementTestTick(int ticks) {
   static const char* spec = std::getenv("SIMMY_PLACE_TEST");
   if (!spec || !Globs_pObjectModule || !Globs_pFixedWorld) return;
@@ -1041,6 +1060,13 @@ void PlacementTestTick(int ticks) {
     int x = 0, y = 0, z = 0;
     if (std::strncmp(a, "paperroom@", 10) == 0 && std::sscanf(a + 10, "%d,%d,%d", &x, &y, &z) == 3) {
       WallPainterRoomTest(x, y, z, std::strstr(a, ",sell") != nullptr && std::strstr(a, ",sell") < (std::strchr(a, ';') ? std::strchr(a, ';') : a + std::strlen(a)));
+    } else if (std::strncmp(a, "create:", 7) == 0 && std::strchr(a, '@')) {
+      const char* at = std::strchr(a, '@');
+      const std::string name(a + 7, at);
+      if (std::sscanf(at + 1, "%d,%d", &x, &y) == 2) {
+        const int id = TestCreateObjectAt(name.c_str(), x, y);
+        std::printf("[place] tick %d create %s at %d,%d: #%d\n", ticks, name.c_str(), x, y, id);
+      }
     } else if (std::strncmp(a, "chain@", 6) == 0 && std::sscanf(a + 6, "%d,%d", &x, &y) == 2) {
       CTilePt t(x, y, 1);
       std::printf("[place] tick %d chain at %d,%d:", ticks, x, y);

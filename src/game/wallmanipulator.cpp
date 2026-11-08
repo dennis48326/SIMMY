@@ -155,7 +155,8 @@ int InteractorModule__WallManipulator::FinalizePlacement() {
 
 // 80220570
 // The line's walls deleted (refunded: the stock grows by what was deleted); when the rooms would then
-// fail the check, the walls as they were and the run's ERoomWall dropped, checked again.
+// fail the check, the walls as they were and instead the whole wall run (ERoomWall) holding the line
+// taken off (DeleteERoomWallContainingSegment), checked again; still failing, nothing is deleted.
 int InteractorModule__WallManipulator::FinalizeWallDel() {
   EVec3 from = m_anchor, to = m_savedPos;
   cFixedWorldImpl* w = World();
@@ -170,7 +171,8 @@ int InteractorModule__WallManipulator::FinalizeWallDel() {
     const std::vector<unsigned char> saved2 = ibuild::SaveArray(w->GetWalls());
     CTilePt a, b;
     ibuild::ConvertVertsToTiles(from, to, a, b);
-    SIMMY_STUB("WallManipulator::FinalizeWallDel: ERoom::DeleteERoomWallContainingSegment", 0x80220570);
+    // The whole wall run holding the line's first segment (its direction's segment) goes instead.
+    room->DeleteERoomWallContainingSegment(TileWalls::DirToWallSeg(CTilePt::GetTileDirection(a, b)), a, b);
     if (!room->PreviewWallBuild(fences)) {
       ibuild::RestoreArray(w->GetWalls(), saved2);
       w->ComputeRooms(0);

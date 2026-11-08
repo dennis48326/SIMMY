@@ -231,6 +231,18 @@ void EGlobal::SetSelectedPerson(int player, cXPerson* person) {
   if (Globs_pSimulator) Globs_pSimulator->SetGlobal(global, static_cast<short>(o ? o->GetID() : 0));
 }
 
+// 800420B4
+// The players' selected sims change places (generic sim call 0x1E), when both have one; the simulator's
+// globals 3 and 0x20 get the new ids. GC changes nothing else (no HUD, plumb bob or control change).
+void EGlobal::SwapSelectedSims() {
+  if (!Globs_pSimulator || !m_selectedPerson[0] || !m_selectedPerson[1]) return;
+  cXPerson* first = m_selectedPerson[1];
+  m_selectedPerson[1] = m_selectedPerson[0];
+  m_selectedPerson[0] = first;
+  Globs_pSimulator->SetGlobal(3, static_cast<short>(m_selectedPerson[0]->AsObject()->GetID()));
+  Globs_pSimulator->SetGlobal(0x20, static_cast<short>(m_selectedPerson[1]->AsObject()->GetID()));
+}
+
 // 80041538
 // The person's ESim, kept by the house's object manager and put in the house's level, and its shadow
 // (in the level's extra list, drawn by the shadow pass); both find their room and hidden state through

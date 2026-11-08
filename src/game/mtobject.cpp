@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <string>
 #include <vector>
 
 namespace {
@@ -120,6 +121,137 @@ void cXMTObjectImpl::AssignOffsets() {
     p->m_turned[2] = p->m_offset[2] - base[2];
     Turned(dir, x, y, &p->m_turned[0], &p->m_turned[1]);
   }
+}
+
+// 800C6B10
+// The group's reset, done by its lead (a part passes it on): each part's object reset, the offsets
+// turned again (AssignOffsets), then part by part its init tree at once, with `run` (unless author mode)
+// one tick of its main tree, and its sim flags.
+void cXMTObjectImpl::Reset(bool run) {
+  EnsureLinked();
+  if (m_lead) {
+    m_lead->Reset(run);  // the lead's cXMTObject vtable 0x24
+    return;
+  }
+  for (cXMTObjectImpl* p = this; p; p = p->m_nextPart) p->cXObjectImpl::Reset(run);
+  AssignOffsets();
+  for (cXMTObjectImpl* p = this; p; p = p->m_nextPart) {
+    p->RunTree(0, 0, nullptr);
+    if (run && _gd.m_fieldF0 == 0) p->Simulate(0);  // DAT_80475C74: author mode
+    p->UpdateSimFlags();
+  }
+}
+
+// 800C6EBC ObjectsAtTile(FTilePt&, int): an ObjectIterator over the tile's objects (kind 0).
+static ObjectIterator ObjectsAtFTile(const int pos[2], int level) {
+  CTilePt tile(pos[1] >> 4, pos[0] >> 4, level);
+  ObjectIterator it;
+  it.init(tile, ObjectIterator__IterateType{0});
+  return it;
+}
+
+// The eight neighbours (x step, y step in 1/16-tile words [0], [1]) of MergeInPlace and
+// UpdateDynAdjacency, by direction (0: -x, then clockwise).
+static const int kNeighbour[8][2] = {{-1, 0}, {-1, 1}, {0, 1}, {1, 1}, {1, 0}, {1, -1}, {0, -1}, {-1, -1}};
+
+// 800C6F2C
+// `other`'s group joins mine (a dynamic multi-tile object, e.g. flood puddles side by side): its parts go
+// after my chain's last part, take my lead and my lead's direction, and get their offsets from my lead
+// (turned: from the locations; as defined: turned back by the direction). GC: also asks IsDynamic and
+// IsInWorld without using the answers.
+void cXMTObjectImpl::MergeDynamic(cXMTObjectImpl* other) {
+  if (!other) return;
+  cXMTObjectImpl* lead = GetFirstMultiTileObject();
+  cXMTObjectImpl* otherLead = other->GetFirstMultiTileObject();
+  if (lead == otherLead) return;
+  cXMTObjectImpl** link = &m_nextPart;
+  while (*link) link = &(*link)->m_nextPart;
+  *link = otherLead;
+  const int lx = lead->m_location[0], ly = lead->m_location[1];
+  const int t0 = lead->m_turned[0], t1 = lead->m_turned[1];
+  const short dir = static_cast<short>(lead->m_data[1]);
+  const unsigned int back = static_cast<unsigned int>(-dir) & 7;
+  for (cXMTObjectImpl* p = otherLead; p; p = p->m_nextPart) {
+    p->m_lead = lead;
+    p->m_data.WriteVar(1, dir);
+    const int a = (p->m_location[1] - ly + t0 * 0x10) >> 4;
+    const int b = (p->m_location[0] - lx + t1 * 0x10) >> 4;
+    p->m_turned[0] = a;
+    p->m_turned[1] = b;
+    p->m_offset[0] = p->m_offset[1] = 0;
+    if (back == 2) {
+      p->m_offset[1] = a;
+      p->m_offset[0] = -b;
+    } else if (back == 0) {
+      p->m_offset[0] = a;
+      p->m_offset[1] = b;
+    } else if (back == 4) {
+      p->m_offset[0] = -a;
+      p->m_offset[1] = -b;
+    } else if (back == 6) {
+      p->m_offset[0] = b;
+      p->m_offset[1] = -a;
+    }
+  }
+  otherLead->m_lead = lead;
+  static int logged = 0;
+  if (logged++ < 20) {
+    const std::string joining = other->DebugName();
+    std::printf("[vm] %s joins the group of %s (MergeDynamic)\n", joining.c_str(), lead->DebugName());
+  }
+}
+
+// 800C7240
+// The part leaves its dynamic group (RemoveFromChain); the rest (when it led them, from the next part)
+// and, still in the world, the part itself tell their trees their new neighbours.
+void cXMTObjectImpl::RemoveFromDynamic() {
+  cXMTObjectImpl* rest = GetFirstMultiTileObject();
+  if (rest == this) rest = GetNextMultiTileObject();
+  RemoveFromChain();
+  if (rest) rest->UpdateAllAdjacecy();
+  if (ObjIsInWorld(this)) UpdateAllAdjacecy();
+}
+
+// 800C7364
+// In the world: each part of the group, from the lead, its neighbours (UpdateDynAdjacency).
+void cXMTObjectImpl::UpdateAllAdjacecy() {
+  if (!ObjIsInWorld(this)) return;
+  for (cXMTObjectImpl* p = GetFirstMultiTileObject(); p; p = p->GetNextMultiTileObject()) p->UpdateDynAdjacency();
+}
+
+// 800C7434
+// In the world: bit i set where a part of the group is on the neighbour tile in direction (i + my
+// direction) & 7; its tree for entry 8 runs at once with that mask as param 0 (it picks the model).
+void cXMTObjectImpl::UpdateDynAdjacency() {
+  if (!ObjIsInWorld(this)) return;
+  unsigned short mask = 0;
+  for (int i = 0; i < 8; ++i) {
+    const unsigned int d = static_cast<unsigned int>(i + m_data[1]) & 7;
+    const int at[2] = {m_location[0] + kNeighbour[d][0] * 0x10, m_location[1] + kNeighbour[d][1] * 0x10};
+    for (ObjectIterator it = ObjectsAtFTile(at, m_level); it.m_current; ++it)
+      if (IsPartOfMe(it.m_current)) mask = static_cast<unsigned short>(mask | (1u << i));
+  }
+  short params[4] = {static_cast<short>(mask), 0, 0, 0};
+  RunTree(8, 0, params);
+}
+
+// 800C7690
+// A dynamic object just placed: an object of the same type on a tile beside it (the four straight
+// neighbours, in order -x, +y, +x, -y) takes its group in (MergeDynamic), then the group's parts learn
+// their neighbours (UpdateAllAdjacecy).
+void cXMTObjectImpl::MergeInPlace() {
+  if (!ObjIsInWorld(this)) return;
+  ObjSelector* selector = m_selector;
+  const int x = m_location[0], y = m_location[1], level = m_level;
+  for (int d = 0; d < 8; d += 2) {
+    const int at[2] = {x + kNeighbour[d][0] * 0x10, y + kNeighbour[d][1] * 0x10};
+    for (ObjectIterator it = ObjectsAtFTile(at, level); it.m_current; ++it) {
+      cXObjectImpl* o = it.m_current->GetObjectImplementation();
+      if (o && o->GetSelector() == selector)
+        if (auto* mt = dynamic_cast<cXMTObjectImpl*>(o)) mt->MergeDynamic(this);
+    }
+  }
+  UpdateAllAdjacecy();
 }
 
 // 800C6AD0

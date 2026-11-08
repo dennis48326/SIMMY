@@ -6,7 +6,6 @@ RET_UNKNOWN operator>>(EFile &, EIStaticModel *&) { SIMMY_STUB("operator>>(EFile
 void EIStaticModel::Write(EStream &) { SIMMY_STUB("EIStaticModel::Write(EStream &)", 0x8022BAAC); }
 void EIStaticModel::Read(EStream &) { SIMMY_STUB("EIStaticModel::Read(EStream &)", 0x8022BB10); }
 RET_UNKNOWN EIStaticModel::SetModel(char *) { SIMMY_STUB("EIStaticModel::SetModel(char *)", 0x8022BE44); return {}; }
-void EIStaticModel::SlamOrient(EMat4 &, EMat4 &) { SIMMY_STUB("EIStaticModel::SlamOrient(EMat4 &, EMat4 &)", 0x8022BFF8); }
 void EIStaticModel::ChangeShaderState(unsigned int) { SIMMY_STUB("EIStaticModel::ChangeShaderState(unsigned int)", 0x8022D22C); }
 void EIStaticModel::UpdateShaders() { SIMMY_STUB("EIStaticModel::UpdateShaders(void)", 0x8022D2C8); }
 RET_UNKNOWN EIStaticModel::FindShaderContainingTexture(unsigned int) { SIMMY_STUB("EIStaticModel::FindShaderContainingTexture(unsigned int)", 0x8022D47C); return {}; }

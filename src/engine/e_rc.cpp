@@ -247,6 +247,17 @@ void ERC::Texture(ETexture* texture, int stage) {
   EndCommand();
 }
 
+// 802F8270
+// Records the mip-map bias of a texture stage (the renderer ignores it: ENgcRenderer::SetMipMap).
+void ERC::SetMipMap(float bias, int stage) {
+  BeginCommand(0, 0);
+  EDLEntry* e = NewEntry(1);
+  e->f = bias;
+  e->op = kDL_SetMipMap;
+  e->b1 = static_cast<unsigned char>(stage);
+  EndCommand();
+}
+
 // 802F7CAC
 void ERC::EnableGeometryModes(unsigned int modes) { ValueCommand(this, kDL_EnableGeometryModes, modes); }
 // 802F7D38

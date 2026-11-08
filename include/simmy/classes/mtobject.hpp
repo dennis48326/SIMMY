@@ -50,7 +50,7 @@ struct cXMTObjectImpl : public cXObjectImpl {
   RET_UNKNOWN UserCanDelete();  // 800C6A3C
   void Reset(bool) override;  // 800C6B10
   void SetMultiObjectData(int, int);  // 800C6E44
-  void MergeDynamic(cXMTObject *);  // 800C6F2C
+  void MergeDynamic(cXMTObjectImpl* other);  // 800C6F2C (GC: its cXMTObject interface)
   bool IsDynamic();  // 800C71F0
   void RemoveFromDynamic();  // 800C7240
   void UpdateAllAdjacecy();  // 800C7364

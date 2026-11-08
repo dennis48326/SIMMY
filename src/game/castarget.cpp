@@ -595,6 +595,7 @@ int CASTarget::UnloadLastScreen() {
   UIScreenManager* usm = ScreenManager();
   if (!usm) return 1;
   if (usm->IsUIScreenUnloaded(m_screen)) return 0;
+  if (usm->IsUIScreenMarkedForUnloading(m_screen)) return 0;
   usm->UnloadUIScreen(m_screen);
   m_lastScreen = m_screen;
   m_screen = 0;

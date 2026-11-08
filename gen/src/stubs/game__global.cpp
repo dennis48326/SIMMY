@@ -36,7 +36,6 @@ void EGlobal::BeginSaveGame() { SIMMY_STUB("EGlobal::BeginSaveGame(void)", 0x800
 void EGlobal::EndSaveGame() { SIMMY_STUB("EGlobal::EndSaveGame(void)", 0x80041B6C); }
 void CollectInteractionsForObject(cXObject *, InteractionList &, cXPerson *, int) { SIMMY_STUB("CollectInteractionsForObject(cXObject *, InteractionList &, cXPerson *, int)", 0x80041BE0); }
 RET_UNKNOWN EGlobal::CheckForZeroExtentOverride(CTilePt &, cXObject *) { SIMMY_STUB("EGlobal::CheckForZeroExtentOverride(CTilePt &, cXObject *)", 0x80041F00); return {}; }
-void EGlobal::SwapSelectedSims() { SIMMY_STUB("EGlobal::SwapSelectedSims(void)", 0x800420B4); }
 RET_UNKNOWN EGlobal::ListenForController() { SIMMY_STUB("EGlobal::ListenForController(void)", 0x80042194); return {}; }
 RET_UNKNOWN EGlobal::GetSkillFromName(char *) { SIMMY_STUB("EGlobal::GetSkillFromName(char *)", 0x8004219C); return {}; }
 RET_UNKNOWN EGlobal::GetNameFromSkill(AnimRef *) { SIMMY_STUB("EGlobal::GetNameFromSkill(AnimRef *)", 0x800421A4); return {}; }

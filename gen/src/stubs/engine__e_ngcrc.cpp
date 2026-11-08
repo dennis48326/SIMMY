@@ -1,7 +1,6 @@
 // GENERATED stubs for unported functions of engine/e_ngcrc.cpp. Do not edit.
 #include "simmy/types_gen.hpp"
 
-void ENgcRC::TriStrip(int, float *, float *, unsigned char *, signed char *, unsigned char *, bool) { SIMMY_STUB("ENgcRC::TriStrip(int, float *, float *, unsigned char *, signed char *, unsigned char *, bool)", 0x80338484); }
 RET_UNKNOWN ENgcRC::TriStrip(int, int, unsigned short *, float *, float *, unsigned char *, signed char *, unsigned char *) { SIMMY_STUB("ENgcRC::TriStrip(int, int, unsigned short *, float *, float *, unsigned char *, signed char *, unsigned char *)", 0x803389D0); return {}; }
 RET_UNKNOWN ENgcRC::TriStripRef(int, int, unsigned short *, float *, float *, unsigned char *, signed char *, unsigned char *) { SIMMY_STUB("ENgcRC::TriStripRef(int, int, unsigned short *, float *, float *, unsigned char *, signed char *, unsigned char *)", 0x80338CDC); return {}; }
 RET_UNKNOWN ENgcRC::TriStrip(int, short *, short *, unsigned char *, signed char *, unsigned char *, bool) { SIMMY_STUB("ENgcRC::TriStrip(int, short *, short *, unsigned char *, signed char *, unsigned char *, bool)", 0x80338EBC); return {}; }

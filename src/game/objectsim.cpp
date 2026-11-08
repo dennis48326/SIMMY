@@ -200,16 +200,91 @@ void cXObjectImpl::HandleError() {
     if (Globs_pObjectModule) Globs_pObjectModule->SetSimFlag(m_id, 4, false);
     return;
   }
-  // cXObjectImpl::Reset (vtable 0x1C): the stack back to the main tree; a person's animator resets
-  // with it (cXPersonImpl::Reset 8011EB78: its props come off; PC: the rest of the person's reset,
-  // its data cleared, is not ported).
-  if (GetType() == 2)
-    if (auto* p = dynamic_cast<cXPersonImpl*>(this))
-      if (p->m_animator) p->m_animator->Reset();
-  // cXObjectImpl::Reset: its passive influences go.
+  // Cleanup(nullptr) through the cXObjectImpl vtable (0x1C): an object without a cleanup tree is put
+  // back as made (Reset), else runs it; a person (cXPersonImpl::Cleanup) lets go of everything.
+  Cleanup(nullptr);
+}
+
+// 800DA848
+// Back to as made. Out of its site while its data is reset (kept: its room 0x1D, direction 1, value
+// 0x29, purchase date 0x2D-0x2F, hour 0x18, minute 0x15, slot count 0x43; 0xB its id, 0x3A the
+// definition's +0x62) and its "placed from the inventory" flag; attributes and temps 0; the tree sim
+// back to its main tree (none: no main tree sim); its site again, data 2 / 3 its container and slot
+// (GetPlacementSpec); its age; its idle status cleared; its passive influences gone. Not a multi-tile part
+// (cXMTObjectImpl::Reset does those for the group): its init tree at once, with `run` (unless author
+// mode) one tick of its main tree when it has one, then its sim flags.
+void cXObjectImpl::Reset(bool run) {
+  // GC: the sync object (+0xDC..+0xE4) cleared (PC: not kept).
+  HierSite site;
+  ::HierGetSite(this, site);
+  ::HierSever(this);
+  const int fromInventory = ObjGetWasPlacedFromInventory(this);
+  static const int kKept[] = {0x1d, 1, 0x29, 0x2d, 0x2e, 0x2f, 0x18, 0x15, 0x43};
+  short kept[9];
+  for (int i = 0; i < 9; ++i) kept[i] = m_data[kKept[i]];
+  m_data.Reset();
+  for (int i = 0; i < 9; ++i) m_data.WriteVar(kKept[i], kept[i]);
+  m_data.WriteVar(0xb, m_id);
+  m_data.WriteVar(0x3a, m_def ? ERQuickdata::S16(m_def, 0x62) : 0);
+  ObjSetWasPlacedFromInventory(this, fromInventory != 0);
+  for (int i = 0; i < m_attrCount; ++i) m_attrs[i] = 0;
+  for (short& t : m_temps) t = 0;
+  const short mainTree = GetTreeID(1);
+  if (!m_treeSim) {  // PC: the tree sim is made with the behaviour (GC: Initialize)
+    m_treeSim = new TreeSimImpl(this);
+    m_treeSim->Initialize(0, m_temps);
+  }
+  m_treeSim->SetNoMainTreeSim(mainTree == 0);
+  m_treeSim->Reset(GetBehavior(), mainTree);
+  ::HierSetSite(this, site);
+  PlaceSpec spec(false);
+  ObjGetPlacementSpec(this, spec);
+  m_data.WriteVar(2, static_cast<short>(spec.container ? spec.container->m_id : 0));
+  m_data.WriteVar(3, static_cast<short>(spec.slot));
+  UpdateAge();
+  SetIdleStatus(-1);
   if (PassiveInfluenceSystem* influence = Globs_pSimulator ? Globs_pSimulator->GetPassiveInfluenceSystem() : nullptr)
     influence->RemoveObjectFromMap(this);
-  if (m_treeSim) m_treeSim->Reset(GetBehavior(), GetTreeID(1));
+  if (!IsMultiTile()) {
+    RunTree(0, 0, nullptr);
+    if (run && _gd.m_fieldF0 == 0 && m_treeSim->HasMainTreeSim()) Simulate(0);  // DAT_80475C74: author mode
+    UpdateSimFlags();
+  }
+}
+
+// 800DB16C
+// What it does when everything is cleaned up (`object` null: after a tree error; GC does nothing for an
+// object going). Without a cleanup tree (entry 3): picked up, then (unless misc flag 0x40) reset and put
+// back where it was. With one: a single object runs it at once, its user count (data 0x3E) 0, data 8
+// flag 0x20 off, its stack back to its main tree; a multi-tile group's parts with one each do (their
+// stacks to this object's main tree). Then its idle status cleared and its sounds quietened. GC: also
+// the module's tutorial object forgotten if it is this one (PC: never set).
+void cXObjectImpl::Cleanup(cXObject* object) {
+  if (object) return;
+  if (GetTreeID(3) == 0) {
+    PlaceSpec spec(false);
+    ObjGetPlacementSpec(this, spec);  // GetPlacementInfo (800DCACC)
+    ObjPickup(this);
+    if (!GetMiscFlag(cXObject__MiscFlag{0x40})) {
+      Reset(true);  // through the cXObjectImpl vtable (0x2C)
+      if (spec.inWorld) ObjPlace(this, spec.pos, spec.level, spec.container, spec.slot);
+    }
+  } else if (!IsMultiTile()) {
+    RunTree(3, 0, nullptr);
+    m_data.WriteVar(0x3e, 0);
+    m_data.WriteVar(8, static_cast<short>(m_data[8] & ~0x20));
+    if (m_treeSim) m_treeSim->Reset(GetBehavior(), GetTreeID(1));
+  } else if (auto* mt = dynamic_cast<cXMTObjectImpl*>(this)) {
+    for (cXMTObjectImpl* p = mt->GetFirstMultiTileObject(); p; p = p->GetNextMultiTileObject()) {
+      if (p->GetTreeID(3) == 0) continue;
+      p->RunTree(3, 0, nullptr);
+      p->m_data.WriteVar(0x3e, 0);
+      p->m_data.WriteVar(8, static_cast<short>(p->m_data[8] & ~0x20));
+      if (p->m_treeSim) p->m_treeSim->Reset(GetBehavior(), GetTreeID(1));
+    }
+  }
+  if (Globs_pObjectModule) Globs_pObjectModule->SetIdleStatus(m_id, -1);
+  if (Globs_pSound) Globs_pSound->QuietBySourceID(m_id);
 }
 
 // 800F9E6C
@@ -1907,9 +1982,18 @@ int cXObjectImpl::TryFindGoodLocation(StackElem* frame, const unsigned char* par
   CTilePt at(pos[1] >> 4, pos[0] >> 4, level);
   switch (params[0]) {
     case 1:
-      // Pickup (vtable 0x12C: the "picked up" tree, out of the world, its room data 0x1D with it) and the
-      // player's object menu closed (GC: HUDTarget::CloseMenu for the player whose sim it is; PC: none).
+      // Pickup (vtable 0x12C: the "picked up" tree, out of the world, its room data 0x1D with it); a
+      // player's selected sim picked up closes that player's object menu (its TreeSim GetPerson,
+      // HUDTarget::CloseMenu). GC: first a dynamic multi-tile object leaves its group (PC: not kept).
       ObjPickup(object);
+      if (object->GetType() == 2 && _gd.m_hudTarget)
+        for (int player = 0; player < 2; ++player) {
+          cXPerson* selected = _globals.GetSelectedPerson(player);
+          if (selected && selected->AsObject() == static_cast<cXObject*>(object)) {
+            _gd.m_hudTarget->CloseMenu(player);
+            break;
+          }
+        }
       return 1;
     case 2: {
       if (!ref) ref = this;
@@ -1997,6 +2081,27 @@ int cXObjectImpl::TryDrop() {
 namespace {
 short TreeIDByName(Behavior* b, const char* name);
 }  // namespace
+
+// PC development aid (SIMMY_PLACE_TEST "create:<object file>@x,y"): the object made and put on the tile
+// as TryCreateObject does (a dynamic multi-tile object in the tile's middle, then MergeInPlace). Its id.
+int TestCreateObjectAt(const char* fileName, int x, int y) {
+  ObjectFolderImpl* folder = Globs_pObjectFolder;
+  ObjectModuleImpl* module = Globs_pObjectModule;
+  ObjSelector* selector = nullptr;
+  for (ObjSelector* s = folder ? folder->GetNextSelector(nullptr) : nullptr; s && !selector; s = folder->GetNextSelector(s))
+    if (s->m_fileName && std::strcmp(s->m_fileName, fileName) == 0 && !s->GetIsMultiTileSubObject()) selector = s;
+  short id = 0;
+  if (!selector || !module || !module->MakeNewOutOfWorldObject(selector, &id)) return 0;
+  cXObject* x0 = module->GetObjectFromID(id);
+  cXObjectImpl* made = x0 ? x0->GetObjectImplementation() : nullptr;
+  if (!made) return 0;
+  int pos[2] = {y * 16 + 8, x * 16 + 8};
+  auto* dynamic = made->IsMultiTile() ? dynamic_cast<cXMTObjectImpl*>(made) : nullptr;
+  if (dynamic && !dynamic->IsDynamic()) dynamic = nullptr;
+  PlaceObject(made, pos, 1, nullptr);
+  if (dynamic) dynamic->MergeInPlace();
+  return id;
+}
 
 // 800FFF24
 // Operands: +0 the GUID (flag 4 of +5: a person for the neighbour in the frame's stack object instead),
@@ -2099,7 +2204,18 @@ int cXObjectImpl::TryCreateObject(StackElem* frame, const unsigned char* params)
   if (!made) return 0;
   if (params[5] & 0x20)
     if (cXObjectImpl* o = objectAt(frame->m_stackObject)) made->m_data.WriteVar(1, static_cast<short>(o->GetData(1)));
-  if (static_cast<signed char>(params[4]) != 6) PlaceObject(made, pos, level, container);
+  if (static_cast<signed char>(params[4]) != 6) {
+    // A dynamic multi-tile object (flood puddles) goes to its tile's middle and, placed, merges with
+    // the same objects beside it (cXMTObjectImpl::MergeInPlace, cXMTObject vtable 0x4C).
+    auto* dynamic = made->IsMultiTile() ? dynamic_cast<cXMTObjectImpl*>(made) : nullptr;
+    if (dynamic && !dynamic->IsDynamic()) dynamic = nullptr;
+    if (dynamic) {
+      pos[0] = (pos[0] & ~0xf) | 8;
+      pos[1] = (pos[1] & ~0xf) | 8;
+    }
+    PlaceObject(made, pos, level, container);
+    if (dynamic) dynamic->MergeInPlace();
+  }
   if (neighbor)
     if (auto* p = dynamic_cast<cXPersonImpl*>(made))
       if (p->m_animator) p->m_animator->m_resetPos = 1;  // PC: the animator takes the new place
@@ -2853,8 +2969,9 @@ void cXObjectImpl::RewriteDialogParamIndices(unsigned char* param) {
 // Shows the dialog (EdithDialogPrimitive::SetDialog) and, for a modal one, waits (4) until it is
 // answered: then the answer goes to temp (operand +7 bits 4-6) and the primitive gives the callback's
 // code (true). With the family asleep or away (ObjectModule::IsFamilyMemberAwakeAndVisible) a modal one
-// is skipped (temp 0 = 0). GC: also skipped while a player's interactor is busy (+0x160 / +0x234) and
-// while the EORGlobals hold one (+0x350); PC: those are not ported.
+// is skipped (temp 0 = 0). GC: also skipped while a player's interactor is busy (InteractorManager
+// +0x160 / +0x234) and while the EORGlobals hold one (+0x350); PC: the interactors are PC stand-ins
+// without those fields, so never busy.
 int cXObjectImpl::TryDialog(StackElem* frame, const unsigned char* params, bool testing) {
   if (!params) return 0;
   unsigned char p[8];
@@ -2870,7 +2987,7 @@ int cXObjectImpl::TryDialog(StackElem* frame, const unsigned char* params, bool 
   }
   if (waiting) return 4;
   const bool busy = false;
-  const int awake = 1;  // GC: Globs::pObjectModule vtable 0xBC (IsFamilyMemberAwakeAndVisible)
+  const int awake = Globs_pObjectModule && Globs_pObjectModule->IsFamilyMemberAwakeAndVisible() ? 1 : 0;  // vtable 0xBC
   const int kind = p[5] & 0xf0;
   bool modal = kind == 0x40;
   if ((p[5] & 0xf0) == 0 && (static_cast<signed char>(p[3]) != -2 || static_cast<signed char>(p[0]) != -2)) modal = true;

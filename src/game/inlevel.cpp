@@ -51,6 +51,18 @@ void InLevelBaseState::Reset() {
   _gd.m_field8C = 1;  // DAT_80475C10
 }
 
+// 80089EB0
+// Leaving the state: the two players' MU slot states (MUStateMachine 80485900..0C) back to their
+// defaults, the HUD goes and the HUD's enable flag (DAT_80475C10) is cleared until the next Reset.
+void InLevelBaseState::Shutdown() {
+  MUStateMachine::s_field900 = 0;
+  MUStateMachine::s_field90C = 1;
+  MUStateMachine::s_field904 = 0;
+  MUStateMachine::s_field908 = 1;
+  DeleteHUD();
+  _gd.m_field8C = 0;  // DAT_80475C10
+}
+
 // 8008B758, 8008B77C, 8008B7A0: TheSimsStateMachine's (the owner's) flow request, used directly.
 
 // Part of 80089F2C (flows 5 and 10, each with its own stage counter): leaving the lot. The HUD goes, the

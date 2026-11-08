@@ -656,8 +656,8 @@ EVec3 SAnimator2::GetEngineFormatPos() {
 // (1/16 tiles, a tile's centre at +8) is already the world position: the house's position (0.5, 0.5)
 // is NOT added — it only centres the objects, whose models sit at their integer tile
 // (ISimsObjectModel::SetObjOrient); adding it put sims half a tile off, e.g. inside the wall behind
-// them. PC: the bounds are a tile around the sim,
-// 1.8 high (GC: EAnimController::CalcVisibilitySphere of the pose, not ported); a bone's position is
+// them. The bound sphere (lighting, sorting) is the pose's EAnimController::CalcVisibilitySphere and the
+// bounds the box around it (EBound3::Compute(EBoundSphere&) 802C5980, inlined); a bone's position is
 // the translation of its EAnimController::CalcNodeOrient.
 void SAnimator2::positionCharacter(EMat4* orient) {
   EMat4 m;
@@ -672,10 +672,12 @@ void SAnimator2::positionCharacter(EMat4* orient) {
   EAnimController& anim = m_sim->m_anim;
   anim.Update(nullptr, nullptr, EVec3{1.0f, 1.0f, 1.0f});
   anim.Compute(*orient, _framecount);
-  const float px = orient->m[3][0], py = orient->m[3][1];
-  m_sim->m_sphere[0] = px, m_sim->m_sphere[1] = py, m_sim->m_sphere[2] = 0.9f, m_sim->m_sphere[3] = 1.0f;
-  float bounds[6] = {px - 0.5f, py - 0.5f, 0.0f, px + 0.5f, py + 0.5f, 1.8f};
-  m_sim->SetBounds(*reinterpret_cast<EBound3*>(bounds));
+  anim.CalcVisibilitySphere(*orient, *reinterpret_cast<EBoundSphere*>(m_sim->m_sphere));
+  {
+    const float* c = m_sim->m_sphere;
+    float bounds[6] = {c[0] - c[3], c[1] - c[3], c[2] - c[3], c[0] + c[3], c[1] + c[3], c[2] + c[3]};
+    m_sim->SetBounds(*reinterpret_cast<EBound3*>(bounds));
+  }
   // The shadow's bounds: three times the sim's sphere across, from the floor up 1.
   if (EIStaticModel* shadow = m_sim->GetShadow()) {
     if (!m_person->IsInvisible()) {

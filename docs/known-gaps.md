@@ -3,7 +3,7 @@
 What is still missing or different, as of the current tree (checked against the code: `SIMMY_STUB`
 calls, `Unported(...)` primitives, `gen/functions.tsv`). For the full list of unported functions run
 `python tools/progress.py` and look at the `[stub #n]` lines of a run of the path you care about.
-About 58% of the game's functions are ported (8463 of 14600 in `gen/functions.tsv`); much of the rest is
+About 60% of the game's functions are ported (8697 of 14600 in `gen/functions.tsv`); much of the rest is
 unreachable in this build (PDA, EyeToy, Urbz leftovers, Xbox/PS2 code) or replaced by PC code.
 **The ranked list of real gaps is [porting-audit.md](porting-audit.md)**; this page keeps the shorter
 summary and the deliberate GC behaviour.
@@ -24,7 +24,8 @@ summary and the deliberate GC behaviour.
 - `TryUserEvent` formats its string (`ParseUIString`) without showing it, as GC does; `TryPreloadObject`
   never waits (object data is read on demand).
 - Placement: a multi-tile container's side with room is not chosen for a surface object; the grid object
-  (GUID 0x437: the port draws its model, the object is not made).
+  (GUID 0x437: the port draws its model, the object is not made, so the held object is placed where GC's
+  grid would refuse it; a door lifted off another door's wall leaves that wall, PC guard).
 - `SAnimator2`: `TryIdleAnimate` syncing an object, `TryAnimate` stopping the idle track, event notes
   of kind 9. (Animation events, `EAnimController::AddEventRange`, are not a gap: the release build never
   collects them.)
@@ -34,18 +35,20 @@ summary and the deliberate GC behaviour.
 - Routing: portals are type-8 multi-tile parts without `cXPortalImpl` (scores in `m_portalValues`);
   `TrySnap` still uses the PC `PersonCanStandAt`. The GC leaves a "move out of the way" object in the
   world when it cannot be used (kept).
-- New objects: `cXObjectImpl::Reset` (800DA848) is not ported; its stand-in runs the init tree and
-  `UpdateSimFlags`, but not its data part (data 0x3A from the definition +0x62). A visitor made by
-  CreateObject runs "init visitor" before its init tree (the port pushes the person's init tree, GC runs it
-  at once).
-- `cXPersonImpl`: `Reset` (8011EB78), motive curves from a string set file (no definition on the disc
-  names one).
+- `cXObjectImpl::Reset` does not clear the sync object (+0xDC..+0xE4, not kept by the port); its data
+  reset emulates GC's per-object / per-category variable maps (see simulation.md).
+- `cXPersonImpl`: motive curves from a string set file (no definition on the disc names one).
+- Load: `CheckIntegrity` (debug report only) and the selected people / object lists / last typed name at
+  the end of the module stream are not done; a dynamic multi-tile object's merge after load and in buy
+  mode is not done (CreateObject's is), and killing a dynamic part does not pick up the rest of its old
+  chain as GC's `cXMTObjectImpl::Pickup` would.
+- New CAS sims get the next free GUID from 0x70000001 (GC `StubObject::MakeNewGUID` 80145D58 xors the
+  clock and `rand()`; kept PC for determinism).
 - GlobalDispatch has no listener list: the house's messages go to `HouseImpl::DoCommand` through
   `HouseDispatch` where the port broadcasts them (0xEC, 0xED, 0xEF, 0xDE, and the simulator's 0xD8 / 0xD9);
   the object module hears only 0xEE (TryUpdate 1, `ObjectModuleDispatch`). Other Commanders (the world,
   families) are not listeners, and the wall tool's 0x91 / 0xFC / 0xEC are not sent.
-- Object models: the height of an object on a counter (`ISimsObjectModel::GetHeightOffset`, data 4 bit
-  0x20) is not ported. The boxwood hedge (`IShrubObject`) is ported but no object on the disc draws its
+- Object models: the boxwood hedge (`IShrubObject`) is ported but no object on the disc draws its
   model. Go Here's nearest free spot uses the port's `FindGoodLocation` stand-in (ring order and
   `ObjectCanPlaceAt` instead of the person's `CanPlace`).
 - Fire code: the meter's model memory share is the summed MODL data sizes of the lot's models, as GC
@@ -57,7 +60,12 @@ summary and the deliberate GC behaviour.
   "carried objects", logged for every held object but only acting for a nested carry, e.g. food on a carried
   plate) does not follow the outer holder's hand; objects held by a sim do (the hand position is ported).
 - `MoveFamilyOntoLot`, the interactor manager, input manager and `SocialModeInteractor`
-  are PC stand-ins (the interactors are tied to the PC keyboard/mouse and co-op layers).
+  are PC stand-ins (the interactors are tied to the PC keyboard/mouse and co-op layers). Checked: a
+  Create-a-Family family of 3 appears whole (the lot's load trees make every member), and stick input is
+  held back while the pause menu or a modal dialog is up.
+- Quitting to the main menu: the house, its objects and people stay until the next game's load
+  (`ELiveMode::QuitToMainMenu` 8008DC90 partial), so `GameData::GamePlayShutdown` (8003B1E4: neighbourhood
+  unload) is not called yet; the next game's neighbourhood load unloads the old one.
 
 ## UI
 
@@ -69,8 +77,7 @@ summary and the deliberate GC behaviour.
   `AttachControllers` (a filter for commands nothing reads on PC).
 - `O2TTarget`: the screen-position wizard (`UseOptionsScreenAdjustXY`; the PC scales the picture itself).
 - CAS: representation shaders (EyeToy), the generating sound, saved grandparents (dev-tool data only),
-  the tweak tool's lights (dev), the costume-number/`PrintUnlocks` dev prints, `ReadOldDescription`
-  (a description without the 0xFEED mark: logged once in an old run, never reproduced). Clothing
+  the tweak tool's lights (dev), the costume-number/`PrintUnlocks` dev prints. Clothing
   unlocks, welding, belts under tops, description repair and the C-stick zoom/turn are ported
   ([cas-and-neighbourhood.md](cas-and-neighbourhood.md)).
 - Mouse: no clicking on individual buttons (the game has no pointer); build/buy cursors are stick-driven.
@@ -88,8 +95,7 @@ summary and the deliberate GC behaviour.
   written but never read) ([camera.md](camera.md)). CAS morph/portrait paths depend on
   aurora readback (headless: blank).
 - Walls: the wallpaper preview's per-room buffers (unused by the preview); `ERoom::GetWallPaperCost` (no
-  caller in the release build). `ERC::TriStrip(int, float*, ...)` (the arrays variant) is not ported; the
-  wall tool's strip is sent as EGEVerts. Bound-tree level files
+  caller in the release build). Bound-tree level files
   (versions 0/1; not reached by any level loaded in the logged runs).
 - A minimised window may accumulate GX work written outside `CanDraw` (untested on Windows).
 
@@ -114,7 +120,7 @@ pad motor through `EVibrate` and aurora's `PADControlMotor` (one on/off motor, a
   control while holding something makes the sim set it down (its idle tree).
 - The story family starts with §0 on lot 9; the plumb bob's particles never show (release build stops
   them); bloom has no notes in the shipped data; lightning is empty (`EHouse::TriggerLightningEffect`,
-  room effect 0x34 kind 2); GBA communication (0x36) is false without EyeToy hardware. (The CAS room's ambient score is a gap, not kept behaviour: GC `CasScene::Init` starts one.)
+  room effect 0x34 kind 2); GBA communication (0x36) is false without EyeToy hardware.
 - In two-player games audio is one stereo mix of both cameras' listeners; full-stage dialogs show for
   both players (in both windows with `split=windows`).
 - `ProcessFrameEffects` and EGraphics bloom/blur parameters are empty in the release build.

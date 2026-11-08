@@ -133,6 +133,13 @@ void EIStaticModel::SetOrient(EMat4& m) {
   SetupBounds();
 }
 
+// 8022BFF8
+// Sets the draw matrix and the orientation as given (no model scale, no bounds).
+void EIStaticModel::SlamOrient(EMat4& draw, EMat4& orient) {
+  m_drawMatrix = draw;
+  m_orient = orient;
+}
+
 // 8022C3A0
 // Takes the model (unless it is the one already held), keeping the draw matrix in its units.
 void EIStaticModel::SetupModel(EInstance* owner, EAnimController* anim) {

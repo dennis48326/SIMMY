@@ -77,6 +77,15 @@ void EGraphics::BeginFrame() {
   m_field04 = 1;                       // in a frame
 }
 
+// 802F1034
+// At the end of each frame: texture stages 0 and 1 are emptied through an immediate context (the
+// renderer lets go of the textures it holds locked).
+void EGraphics::DeselectTextures() {
+  ERC* rc = Open(RCMode::Immediate);
+  for (int stage = 0; stage < 2; ++stage) rc->Texture(nullptr, stage);
+  Close(rc);
+}
+
 // 802F1120
 void EGraphics::EndFrame() {
   DeselectTextures();

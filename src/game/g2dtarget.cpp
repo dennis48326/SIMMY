@@ -181,6 +181,15 @@ void UIReflow::ResetSwfAnimation(const char* id, const char* animation, int play
 
 // 8018003C
 bool UIScreenManager::IsUIScreenUnloaded(int id) { return FindRecordIndexByID(id) == -1; }
+// 80180068
+// GC quirk kept: a screen that has a record is never reported (false); only for a screen without one is
+// the state of "record -1" read, the word just before m_records (+0x78, inside UIObjectBase's bound
+// functors), which is never 3 (being removed). So this is false in practice; its one caller
+// (CASTarget::UnloadLastScreen) asks only about screens it has just found loaded.
+bool UIScreenManager::IsUIScreenMarkedForUnloading(int id) {
+  if (FindRecordIndexByID(id) != -1) return false;
+  return false;  // GC: *(int*)(this + 0x78) == 3
+}
 
 // ---------------------------------------------------------------------------------------------------
 // UIDialog

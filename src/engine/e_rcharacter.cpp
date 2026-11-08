@@ -88,3 +88,7 @@ EResource* ECharacterManager::AllocateAndLoadResource(EFile* file, unsigned int,
   character->Load(*file);
   return character;
 }
+
+// 8032333C
+// Skeletons stay cached (in the free list) after their last reference goes, as animations do.
+int ECharacterManager::CanCache(EResource*) { return 1; }

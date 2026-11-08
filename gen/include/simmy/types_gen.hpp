@@ -3261,11 +3261,7 @@ struct EBound3 {
     void Compute(EVec3 &, float);  // 802C5930
     void Compute(EBoundSphere &);  // 802C5980
 };
-struct EBoundSphere {
-    EBoundSphere() = default;  // generated: lets derived stubs construct the base
-    RET_UNKNOWN Combine(EBoundSphere &, EBoundSphere &);  // 8035A034
-    RET_UNKNOWN ComputeFast(EVec3 *, int);  // 8035A258
-};
+#include "simmy/classes/eboundsphere.hpp"  // hand-written
 struct EBoundTreeNode : public EStorable {
     EBoundTreeNode();  // 802C5A78
     virtual void Write(EStream &);  // 802C5AE8

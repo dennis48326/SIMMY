@@ -11,7 +11,6 @@ void ENgcRenderer::CallbackParam(EDLEntry *) { SIMMY_STUB("ENgcRenderer::Callbac
 void ENgcRenderer::Callback(EDLEntry *) { SIMMY_STUB("ENgcRenderer::Callback(EDLEntry *)", 0x8034A6D0); }
 void ENgcRenderer::GEList(EDLEntry *) { SIMMY_STUB("ENgcRenderer::GEList(EDLEntry *)", 0x8034A6E8); }
 void ENgcRenderer::RecalcMatrices(EDLEntry *) { SIMMY_STUB("ENgcRenderer::RecalcMatrices(EDLEntry *)", 0x8034A700); }
-void ENgcRenderer::SetMipMap(EDLEntry *) { SIMMY_STUB("ENgcRenderer::SetMipMap(EDLEntry *)", 0x8034A718); }
 void ENgcRenderer::Vertex(EDLEntry *) { SIMMY_STUB("ENgcRenderer::Vertex(EDLEntry *)", 0x8034A730); }
 void ENgcRenderer::PointListPacked(EDLEntry *) { SIMMY_STUB("ENgcRenderer::PointListPacked(EDLEntry *)", 0x8034A754); }
 void ENgcRenderer::VerifyMpg(EDLEntry *) { SIMMY_STUB("ENgcRenderer::VerifyMpg(EDLEntry *)", 0x8034A77C); }

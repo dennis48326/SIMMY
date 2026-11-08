@@ -780,10 +780,16 @@ void ESim::DoAnimation() {
 void ESim::DoLightingCalculation() {}
 
 // 800341E8
-// GC: the pose's tight bound box when the controller has matrices, else the bound sphere.
+// Once the controller has this frame's matrices, the box around the posed joints (the model's orient,
+// EAnimController::CalcTightBoundBox); before that the bound sphere.
 unsigned int ESim::VisibilityTest(E3DWindow& win) {
   if (HasQueuedOperation()) return 0;
-  return win.Test(*reinterpret_cast<EBound3*>(m_bounds));
+  if (!m_anim.m_matrices) return win.Test(*reinterpret_cast<EBoundSphere*>(m_sphere)) ? 1u : 0u;
+  float box[6] = {};
+  EMat4 orient;
+  GetOrient(orient);
+  m_anim.CalcTightBoundBox(orient, *reinterpret_cast<EBound3*>(box), nullptr);
+  return win.Test(*reinterpret_cast<EBound3*>(box));
 }
 
 namespace {

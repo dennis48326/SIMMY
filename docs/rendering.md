@@ -81,13 +81,21 @@ is pinned by `SIMMY_AURORA_TAG` in [`CMakeLists.txt`](../CMakeLists.txt).
 | Mirror (CAS) | [`e_mirrorportal.cpp`](../src/engine/e_mirrorportal.cpp) | `EMirrorPortal` |
 | Ghosts | [`ghost.cpp`](../src/game/ghost.cpp), `ESim::Draw` | `SIMMY_GHOST_TEST`. A green person (data 0x4A flag 2) is lit by one green ambient light only (`_vGhostGreen` 0.8, 1.8, 0.65; no sun or point lights) |
 | Sim models | [`esim.cpp`](../src/game/esim.cpp) `initModel` | A player's sim reuses the composited model of the last house (`ReadModelFromCache` / `TransferModelToCache`, dropped at the main menu: `DeletePlayerCachedModel`); service NPCs draw their record's own model (`ServiceNpcOrderTableCallback`); a costume change flushes queued data-manager work and costume models (`UpdateSkinChange`) |
-| Animation | [`e_animcontroller.cpp`](../src/engine/e_animcontroller.cpp), [`e_rmodel.cpp`](../src/engine/e_rmodel.cpp) | Layered and phase-locked tracks (`Layer`, `SetTrackPhaseLock`, `GetSlavePos`), procedural tracks (head turning), `ERModel::DrawHierarchical`. Animation events of phase-locked tracks (`AddEventRange`) are still stubbed |
+| Animation | [`e_animcontroller.cpp`](../src/engine/e_animcontroller.cpp), [`e_rmodel.cpp`](../src/engine/e_rmodel.cpp) | Layered and phase-locked tracks (`Layer`, `SetTrackPhaseLock`, `GetSlavePos`), procedural tracks (head turning), `ERModel::DrawHierarchical`. A sim's bound sphere (its lighting and sort point) is the pose's `CalcVisibilitySphere` (802EFFCC: the skeleton's sphere moved towards each animated track's root and radius by the track's intensity, `EBoundSphere::Combine` 8035A034 for layered tracks) and its bounds the box around it; once the controller has matrices, culling tests the box around the posed joints (`ESim::VisibilityTest` 800341E8, `CalcTightBoundBox` 802EA53C, `CalcNodePos` 802F0428). Vehicles (carpool, bus) take their bounds from the pose too and their shadow follows the car body (`ISimsObjectModel::Update`, `EIStaticModel::SlamOrient` 8022BFF8). Skeletons stay cached after their last reference (`ECharacterManager::CanCache` 8032333C). The release build discards animation events (`AddEventRange`, see porting-audit.md) |
 
 ## Gotchas and invariants
 
 - **aurora reads GX array data by pointer later** (its GX processing runs after the game's calls). Do not
   free or overwrite vertex data the current frame drew; call `EGraphics::Flush()` (app thread: sends the
   open RC, `GXDrawDone` with the frame open) before freeing, as GC's `FreeVertexData` / `SimImageMaker` do.
+- Each frame ends with texture stages 0 and 1 emptied (`EGraphics::DeselectTextures` 802F1034 through the
+  immediate context, from `EndFrame`), so no texture stays locked by the renderer between frames.
+- Skins are composited into 32-bit RGBA textures (`SimModel::GetSkinTextureDef`, a PC choice; GC used 8-bit
+  palettised 0x8A skins). The 8-bit copies (`TextureUtils::CopyTexture32To8` 8030B228, `CopyTexture8To8`
+  8030B960) and the 4D quantiser `ERTQuantize4D` are therefore unreachable and stay stubs; disc textures
+  copied into a skin go through the ported `CopyTexture8To32` / `CopyTexture32To32`.
+- `ERC::SetMipMap` (802F8270) records a mip-map bias that the renderer ignores, as on GC
+  (`ENgcRenderer::SetMipMap` 8034A718 is empty in the release build).
 - A texture being destroyed must leave the renderer's slots (`~ENgcTexture` clears `m_textures`; the Apt
   aux `freeTexture` unbinds first); GC tolerated use-after-free here, PC crashes.
 - Headless runs never open an aurora frame: `platform_frame_tick` clears aurora's GX FIFO each frame, or it

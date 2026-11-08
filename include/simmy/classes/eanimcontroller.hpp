@@ -146,7 +146,8 @@ struct EAnimController {
   void PrepareForCollision(EMat4 &);  // 802EA28C
   void PostMultNodeAndDescendents(int, EMat4 &);  // 802EA2CC
   void PreMultNodeAndDescendents(int, EMat4 &);  // 802EA404
-  void CalcTightBoundBox(EMat4 &, EBound3 &, bool *);  // 802EA53C
+  // The box around the posed nodes' pivots (only the nodes `use` marks, when given).
+  void CalcTightBoundBox(EMat4& root, EBound3& box, bool* use);  // 802EA53C
   void FixAccumulationForRootNode(EACTrack* track, EACNodeState& state);  // 802EA698
   void AnimateSpecial(ERAnim* anim, float frame, EACTrackStreams* streams, EACNodeState* stored,
                       EAnimNodeDataPos* node, EACNodeState& state);  // 802EA6DC
@@ -204,13 +205,13 @@ struct EAnimController {
   void SetTrackSpeed(eTrackFlags flags, float speed);  // 802EFD88
   void SetAllTrackSpeed(float speed);  // 802EFED0
   RET_UNKNOWN VisibilityTest(EMat4 &);  // 802EFF38
-  void CalcVisibilitySphere(EMat4 &, EBoundSphere &);  // 802EFFCC
+  void CalcVisibilitySphere(EMat4& root, EBoundSphere& out);  // 802EFFCC
   EVec3 GetAnimRootNodeTrans(EACTrack* track);  // 802F0300
   // `model` posed by this controller at `root` (Compute, then ERModel::DrawHierarchical).
   void Draw(ERC* rc, ERModel* model, EMat4& root);  // 802F03B4
-  RET_UNKNOWN CalcNodePos(int);  // 802F0428
+  EVec3 CalcNodePos(int index);  // 802F0428
   void CalcNodeMatrix(int, EMat4 &);  // 802F055C
-  RET_UNKNOWN GetNodeMatrix(int);  // 802F0678
+  EMat4* GetNodeMatrix(int index);  // 802F0678
   void CalcNodeOrientWithoutLocalRot(int, EMat4 &);  // 802F0700
   void CalcNodeOrient(int, EMat4 &);  // 802F085C
   void SetNodeIgnoreAnimatedVisibility(int, bool);  // 802F0A30

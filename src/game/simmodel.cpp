@@ -211,10 +211,41 @@ Sim__SimPartsS2CParam CasSimDescriptionS2C::GetBodyPartParam(eBodyPartS2C part) 
   return r;
 }
 
+// 80167B7C
+// A description in the older layout (no 0xFEED mark; the mark's two bytes were the first name's first
+// character): only the names and the gender are kept, on a cleared sim (every part style 0, the
+// default identity); the old look (25 bytes, 13 floats, 23 bytes) is read past. GC quirk kept: the
+// first name's first character becomes 0xFEED (ClearSim has already put the mark back when it is
+// copied).
+void CasSimDescriptionS2C::ReadOldDescription(ReconBuffer* b) {
+  ClearSim(false);
+  const unsigned short first = m_magic;
+  m_magic = 0xfeed;
+  m_firstName[0] = first;
+  b->Recon16(reinterpret_cast<short*>(&m_firstName[1]), 0x1f);
+  b->Recon16(reinterpret_cast<short*>(m_lastName), 0x20);
+  b->ReconBool(&m_male);
+  signed char bytes[25];
+  for (signed char& c : bytes) b->Recon8(&c, 1);
+  float floats[13];
+  for (int i = 0; i < 5; ++i) b->ReconFloat(&floats[i], 1);
+  b->ReconFloat(&floats[5], 3);
+  for (int i = 8; i < 13; ++i) b->ReconFloat(&floats[i], 1);
+  signed char more[23];
+  for (signed char& c : more) b->Recon8(&c, 1);
+  static const bool trace = std::getenv("SIMMY_RECON_TRACE") != nullptr;  // PC dev aid
+  if (trace) {
+    char name[32] = {};
+    for (int i = 1; i < 31 && m_firstName[i]; ++i) name[i - 1] = static_cast<char>(m_firstName[i]);
+    std::printf("[desc] old-layout description read (no 0xFEED mark): first name \"?%s\", %s\n", name,
+                m_male ? "male" : "female");
+  }
+}
+
 // 80167F00
 // The saved look (the neighbourhood's 'User' resources, the costume files): field by field, ints held
-// as a byte. Descriptions without the 0xFEED mark are an older layout (ReadOldDescription, not
-// ported). Version 2 adds the arm accessory's option.
+// as a byte. Descriptions without the 0xFEED mark are an older layout (ReadOldDescription). Version 2
+// adds the arm accessory's option.
 void CasSimDescriptionS2C::DoStream(ReconBuffer* b, int) {
   auto r8 = [b](signed char& v) { b->Recon8(&v, 1); };
   auto u8 = [b](unsigned char& v) { b->Recon8(reinterpret_cast<signed char*>(&v), 1); };
@@ -227,7 +258,7 @@ void CasSimDescriptionS2C::DoStream(ReconBuffer* b, int) {
   b->Recon16(&magic, 1);
   m_magic = static_cast<unsigned short>(magic);
   if (m_magic != 0xfeed) {
-    SIMMY_STUB("CasSimDescriptionS2C::ReadOldDescription", 0x80167B7C);
+    ReadOldDescription(b);
     return;
   }
   u8(m_version);

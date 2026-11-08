@@ -25,6 +25,28 @@ void ERC::TriStrip(EGEVert* verts, int count) {
   EndCommand();
 }
 
+// 802F68EC
+// A strip over vertex arrays copied into the list: positions (x, y, z, w floats), uvs (two floats, or
+// four with two sets), colours (RGBA bytes), normals (signed bytes x, y, z, w) and weights (4 bytes).
+void ERC::TriStrip(int count, float* positions, float* uvs, unsigned char* colors, signed char* normals,
+                   unsigned char* weights, bool twoUVs) {
+  if (!count) return;
+  void* pos = AllocAndCopy(positions, count << 4);
+  void* uv = AllocAndCopy(uvs, (twoUVs ? 4 : 2) * count * 4);
+  void* col = AllocAndCopy(colors, count * 4);
+  void* nrm = AllocAndCopy(normals, count * 4);
+  void* wgt = AllocAndCopy(weights, count * 4);
+  BeginCommand(2, 1);
+  m_dl->m_vertCount += count;
+  EDLEntry* e = NewEntry(EDLEntry::EntriesFor<EDLTriStripPackedData>());
+  e->op = kDL_TriStripPacked;
+  e->u = static_cast<unsigned int>(count);
+  e->b1 = static_cast<unsigned char>(twoUVs ? 1 : 0);  // GC: the entry's +1 is not written here
+  *e->Payload<EDLTriStripPackedData>() = {pos, uv, static_cast<unsigned char*>(col), static_cast<signed char*>(nrm),
+                                          static_cast<unsigned char*>(wgt), nullptr, 0};
+  EndCommand();
+}
+
 // 802F6BF0
 void ERC::LineList(EGEVert* verts, int count) {
   if (!count) return;
@@ -78,6 +100,42 @@ void ENgcRC::TriStrip(EGEVert* verts, int count) {
   } else {
     ERC::TriStrip(verts, count);
   }
+}
+
+// 80338484
+// The array strip: immediate contexts draw it at once (ENgcRenderer::TriStripPacked); deferred ones copy
+// each array given into the list (32-byte aligned) and record it. PC: the GX display list GC built here
+// for unweighted strips (_ngcUseGXDisplayList) is not made; the renderer sends the vertices directly.
+void ENgcRC::TriStrip(int count, float* positions, float* uvs, unsigned char* colors, signed char* normals,
+                      unsigned char* weights, bool twoUVs) {
+  if (!count) return;
+  if (m_mode == RCMode::Immediate) {
+    m_dl->m_vertCount += count;
+    // GC: ENgcRenderer::TriStripPacked(int, float*, ...) 803428D0; PC: the recorded form's handler.
+    EDLEntry entries[EDLEntry::EntriesFor<EDLTriStripPackedData>()];
+    EDLEntry& e = entries[0];
+    e.op = kDL_TriStripPacked;
+    e.u = static_cast<unsigned int>(count);
+    e.b1 = static_cast<unsigned char>(twoUVs ? 1 : 0);
+    *e.Payload<EDLTriStripPackedData>() = {positions, uvs, colors, normals, weights, nullptr, 0};
+    _ngcRenderer.TriStripPacked(&e);
+    return;
+  }
+  const unsigned int n = static_cast<unsigned int>(count);
+  void* pos = AllocAndCopy(positions, static_cast<int>(n * 0x10));
+  void* uv = uvs ? AllocAndCopy(uvs, static_cast<int>(twoUVs ? n * 0x10 : n * 8)) : nullptr;
+  void* col = colors ? AllocAndCopy(colors, static_cast<int>(n * 4)) : nullptr;
+  void* nrm = normals ? AllocAndCopy(normals, static_cast<int>(n * 4)) : nullptr;
+  void* wgt = weights ? AllocAndCopy(weights, static_cast<int>(n * 4)) : nullptr;
+  BeginCommand(2, 0);
+  m_dl->m_vertCount += count;
+  EDLEntry* e = NewEntry(EDLEntry::EntriesFor<EDLTriStripPackedData>());
+  e->u = static_cast<unsigned int>(count);
+  e->op = kDL_TriStripPacked;
+  e->b1 = static_cast<unsigned char>(twoUVs ? 1 : 0);
+  *e->Payload<EDLTriStripPackedData>() = {pos, uv, static_cast<unsigned char*>(col), static_cast<signed char*>(nrm),
+                                          static_cast<unsigned char*>(wgt), nullptr, 0};
+  EndCommand();
 }
 
 // 8033B350

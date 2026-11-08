@@ -12,6 +12,7 @@
 #include "simmy/unported_globals.hpp"
 #include "simmy/classes/placement.hpp"
 #include "simmy/roomresolve.hpp"
+#include "simmy/classes/routing.hpp"
 
 #include <algorithm>
 #include <cstdio>
@@ -161,6 +162,33 @@ void HierGetSite(cXObjectImpl* o, HierSite& site) {
     site.pos[0] = (o->m_siteTile >> 6) * 16 + 8;
     site.pos[1] = (o->m_siteTile & 0x3f) * 16 + 8;
     site.valid = 1;
+  }
+}
+
+// 800DCB78 cXObjectImpl::GetPlacementSpec
+// Where the object is, as Place would take it: its location (in the world when on the lot, cFixedWorld
+// vtable 0x6C), its level, and the container and slot of the first object of its tile chain (data 0x1A;
+// the entry, data 0xE, less one: entry 0 is the chain, so a chained object has slot -1, and an entry
+// of 0 there is put back to -1).
+void ObjGetPlacementSpec(cXObjectImpl* o, PlaceSpec& spec) {
+  CTilePt tile = o->GetCTilePt();
+  if (World() && !World()->OutOfBounds(tile)) {
+    spec.inWorld = 1;
+    spec.pos[0] = o->m_location[0];
+    spec.pos[1] = o->m_location[1];
+  } else {
+    spec.inWorld = 0;
+    spec.pos[0] = spec.pos[1] = -16;
+  }
+  spec.level = o->m_level;
+  cXObjectImpl* first = o;
+  while (cXObjectImpl* prev = GetPrevObjectSibling(first)) first = prev;
+  spec.container = ObjectByID(first->GetData(0x1a));
+  spec.slot = first->GetData(0xe);
+  if (spec.slot != -1) {
+    spec.slot -= 1;
+    if (spec.slot == -1) first->m_data.WriteVar(0xe, -1);
+    // GC: also CountObjectSlots of the container (vtable 0x2B4), its result unused.
   }
 }
 
@@ -1065,9 +1093,67 @@ int ObjCanPlace(cXObjectImpl* o, const int pos[2], int level, cXObjectImpl* cont
 }
 
 // 800DE3C4 cXObjectImpl::Place / 800C61E4 cXMTObjectImpl::Place
+static void ObjPlaceParts(cXObjectImpl* o, const int pos[2], int level, cXObjectImpl* container, int slot);
+static void ObjPickupParts(cXObjectImpl* o);
+
+// 8012FE1C
+// cXPortalImpl::ApplyWallStyle (`place`) / the wall part of 801302B0 cXPortalImpl::Pickup:
+// each part of a door or window with a wall style (cXPortal::GetWallStyle 801327C8, its definition's
+// +0x5C) and a wall it needs (GetRequiredSegment) gives that wall of its tile, when there is one, its
+// style (picked up: 1, the plain wall). The wall model, the walls the router and the collision map see,
+// and the wall tool's door check read it.
+static void PortalPartWallStyle(cXMTObjectImpl* p, bool place, cXMTObjectImpl* group) {
+  cFixedWorldImpl* w = World();
+  const int style = p->m_def ? ERQuickdata::S16(p->m_def, 0x5c) : 0;
+  if (!w || style == 0) return;
+  const unsigned int seg = GetRequiredSegment(p);
+  if (seg == 0) return;
+  CTilePt tile = p->GetCTilePt();
+  if (w->OutOfBounds(tile)) return;
+  TileWalls walls = w->GetWall(tile);
+  if (!walls.HasWall(static_cast<int>(seg))) return;
+  if (!place) {
+    // PC guard: the port has no placement grid object, so buy mode also puts a door over another door's
+    // wall (GC: PlacementObject::Place only where the grid object may go); lifting it off again leaves
+    // the other door's wall as it is. (Killed, `group` null: only a wall of its own style.)
+    if (!group && walls.GetStyle(static_cast<int>(seg)) != style) return;
+    if (group)
+      for (cXObjectImpl* q : ObjectsAtTile(tile))
+        if (q != p && IsPortalObject(q) && !group->IsPartOfMe(q) && GetRequiredSegment(q) == seg) return;
+  }
+  walls.SetStyle(WallStyle{place ? style : 1}, static_cast<int>(seg));
+  w->SetWall(tile, walls);
+  static const bool trace = std::getenv("SIMMY_PLACE_TRACE") != nullptr;  // PC development aid
+  if (trace) std::printf("[place] %s: wall %02x at %d,%d style %d\n", p->DebugName(), seg, tile.GetX(), tile.GetY(), place ? style : 1);
+}
+
+static void PortalWallStyle(cXObjectImpl* o, bool place) {
+  auto* mt = o && IsPortalObject(o) ? dynamic_cast<cXMTObjectImpl*>(o) : nullptr;
+  if (!mt) return;
+  for (cXMTObjectImpl* p = mt->GetFirstMultiTileObject(); p; p = p->GetNextMultiTileObject()) PortalPartWallStyle(p, place, mt);
+}
+
+// ObjectModuleImpl::KillObject's Pickup (800F5668, vtable 0x12C) for one part of a door or window: its
+// wall plain again (the parts are killed one by one here; the group is not walked).
+void ObjPortalPartKilled(cXObjectImpl* o) {
+  auto* p = o && IsPortalObject(o) ? dynamic_cast<cXMTObjectImpl*>(o) : nullptr;
+  if (p) PortalPartWallStyle(p, false, nullptr);
+}
+
 // Every part to its site (off the lot: picked up), then the models take their places (the group's
-// middle is known only when all parts are there). GC: the dynamic group's merge (vtable 0x44/0x4C).
+// middle is known only when all parts are there). GC: the dynamic group's merge (vtable 0x44/0x4C). A
+// door or window then dresses its walls (cXPortalImpl::Place 8012FDD0: ApplyWallStyle, the routes
+// dirtied).
+// 8012FDD0
 void ObjPlace(cXObjectImpl* o, const int pos[2], int level, cXObjectImpl* container, int slot) {
+  ObjPlaceParts(o, pos, level, container, slot);
+  if (IsPortalObject(o)) {
+    PortalWallStyle(o, true);
+    PortalDirtyAllRoutes();
+  }
+}
+
+static void ObjPlaceParts(cXObjectImpl* o, const int pos[2], int level, cXObjectImpl* container, int slot) {
   PlacementGroup* g = PlacementGroupOf(o);
   PlacementGroup::Part* me = g ? PartOf(g, o) : nullptr;
   if (!me) {
@@ -1084,8 +1170,20 @@ void ObjPlace(cXObjectImpl* o, const int pos[2], int level, cXObjectImpl* contai
   for (auto& p : g->parts) SimObjectPlaced(p.object);
 }
 
-// 800DE144 cXObjectImpl::Pickup / 800C63E4 cXMTObjectImpl::Pickup: every part.
+// 800DE144 cXObjectImpl::Pickup / 800C63E4 cXMTObjectImpl::Pickup: every part. A door or window first
+// puts its walls back to plain (cXPortalImpl::Pickup 801302B0), then the routes are dirtied.
+// 801302B0
 void ObjPickup(cXObjectImpl* o) {
+  if (IsPortalObject(o)) {
+    PortalWallStyle(o, false);
+    ObjPickupParts(o);
+    PortalDirtyAllRoutes();
+    return;
+  }
+  ObjPickupParts(o);
+}
+
+static void ObjPickupParts(cXObjectImpl* o) {
   if (PlacementGroup* g = PlacementGroupOf(o)) {
     for (auto& p : g->parts) PlainPickup(p.object);
     return;

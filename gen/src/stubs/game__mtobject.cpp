@@ -12,14 +12,7 @@ void cXMTObjectImpl::UserPlace(FTilePt &, int, cXObject *, int) { SIMMY_STUB("cX
 RET_UNKNOWN cXMTObjectImpl::UserCanPickup() { SIMMY_STUB("cXMTObjectImpl::UserCanPickup(void)", 0x800C6824); return {}; }
 void cXMTObjectImpl::UserPickup(bool) { SIMMY_STUB("cXMTObjectImpl::UserPickup(bool)", 0x800C68B8); }
 RET_UNKNOWN cXMTObjectImpl::UserCanDelete() { SIMMY_STUB("cXMTObjectImpl::UserCanDelete(void)", 0x800C6A3C); return {}; }
-void cXMTObjectImpl::Reset(bool) { SIMMY_STUB("cXMTObjectImpl::Reset(bool)", 0x800C6B10); }
 void cXMTObjectImpl::SetMultiObjectData(int, int) { SIMMY_STUB("cXMTObjectImpl::SetMultiObjectData(int, int)", 0x800C6E44); }
-RET_UNKNOWN ObjectsAtTile(FTilePt &, int) { SIMMY_STUB("ObjectsAtTile(FTilePt &, int)", 0x800C6EBC); return {}; }
-void cXMTObjectImpl::MergeDynamic(cXMTObject *) { SIMMY_STUB("cXMTObjectImpl::MergeDynamic(cXMTObject *)", 0x800C6F2C); }
-void cXMTObjectImpl::RemoveFromDynamic() { SIMMY_STUB("cXMTObjectImpl::RemoveFromDynamic(void)", 0x800C7240); }
-void cXMTObjectImpl::UpdateAllAdjacecy() { SIMMY_STUB("cXMTObjectImpl::UpdateAllAdjacecy(void)", 0x800C7364); }
-void cXMTObjectImpl::UpdateDynAdjacency() { SIMMY_STUB("cXMTObjectImpl::UpdateDynAdjacency(void)", 0x800C7434); }
-void cXMTObjectImpl::MergeInPlace() { SIMMY_STUB("cXMTObjectImpl::MergeInPlace(void)", 0x800C7690); }
 cXMTObject::cXMTObject(int) { SIMMY_STUB("cXMTObject::cXMTObject(int)", 0x800C7A4C); }
 void cXMTObject::setMTObjectImpl(cXMTObjectImpl *) { SIMMY_STUB("cXMTObject::setMTObjectImpl(cXMTObjectImpl *)", 0x800C7CB0); }
 void cXMTObject::setPortalImpl(cXPortalImpl *) { SIMMY_STUB("cXMTObject::setPortalImpl(cXPortalImpl *)", 0x800C7CC0); }

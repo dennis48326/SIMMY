@@ -20,7 +20,7 @@ Of 14,600 GC functions, 8,500 are ported and 6,100 are stubs. The stubs break do
 | NA-unreachable | 2,720 | Never reached in the release build: 2,137 have no caller at all; the rest are dev/debug/cheat tools, the Urbz PDA screens, unused classes |
 | NA-platform | 224 | EyeToy, PS2/Xbox paths (HDD thread), GBA link, GC hold-to-reset, HDTV layouts |
 | **Missing** | **178** | GC behaviour reachable in normal play (37 high, 89 medium, 52 low), grouped into the features below |
-| Unsure | 10 | Needs a specific run to decide (listed at the end) |
+| Unsure | 10 | Needed a specific run to decide; resolved at the end |
 
 A separate pass over the 189 inline `SIMMY_STUB` sites, `Unported(...)` primitives, comment-only GC
 behaviour and PC stand-ins found 105 more gaps inside ported code (6 high, 24 medium, 75 low). Those are
@@ -56,9 +56,8 @@ disc's movies use either exist in the PC runtime or are absent from the GC binar
 - **Done** (mS): `TryNotifyStackObject` 0x40 ends a sim's idle-animate (count 0).
 - **Done** (mS): a skipped/cancelled queued action runs its object's queue-skipped tree (entry 4,
   `ActionSkipped` 8012AD98).
-- **Done** (mS): visitors made by CreateObject flag 4 run "init visitor" (`IsVisitor` 8012C8A8). PC
-  order difference: the port's `MakeNeighborPerson` still pushes the person's init tree instead of running
-  it at once (GC `Reset(true)`), so "init visitor" runs before it.
+- **Done** (mS): visitors made by CreateObject flag 4 run "init visitor" (`IsVisitor` 8012C8A8); since lA
+  after the person's `Reset(true)` (8011EB78: its init tree and a tick of its main tree), GC's order.
 - **Done** (mS): `TryCallNamedTree` modes 0/1 run the named tree at once (RunOneTickTree) from check trees
   too, and a tree that does not finish is GC's error 0x44F (PC workaround removed; a `[vm] ... did not
   finish` line names the tree and node if it ever happens).
@@ -66,7 +65,8 @@ disc's movies use either exist in the PC runtime or are absent from the GC binar
   Reset (single objects and each multi-tile part) and of PostLoad: sim flag 2 (runs while paused), 8.
 - **Done** (mS): `cXObjectImpl::Initialize` (800DA3D8, `EdithVariableSet::Initialize` 800E33F4) for every
   object `MakeNewOutOfWorldObject` makes (trees, buy mode, multi-tile parts) and `JustBorn`'s purchase date
-  (800DAC94). Left: the rest of `Reset(true)` (data 0x3A from the definition +0x62).
+  (800DAC94). **Done** (lA): the rest of `Reset(true)` (800DA848, 800C6B10, 8011EB78: data reset with 0x3A
+  from the definition +0x62, the price written after it, one main-tree tick).
 
 **World, building and lighting**
 - **Done** (mW): counter tops with a sink draw the cut-out counter and the sink sub-model
@@ -80,8 +80,8 @@ disc's movies use either exist in the PC runtime or are absent from the GC binar
   (`CalcLights4` 8022907C, the merge in `EIWallPart::Draw` 8002A4C0).
 - **Done** (mW): `InvalidateAllRoutes` after a wall edit (`HandleFinalizeRequest` 80221028).
 - **Done** (mW): `ApplyMatrix` portal rooms (`PortalRoom` 80050C38), the outside flag and the render-position
-  override (`cXObjectImpl::OverrideRenderPosition` 800E2FF8..800E3044). Left: the counter height
-  (`GetHeightOffset` 8004C7F0).
+  override (`cXObjectImpl::OverrideRenderPosition` 800E2FF8..800E3044). **Done** (lA): the height on a
+  holder (`GetHeightOffset` 8004C7F0; it is a person's bone height, not a counter's).
 - **Done** (mW): `UserCanPlace` (800E1E30) refuses slot types 5..7.
 - **Done** (mW): classic Go Here uses the person's nearest free spot (8003A7F8); also fixed: the house offset
   floats were read as integers, so Go Here never placed its object at all.
@@ -118,38 +118,83 @@ disc's movies use either exist in the PC runtime or are absent from the GC binar
 ## Low priority
 
 Details are in the audit reports. In short:
-- **Sims:** the fixed culling box and visibility sphere, so a lying-down sim can pop at screen edges.
-- **Camera:** cuts start one frame early.
-- **Performance:** skeletons are not cached.
-- **Unused today:** the end-of-frame texture unbind and the 8-bit texture copies.
-- **Objects:**
-  - object age data never updates;
-  - person reset after a tree error is partial;
-  - container height offsets;
-  - load integrity fix-ups;
-  - door and window wall styles;
-  - new CAS sims' GUIDs;
-  - the grid object.
-- **Building:** wall delete after a failed room preview.
-- **Text:** the sprite balloon period is fixed at 500 ms.
-- **Lists:** the relationship list breaks name ties by first name only.
-- **Leftovers:** various small branches in the tree primitives.
+- **Done** (lB): **Sims:** the pose's culling box and visibility sphere (`CalcTightBoundBox` 802EA53C,
+  `CalcNodePos` 802F0428, `GetNodeMatrix` 802F0678, `CalcVisibilitySphere` 802EFFCC, `EBoundSphere::Combine`
+  8035A034; `ESim::VisibilityTest` 800341E8, `SAnimator2::positionCharacter` 80065094).
+- **Done** (lB): **Camera:** a cut's start frame (`GetTrackFrame` 802EF4DC).
+- **Done** (lB): **Performance:** skeletons are cached (`ECharacterManager::CanCache` 8032333C).
+- **Done** (lB): the end-of-frame texture unbind (`EGraphics::DeselectTextures` 802F1034) and
+  `InLevelBaseState::Shutdown` (80089EB0). **Not ported, unreachable:** the 8-bit texture copies
+  (`CopyTexture32To8` 8030B228, `CopyTexture8To8` 8030B960, `ERTQuantize4D`): the PC composites skins into
+  32-bit textures (`SimModel::GetSkinTextureDef`), so no 8-bit target is ever copied into.
+- **Done** (lB): **Vehicles** (carpool, bus, taxi: object type 0xC): bounds from the pose and the shadow on the
+  car body (`ISimsObjectModel::Update` 8004CBDC, `EBound3::CalcBoundSphere` 802C5858,
+  `EIStaticModel::SlamOrient` 8022BFF8).
+- **Done** (lB): the CAS room's ambient score `scoreCAS` (`CasScene::Init` 801653FC, `Update`, the listener on
+  focus changes, the destructor) and `CASTarget::UnloadLastScreen`'s check (80180068, never true on GC).
+- **Done** (lB): `ERC::TriStrip(int, float*, ...)` (802F68EC, `ENgcRC::TriStrip` 80338484; the wallpaper and
+  wall previews' `DrawVerticalRect` uses it as GC does), `ERC::SetMipMap` (802F8270, renderer side empty as on
+  GC), `ReadOldDescription` (80167B7C), `EShader::ChangeMaterial` (802FA390, no caller).
+- **Objects** (lA, see [simulation.md](simulation.md) and [build-buy-and-world.md](build-buy-and-world.md)):
+  - **Done**: object age (`UpdateAge` 800DBB18, daily and at reset).
+  - **Done**: after a tree error GC runs `Cleanup(nullptr)`, not a person reset: `cXObjectImpl::Cleanup`
+    800DB16C (pick up, `Reset(true)`, put back; or the cleanup tree); a person's `Cleanup` as before.
+  - **Done**: the height on a holder (`GetHeightOffset` 8004C7F0).
+  - **Done**: load fix-ups: data defaults before a saved object is read, placeholders killed,
+    `UpdateSimObjects` 800F62DC, `PostLoad`'s level and placeholder cleanup. Not done: `CheckIntegrity`
+    (a debug report only), auto-reset (`sAutoReset` is never set).
+  - **Done**: door and window wall styles (`cXPortalImpl::Place` / `ApplyWallStyle` / `Pickup` 8012FDD0,
+    8012FE1C, 801302B0). A door bought in buy mode left its wall solid before.
+  - Kept PC: new CAS sims' GUIDs (`MakeNewGUID` 80145D58 reads the clock; the port's counter is
+    deterministic and unique).
+  - Left: the grid object (8021B27C, 8021BC44, 8021BCA8): the model is drawn; making real 0x437 objects
+    would add objects to the module (ids, saves) for a cursor.
+- **Building:** **Done** (lA): wall delete after a failed room preview (`DeleteERoomWallContainingSegment`
+  8002FEAC and helpers).
+- **Lists:** **Done** (lA): the relationship list breaks first-name ties by last name (`sort_records_by_name`
+  801DA670).
+- **Leftovers:** **Done** (lA): `TryDialog` skips modal dialogs when no family member is awake and visible;
+  `TryFindGoodLocation`'s pickup closes the picked-up sim's player menu; generic call 0x1E
+  (`SwapSelectedSims` 800420B4); buy-mode grab highlights (`ObjectManipulator::UpdateObjectHighlights`
+  80219C74, and A grabs the lit objects as GC's `TryGrabbingWorldObject` 8021A348). Left, never reached:
+  `TryDialog`'s busy-interactor test (PC interactors), `TryAnimateObject`'s preload sync wait (the PC loads
+  at once), `TryCameraControl` bone/dummy targets and the check-tree advertisement copy (not logged).
+- **Done** (lB): **Text:** the sprite balloon alternation period is the tree object's temp 0 (500 ms when not
+  positive; `TrySetBalloon` 800FBA00).
 
-## Unsure: what to run
+## Unsure: resolved (lB)
 
-1. **Free-play family size.** Make a CAS family of 3–4 sims and check that all of them appear on the lot. `MoveFamilyOntoLot` is a stand-in.
-2. **Old-format descriptions.** A run read a description without the 0xFEED mark (`ReadOldDescription` 80167B7C). Log the source at simmodel.cpp:229. If it is disc data, this becomes high priority.
-3. **Generic sim calls.** Done (H11): a scan of the disc's trees lists the ids used; `SIMMY_GSC_TRACE=1` logs first uses at run time.
-4. **Dynamic multi-tile merge.** Place two flag-8 objects side by side, such as counters (800C7690).
-5. **Vehicles.** Watch the carpool or bus arrive (isimsobjectmodel.cpp:420).
-6. **Neighbourhood unload.** Quit to the menu, then load another slot (`GamePlayShutdown`).
-7. **`EShader::ChangeMaterial`** (802FA390). Grep a long soak for it.
-8. **Input held back.** Check that input stays blocked while menus and dialogs are up (interactor stand-ins).
+1. **Free-play family size.** Not a gap. A Create-a-Family family of 3 (made in CAS, moved into lot 15,
+   entered) appears whole: the lot's scenario controller (`generator_scenario_sp`) makes every member with
+   `TryCreateObject` on load; the PC `MoveFamilyOntoLot` only picks the player's sim among them. Families
+   read from a save (lot 13's four Freebers) come back from the house.
+2. **Old-format descriptions.** Ported (`ReadOldDescription` 80167B7C: names and gender kept on a cleared
+   sim). Not reproduced (free play lot 13 entered again, story start, saves); `SIMMY_RECON_TRACE=1` reports
+   it.
+3. **Generic sim calls.** Done (H11).
+4. **Dynamic multi-tile merge.** **Done** (lA): dynamic objects (a tree for entry 8, e.g. flood puddles
+   `efx_flood`) made by CreateObject go to the tile's middle and merge with the same objects beside them
+   (`MergeInPlace` 800C7690, `MergeDynamic` 800C6F2C, `UpdateAllAdjacecy` 800C7364, `UpdateDynAdjacency`
+   800C7434, `RemoveFromDynamic` 800C7240, `ObjectsAtTile` 800C6EBC). Left: buy-mode placement and the
+   merge after load (mtobject.cpp `PostLoad`).
+5. **Vehicles.** Ported (see Low priority). The taxi on lot 9 and the carpool are type 0xC.
+6. **Neighbourhood unload.** A real gap, blocked. GC `TheSimsMainMenuState::Update` (80098838) calls
+   `GameData::GamePlayShutdown` (8003B1E4: `Globs::pHouse` = 0, `NeighborhoodImpl::Unload`) when a game
+   returns to the menu. Ported and run (story start, pause > options > quit > "No", then New Game): the
+   next game crashed, because the PC's `ELiveMode::QuitToMainMenu` (8008DC90) still leaves the house, its
+   object module and people alive (stub: `PlumbBob::ShutdownAll`, object module vtable 0x68, house vtable
+   0x90, simulator vtable 0x88) and those people point at the unloaded neighbours. Reverted to the stub; the
+   same run without it plays on (the next game's `NeighborhoodImpl::Load` unloads first, so no stale family
+   survives). Port `QuitToMainMenu`'s teardown first, then `GamePlayShutdown`.
+7. **`EShader::ChangeMaterial`** (802FA390). No caller in the release build (the vtable slot is never
+   called); ported anyway (12 words and `UpdateMaterialCoefficients`).
+8. **Input held back.** Not a gap: stick input given while the pause menu is open (200 frames) or while the
+   story's modal welcome dialog is up does not move the sim; the same input after closing them does.
 
 ## Corrections to earlier docs found by this audit
 
 - **Animation events:** `EAnimController::AddEventRange` is not a gap. The release build never collects those events.
-- **CAS ambient score:** the CAS room does have one. GC `CasScene::Init` 801653FC starts an `AmbientScorePlayer`, so this is a low-priority gap, not kept behaviour.
+- **CAS ambient score:** the CAS room does have one (`scoreCAS`). GC `CasScene::Init` 801653FC starts an `AmbientScorePlayer`; ported (lB).
 - **Saving people:** the port does save people now; they are added to the object module.
 - **Stale comments:**
   - wallmanipulator.cpp:12: the room want event is sent.

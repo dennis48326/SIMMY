@@ -60,7 +60,6 @@ RET_UNKNOWN sort_selectors_by_name(void *, void *) { SIMMY_STUB("sort_selectors_
 RET_UNKNOWN sort_walls_by_name(void *, void *) { SIMMY_STUB("sort_walls_by_name(void *, void *)", 0x801D1CA4); return {}; }
 RET_UNKNOWN sort_floors_by_name(void *, void *) { SIMMY_STUB("sort_floors_by_name(void *, void *)", 0x801D1D74); return {}; }
 void PCTTarget::static_GrabManipulatorCallback(InteractorModule__Interactor__CallbackData *) { SIMMY_STUB("PCTTarget::static_GrabManipulatorCallback(InteractorModule::Interactor::CallbackData *)", 0x801D1E40); }
-RET_UNKNOWN sort_records_by_name(void *, void *) { SIMMY_STUB("sort_records_by_name(void *, void *)", 0x801DA670); return {}; }
 RET_UNKNOWN MMUTarget::GetCurrentMainScreenChoice() const { SIMMY_STUB("MMUTarget::GetCurrentMainScreenChoice(void) const", 0x801E7078); return {}; }
 RET_UNKNOWN MMUTarget::GetCurrentGameplayChoice() const { SIMMY_STUB("MMUTarget::GetCurrentGameplayChoice(void) const", 0x801E7080); return {}; }
 RET_UNKNOWN E2ETarget::GetTopLevelState() { SIMMY_STUB("E2ETarget::GetTopLevelState(void)", 0x801E7088); return {}; }

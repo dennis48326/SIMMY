@@ -853,8 +853,8 @@ void InteractorModule__InteractorVisualizer::DrawWallRectPreview(InteractorModul
 // 80215FDC
 // An upright strip from `from` to `to` (a quad per tile), `height` high, in `shader` lit white. Texture
 // coordinates: mode 2 a tile across each quad, stepping `uvStep` along; mode 1 the same turned; else
-// the texture's centre. PC: as EGEVerts (GC: the position, uv and normal arrays of
-// ERC::TriStrip(int, float*, ...), not ported).
+// the texture's centre. Sent as arrays (positions x, y, z, 0; uvs; normals 0, 0x7f, 0, 0x7f; no
+// colours) allocated from the context, through ERC::TriStrip(int, float*, ...).
 void InteractorModule__InteractorVisualizer::DrawVerticalRect(ERShader* shader, EVec3& from, EVec3& to, float height, int texGen, float uvStep) {
   EShader* s = shader ? shader->GetShader() : nullptr;
   if (!s) return;
@@ -869,7 +869,12 @@ void InteractorModule__InteractorVisualizer::DrawVerticalRect(ERShader* shader, 
   int n = static_cast<int>(dy + 0.5f);
   if (n < static_cast<int>(dx + 0.5f)) n = static_cast<int>(dx + 0.5f);
   if (n == 0) return;
-  const int pairs = n + 1;
+  const unsigned int pairs = static_cast<unsigned int>(n) + 1;
+  // One block: positions (8 floats a pair), uvs (4 floats a pair), normals (8 bytes a pair).
+  auto* pos = static_cast<float*>(s_pERC->Alloc(pairs * 0x38, 0x20));
+  if (!pos) return;
+  float* uvs = pos + pairs * 8;
+  auto* normals = reinterpret_cast<signed char*>(uvs + pairs * 4);
   const float inv = 1.0f / static_cast<float>(n);
   const float sx = (to.x - from.x) * inv, sy = (to.y - from.y) * inv;
   float u, v, du, dv, su, sv;  // the pair's uv, the top's offset, the step
@@ -880,16 +885,20 @@ void InteractorModule__InteractorVisualizer::DrawVerticalRect(ERShader* shader, 
   } else {
     u = 0.5f, v = 0.5f, du = dv = su = sv = 0.0f;
   }
-  std::vector<EGEVert> verts;
-  verts.reserve(static_cast<size_t>(pairs) * 2);
   float x = from.x, y = from.y;
-  for (int i = 0; i < pairs; ++i) {
-    verts.push_back(Vert(x, y, 0.0f, 0, 0x7f, 0, 0x7f, u, v));
-    verts.push_back(Vert(x, y, height, 0, 0x7f, 0, 0x7f, u + du, v + dv));
+  float* p = pos;
+  float* t = uvs;
+  signed char* nm = normals;
+  for (unsigned int i = 0; i < pairs; ++i) {
+    p[0] = x, p[1] = y, p[2] = 0.0f, p[3] = 0.0f;
+    p[4] = x, p[5] = y, p[6] = height, p[7] = 0.0f;
+    t[0] = u, t[1] = v, t[2] = u + du, t[3] = v + dv;
+    for (int k = 0; k < 2; ++k) nm[k * 4] = 0, nm[k * 4 + 1] = 0x7f, nm[k * 4 + 2] = 0, nm[k * 4 + 3] = 0x7f;
+    p += 8, t += 4, nm += 8;
     x += sx, y += sy;
     u += su, v += sv;
   }
-  s_pERC->TriStrip(verts.data(), static_cast<int>(verts.size()));
+  s_pERC->TriStrip(static_cast<int>(pairs * 2), pos, uvs, nullptr, normals, nullptr, false);
 }
 
 // 80216488

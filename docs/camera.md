@@ -35,7 +35,8 @@ build tools and the place/grab manipulators let the camera read the C stick unfi
 ## CameraDirector
 
 Shots: `StartAnim` (camera animation relative to `m_animBase`; node 0's matrix is the camera; it runs at
-the simulator's speed in live mode), cuts and interpolations (`SetCameraCut`, `SetCameraInterp`),
+the simulator's speed in live mode; the shot remembers its main track's frame after the first `Update`,
+`EAnimController::GetTrackFrame` 802EF4DC), cuts and interpolations (`SetCameraCut`, `SetCameraInterp`),
 `LetterBox`, `ReleaseToGameCamera` (with +0x320 set, `CalcSimsCam` works out the game camera's own view
 first and the camera eases there from the shot), `InterpToGameCamera` (8001C69C), `InterpToCancelCamera`
 / `CalcCancelCam` (a shot the stick cancels, `CheckCancelled`), `ForceDisableHud`, `Disable/EnableControls`

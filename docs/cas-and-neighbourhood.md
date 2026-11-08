@@ -74,6 +74,14 @@ camera stays where the stick left it, read back from the tweak tool), and its x 
 degrees a second at full deflection) unless rotation is locked. The pad is the CAS player's mapped pad,
 else the active pad unless it is player 1's (`CasPad` in cas.cpp).
 
+**Ambient score.** `CasScene::Init` (801653FC) starts an `AmbientScorePlayer` with one listener on the
+room's score `scoreCAS` (`GetAmbientScoreName` 801672C8, `{anonymous}::SCORE_NAME`); `Update` advances it,
+each focus change (`HandleEventChangeFocus` 80166BB0) moves the listener to the spot being looked at
+(genetics, the roommates' second place, else the mirror spot; facing +y) and the scene's destructor stops
+it. `CASTarget::UnloadLastScreen` (80193F2C) asks `UIScreenManager::IsUIScreenMarkedForUnloading`
+(80180068), which on GC only reads a word before the record table for a screen without a record, so it
+never refuses (kept as GC).
+
 **Clothing and tattoo unlocks** (`CasClothingUnlocks`, 8015E9D4..8015F21C, casclothingunlocks.cpp; kept
 at `PlayerFamilyImpl` +0xC8, streamed in `FAMI` from version 0x10). A byte per gender, body part and
 style (2 x 32 x 40) and per gender, tattoo type and texture (2 x 8 x 30): flag 2 locked, flag 4 "new".
@@ -122,9 +130,11 @@ range and with models/textures, the hat-driven hair-bottom flag, the torso layer
 flag, tattoos, morphs (body 0..2, head 0..7, face 0..3), personality (0..10, else Aries'), aspiration
 and names. GC passes the int options of hair, hat, lower body and arm accessory as `signed char&`, so on
 the big-endian GC only their high byte is checked: kept. PC logs each repair as `[desc] Verify: ...`
-(GC's assert text). No disc description needed one in the runs made. `ReadOldDescription` (80167B7C, a
-description without the 0xFEED mark) was logged once in an old free-play run (lot 13) and never since
-(free play lot 13, story start, saves): not ported.
+(GC's assert text). No disc description needed one in the runs made. A description without the 0xFEED
+mark is the older layout (`ReadOldDescription` 80167B7C): only the names and the gender are kept on a
+cleared sim and the old look is read past (GC quirk kept: the first name's first character becomes
+0xFEED). It was logged once in an old free-play run (lot 13) and not since (free play lot 13 entered
+again, story start, saves); `SIMMY_RECON_TRACE=1` prints `[desc] old-layout description read` if it happens.
 
 The skin
 is composited per map quadrant (`SkinCompositor`): base skin, the quadrant's tattoo (locations 0, 1, 2 =

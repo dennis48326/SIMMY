@@ -267,7 +267,7 @@ struct ObjectModuleImpl {
   virtual void UpdateInteractionInfluences();  // 800F5DD0
   virtual void KillAllObjects();  // 800F5E78
   virtual void KillObjectsOutsideBounds(int, int, int, int);  // 800F60CC
-  RET_UNKNOWN UpdateSimObjects();  // 800F62DC
+  void UpdateSimObjects();  // 800F62DC
   virtual void AddToKillQueue(short id, bool now);  // 800F6690
   virtual void ClearKillQueue();  // 800F69B0
   virtual RET_UNKNOWN IsFamilyMemberAwakeAndVisible();  // 800F69BC

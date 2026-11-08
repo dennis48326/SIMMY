@@ -307,8 +307,19 @@ void R2LTarget::onSummaryDialogZeroInputCallback() { m_dialogActive = 0; }
 // 801DCE84
 void R2LTarget::onSummaryDialogDialogClosedCallback() { m_dialogActive = 0; }
 
+// 801DA670
+// qsort's order of two relationship records: by the first names (wcscmp), ties by the last names.
+RET_UNKNOWN sort_records_by_name(void* a, void* b) {
+  if (a == b) return 0;
+  const R2LTarget::Record& ra = *static_cast<const R2LTarget::Record*>(a);
+  const R2LTarget::Record& rb = *static_cast<const R2LTarget::Record*>(b);
+  if (ra.first != rb.first) return ra.first < rb.first ? -1 : 1;
+  if (ra.last != rb.last) return ra.last < rb.last ? -1 : 1;
+  return 0;
+}
+
 // 801DBE40
-// The selected sim's relationships (PlayerRelatedPeople), sorted by first name, the first selected.
+// The selected sim's relationships (PlayerRelatedPeople), sorted by name, the first selected.
 void R2LTarget::SetupRelationships() {
   m_records.clear();
   cXPerson* person = _globals.GetSelectedPerson(m_player);  // DAT_80475E88
@@ -329,8 +340,10 @@ void R2LTarget::SetupRelationships() {
     rec.level = r.level;
     m_records.push_back(std::move(rec));
   }
-  // sort_records_by_name
-  std::sort(m_records.begin(), m_records.end(), [](const Record& a, const Record& b) { return a.first < b.first; });
+  // qsort with sort_records_by_name.
+  std::sort(m_records.begin(), m_records.end(), [](const Record& a, const Record& b) {
+    return sort_records_by_name(const_cast<Record*>(&a), const_cast<Record*>(&b)) < 0;
+  });
   if (!m_records.empty()) ChangeSelection(0);
 }
 

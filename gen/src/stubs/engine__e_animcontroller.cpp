@@ -13,7 +13,6 @@ void EAnimController::ComputeInverse(EMat4 &, int) { SIMMY_STUB("EAnimController
 void EAnimController::PrepareForCollision(EMat4 &) { SIMMY_STUB("EAnimController::PrepareForCollision(EMat4 &)", 0x802EA28C); }
 void EAnimController::PostMultNodeAndDescendents(int, EMat4 &) { SIMMY_STUB("EAnimController::PostMultNodeAndDescendents(int, EMat4 &)", 0x802EA2CC); }
 void EAnimController::PreMultNodeAndDescendents(int, EMat4 &) { SIMMY_STUB("EAnimController::PreMultNodeAndDescendents(int, EMat4 &)", 0x802EA404); }
-void EAnimController::CalcTightBoundBox(EMat4 &, EBound3 &, bool *) { SIMMY_STUB("EAnimController::CalcTightBoundBox(EMat4 &, EBound3 &, bool *)", 0x802EA53C); }
 void EAnimController::CallbackIntermediateComputeMatrices(EMat4 &) { SIMMY_STUB("EAnimController::CallbackIntermediateComputeMatrices(EMat4 &)", 0x802EB53C); }
 void EAnimController::TransferTrack(eTrackFlags, eTrackFlags) { SIMMY_STUB("EAnimController::TransferTrack(eTrackFlags, eTrackFlags)", 0x802EC6E8); }
 void EAnimController::SetStaticBlendTrackAnim(eTrackFlags, unsigned int, float, int, float, EACTrack *) { SIMMY_STUB("EAnimController::SetStaticBlendTrackAnim(eTrackFlags, unsigned int, float, int, float, EACTrack *)", 0x802ECAF8); }
@@ -27,12 +26,8 @@ void EAnimController::SetTrackBlendHermiteSafe(eTrackFlags, float, float, float,
 RET_UNKNOWN EAnimController::SetTrackBlendHermite(eTrackFlags, float, float, float, float) { SIMMY_STUB("EAnimController::SetTrackBlendHermite(eTrackFlags, float, float, float, float)", 0x802EE6F8); return {}; }
 void EAnimController::SetTrackPhase(eTrackFlags, float) { SIMMY_STUB("EAnimController::SetTrackPhase(eTrackFlags, float)", 0x802EEEC0); }
 RET_UNKNOWN EAnimController::GetTrackFrameCount(eTrackFlags) { SIMMY_STUB("EAnimController::GetTrackFrameCount(eTrackFlags)", 0x802EF374); return {}; }
-double EAnimController::GetTrackFrame(eTrackFlags) { SIMMY_STUB("EAnimController::GetTrackFrame(eTrackFlags)", 0x802EF4DC); return {}; }
 void EAnimController::ClearTrackAnimComplete(eTrackFlags) { SIMMY_STUB("EAnimController::ClearTrackAnimComplete(eTrackFlags)", 0x802EFAC0); }
 RET_UNKNOWN EAnimController::VisibilityTest(EMat4 &) { SIMMY_STUB("EAnimController::VisibilityTest(EMat4 &)", 0x802EFF38); return {}; }
-void EAnimController::CalcVisibilitySphere(EMat4 &, EBoundSphere &) { SIMMY_STUB("EAnimController::CalcVisibilitySphere(EMat4 &, EBoundSphere &)", 0x802EFFCC); }
-RET_UNKNOWN EAnimController::CalcNodePos(int) { SIMMY_STUB("EAnimController::CalcNodePos(int)", 0x802F0428); return {}; }
-RET_UNKNOWN EAnimController::GetNodeMatrix(int) { SIMMY_STUB("EAnimController::GetNodeMatrix(int)", 0x802F0678); return {}; }
 void EAnimController::SetNodeIgnoreAnimatedVisibility(int, bool) { SIMMY_STUB("EAnimController::SetNodeIgnoreAnimatedVisibility(int, bool)", 0x802F0A30); }
 void EAnimController::SetNodeVisible(int, bool) { SIMMY_STUB("EAnimController::SetNodeVisible(int, bool)", 0x802F0A8C); }
 void EAnimController::CalcBillinearCoeff(float, float, float, float &, float &, float &, float &) { SIMMY_STUB("EAnimController::CalcBillinearCoeff(float, float, float, float &, float &, float &, float &)", 0x802F0CCC); }

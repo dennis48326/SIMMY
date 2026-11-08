@@ -605,10 +605,12 @@ void ObjectFolderImpl::SaveUserData(iResFile* file) {
 }
 
 // 800EF9E8
-// A new CAS-made sim: a new GUID, the next 'User' id, a default look.
+// A new CAS-made sim: a new GUID, the next 'User' id, a default look. GC: the GUID is
+// StubObject::MakeNewGUID (80145D58: the performance counter, the time and date and rand() xor-ed, not
+// checked against the GUIDs in use). PC: the next free one from 0x70000001, so a game plays the same on
+// every machine and replay (the determinism rules: no clock in the simulation) and never clashes.
 ObjSelector* ObjectFolderImpl::CreateNewUserSelector() {
   static unsigned int s_next = 0x70000000u;
-  SIMMY_STUB("ObjectFolderImpl::CreateNewUserSelector: StubObject::MakeNewGUID", 0x800EF9E8);
   unsigned int guid = ++s_next;
   while (GetSelectorByGUID(static_cast<int>(guid))) guid = ++s_next;
   ObjSelector* selector = AddUserSelector(static_cast<int>(guid), ++m_lastUserResId);

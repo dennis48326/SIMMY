@@ -777,8 +777,11 @@ int cXObjectImpl::TrySetBalloon(StackElem* frame, const unsigned char* params) {
     slot->SetSprite(1, sprite, 1, (flags >> 10) & 1);
   }
   if (flags & 0x2000) {
-    SIMMY_STUB("cXObjectImpl::TrySetBalloon: the alternation period (cXObject vtable 0x274)", 0x800FBA00);
-    slot->AlternateWithSprite(0, 500);
+    // Alternating with the balloon: the period (ms) is the tree's object's temp 0 (cXObject vtable
+    // 0x274, GetTemp), 500 when not positive.
+    int period = static_cast<int>(GetTemp(0));
+    if (period < 1) period = 500;
+    slot->AlternateWithSprite(0, period);
   }
   // IconGroup::GetBalloonSpriteID (800BCC68): types 0..2 are group 1's icons 0..2.
   {

@@ -2,7 +2,7 @@
 // happy curves, service NPC records, the action queue, its primitives: animate, routing, motive deltas,
 // idle for input, ...), the family put on the lot, and PC stand-ins for the action menu. Autonomy is in
 // autonomy.cpp, social mode in socialmode.cpp, wants and fears in wantfear.cpp; see person.hpp. Still
-// stubbed here: Reset (8011EB78), reaching.
+// stubbed here: reaching.
 #include "simmy/types_gen.hpp"
 #include "simmy/classes/placement.hpp"
 #include "simmy/unported_globals.hpp"
@@ -77,7 +77,7 @@ void cXPersonImpl::Initialize() {
   // weight curves (once).
   if (!m_motiveEffects) {
     m_motiveEffects = new MotiveEffects(this);
-    LoadMotiveEffects();  // PC: GC loads them in Reset (8011EB78, not ported) and PostLoad
+    LoadMotiveEffects();  // PC: GC loads them in Reset and PostLoad (a person made out of the world also gets Reset)
   }
   if (!sHappyCurvesSetup) InitializeStaticMemory();
   if (m_animator) {
@@ -911,8 +911,8 @@ void cXPersonImpl::CompleteCurrentAction() {
 
 // 8012A04C
 // `object` is going (null: everything is): a person running one of its trees on the stack (a gosub
-// object) or doing an action with it as the queue icon lets go: its stack back to the main tree, its
-// animation stopped, data 0x22 / 9 cleared, the current action completed. Then the queued actions on
+// object) or doing an action with it as the queue icon lets go: its animator reset, data 0x22 / 9
+// cleared, its stack back to the main tree, its cleanup tree (entry 3) run, the current action completed. Then the queued actions on
 // `object` (stack or icon object) go; the current one is completed, or loses its icon. Misc flag 0x800
 // guards against cleaning up twice. GC: also the selected person's interactor told (social mode left,
 // the player's input reset), the routes' slots and the sprite slot, a person off the world put back
@@ -932,10 +932,18 @@ void cXPersonImpl::Cleanup(cXObject* object) {
     involved = true;
   if (involved) {
     m_gosubObjects.clear();
-    if (m_animator) m_animator->stopCurAnim(false);
+    if (m_animator) {
+      // PC: the current animation stopped first (GC stops the animation controller's tracks after,
+      // unless misc flag 0x40); then SetPixelated(0), Reset and ResetSuits (vtable 0xAC, 0x2C, 0x34).
+      m_animator->stopCurAnim(false);
+      m_animator->SetPixelated(0);
+      m_animator->Reset();
+      m_animator->ResetSuits();
+    }
     m_data.WriteVar(0x22, 0);
     m_data.WriteVar(9, 0);
     if (m_treeSim) m_treeSim->Reset(GetBehavior(), GetTreeID(1));
+    RunTree(3, 0, nullptr);  // its cleanup tree (entry 3) at once (cXObject vtable 0x104)
     CompleteCurrentAction();
     const std::string who = DebugName();
     std::printf("[sim] %s lets go of %s (cleanup)\n", who.c_str(), impl ? impl->DebugName() : "everything");
@@ -2493,9 +2501,35 @@ void MoveFamilyOntoLot(EHouse* house) {
 
 }
 
+// 8011EB78
+// A person's reset: its person data cleared but the visitor flag (0x20), 0x22, 0x23, the age (0x3A) and
+// gender (0x41), then its neighbour's persistent data again (LoadPersistentData), its suits reset, the
+// object reset (Reset(run): the init tree, a tick of the main tree), its animator reset, the social-mode
+// waits and its idle-animate count cleared, and its motive effects loaded.
+void cXPersonImpl::Reset(bool run) {
+  const short kept[5] = {m_personData[0x20], m_personData[0x22], m_personData[0x23], m_personData[0x3a],
+                         m_personData[0x41]};
+  for (int i = 0; i < 0x50; ++i) m_personData[i] = 0;
+  m_personData[0x22] = kept[1];
+  m_personData[0x20] = kept[0];
+  m_personData[0x23] = kept[2];
+  m_personData[0x3a] = kept[3];
+  m_personData[0x41] = kept[4];
+  if (Globs_pNeighborhood) Globs_pNeighborhood->LoadPersistentData(this);  // vtable 0xEC
+  if (m_animator) m_animator->ResetSuits();
+  cXObjectImpl::Reset(run);
+  if (m_animator) m_animator->Reset();
+  m_waitingForSocialMode = 0;
+  m_idleAnimateCount = -0x8000;
+  m_firstInSocialMode = 0;
+  m_secondInSocialMode = 0;
+  LoadMotiveEffects();
+}
+
 // GC: ObjectModuleImpl::MakeNewOutOfWorldObject (ConstructObject: a cXPersonImpl for the type-2
-// selector), AddObject (the module's people), JustBorn and Reset(true) (the init tree at once), with
-// the neighbour found by Initialize (LoadPersistentData). PC: the people live in the module's ids after
+// selector), AddObject (the module's people), JustBorn and Reset(true) (the init tree and a tick of the
+// main tree at once, before the creator's "init visitor"), with the neighbour found by Initialize
+// (LoadPersistentData). PC: the people live in the module's ids after
 // the objects (AddPersonToModule) and are freed with the family (RemoveFamilyFromLot).
 cXPersonImpl* MakeNeighborPerson(Neighbor* n, ObjSelector* selector) {
   if (!n || !selector || !Globs_pNeighborhood) return nullptr;
@@ -2508,8 +2542,8 @@ cXPersonImpl* MakeNeighborPerson(Neighbor* n, ObjSelector* selector) {
   g_lotPeople.push_back(person);
   AddPersonToModule(person);
   person->Initialize();
-  person->StartBehavior();
-  if (const short init = person->GetTreeID(0)) person->m_treeSim->Gosub(person->GetBehavior(), nullptr, init);
+  person->StartBehavior();  // PC: the tree sim, the sim flag on (GC: Initialize, MakeNewOutOfWorldObject's SetSimFlag)
+  person->Reset(true);      // its init tree at once and one tick of its main tree
   {
     char first[32] = {};
     const CasSimDescriptionS2C* d = person->m_desc;

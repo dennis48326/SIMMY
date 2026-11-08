@@ -108,7 +108,7 @@ drawn, full screen (`GameData::SetBuildBuyPlayer`, `ELiveMode::DrawMain`).
 | # | What | Code | Pad (GC semantics from the ELF) |
 |---|---|---|---|
 | 6 | Place a new object | `PlaceManipulator`, `PlacementObject` (placemanipulator.cpp) | stick moves a tile, A place (0), B cancel (4), L/R rotate (0x13/0x14 -> 5/6) |
-| 2 | Grab mode (move/sell placed objects) | `GrabManipulator` | A grab/drop, X sell (0x2E -> 1), several objects under the cursor -> grab menu (`CreateGrabObjectMenu`) |
+| 2 | Grab mode (move/sell placed objects) | `GrabManipulator` | A grab/drop, X sell (0x2E -> 1); the objects it may pick up near the cursor glow (`ObjectManipulator::UpdateObjectHighlights` 80219C74), A takes the lit one, several -> grab menu (`CreateGrabObjectMenu`) |
 | 3 | Walls and fences | `WallManipulator` ([`wallmanipulator.cpp`](../src/game/wallmanipulator.cpp)) | A anchors, second A builds, B lets go/leaves, trigger held = room, Y next tool |
 | 4 | Wallpaper | `WallPainter` ([`wallpainter.cpp`](../src/game/wallpainter.cpp)) | as above |
 | 5 | Floors | `FloorPainter` ([`floorpainter.cpp`](../src/game/floorpainter.cpp)) | as above |
@@ -163,13 +163,34 @@ flags; run on every room update (`PrepareForBudgetWindow`), each day (0xD8) and 
 
 - The story starts lot 9 with 0 simoleons: nothing is affordable and the wall builder's A does nothing.
   Use `SIMMY_FUNDS=<n>` (on the lot) or `SIMMY_BUY_FUNDS=<n>` (when the catalogue opens) in tests.
-- New objects get GC's fixed default data and their init tree run at once (PC stand-in for
-  `MakeNewOutOfWorldObject`'s Initialize/Reset), or placement flags are 0 in paused buy mode.
+- New objects get GC's default data, their init tree and one tick of their main tree at once
+  (`MakeNewOutOfWorldObject`'s Initialize and `Reset(true)`, [simulation.md](simulation.md)), so their
+  placement flags are set in paused buy mode.
+- Grab mode lights, with nothing in hand, every object instance whose bounds meet the square of the
+  selection radius (0.35..1 tile with the zoom) about the cursor's tile centre and that may be picked up
+  (data 0x22 0, `UserCanPickup`); while the grab menu is open only its current object. A grabs the lit
+  objects (`GetObjectsInRect`; PC: a multi-tile object once, by its lead).
+- Doors and windows dress their wall: placing one (`cXPortalImpl::Place` 8012FDD0 -> `ApplyWallStyle`
+  8012FE1C) gives the wall it needs on each part's tile its definition's wall style (+0x5C: 3 for most,
+  the style the wall model, the router, the collision map and the wall tool read as "a door or window is
+  here"); picking it up (`cXPortalImpl::Pickup` 801302B0, also when it is killed) puts style 1 (plain)
+  back; both dirty the routes. As on GC this happens while the object follows the buy cursor too. PC
+  guard: lifting a door off another door's wall leaves that wall (GC's grid object keeps the door from
+  being placed there; see below). `SIMMY_PLACE_TRACE=1` prints each wall styled.
+- A wall delete whose rooms fail the check (`FinalizeWallDel` 80220570) removes instead the whole wall
+  run holding the line (`ERoom::DeleteERoomWallContainingSegment` 8002FEAC, `FindWallContainingSegment`,
+  `ERoomWall::HasSegment` / `RemoveWallsFromWorld` / `DeleteWallAtTile` 8002F84C..8002FBEC; HasSegment does
+  not look at the run's first tile, as on GC) and checks again; still failing, nothing is deleted.
+- An object on a person (data 4 flag 0x20, data 2 its holder) is placed at the holder's bone 0 height
+  (`GetHeightOffset` 8004C7F0, 0.001..1) and, when the holder has an instance, it and what it holds are
+  drawn as carried (cursor flags 0xC0). PC guard: not when data 2 names the object itself (the template
+  person does). Trash piles have the flag and no holder (height 0).
 - Objects contained in another's slot (object data 2/3) are drawn at the container's slot offset
   (`ISimsObjectModel`, isimsobjectmodel.cpp; `SIMMY_SLOT_OFFSET_OFF=1` to compare, `SIMMY_SLOT_TRACE=1`). A
   multi-tile container's side with room (`IsLegalToPlaceSingleTileAtLocation`) is not chosen.
-- The grid tile object (GUID 0x437) cannot be constructed by the port's object module; its model is drawn
-  directly.
+- The grid tile object (GUID 0x437, `PlacementObject::CreateGridTile` 8021B27C and helpers) is not made;
+  its model is drawn directly. GC places the held object only where its grid object may go
+  (`PlacementObject::Place` 8021BEE4); the port places it anyway and shades it.
 - The build tools' cursors and previews (`InteractorVisualizer`, interactorvisualizer.cpp; drawn through the
   house's order table like the other interactors: `SetupDrawCallback` -> `BuildToolPreDraw`, the record's
   callback -> `BuildToolDraw`, buildtools.cpp). Floor tool: the cursor's two models; with the trigger the
@@ -180,8 +201,9 @@ flags; run on every room update (`PrepareForBudgetWindow`), each day (0xD8) and 
   (`DrawPreviewOnAffectedWalls`). Wallpaper tool: the anchor and brush models; dragging, the paper on the wall
   sides it would cover (`DrawWallpaperRectPreview`) and the strip (red when none), with the trigger the
   paper round the room (`ERoom/ERoomWall::DrawWallpaperPreview`). The models are drawn in
-  `Player::GetInteractorColor` (1, 1, 3). PC deviation: `DrawVerticalRect` sends EGEVerts
-  (`ERC::TriStrip(EGEVert*)`; the arrays variant of `ERC::TriStrip` is not ported).
+  `Player::GetInteractorColor` (1, 1, 3). `DrawVerticalRect` sends its strip as arrays
+  (positions, uvs and normals allocated from the context) through `ERC::TriStrip(int, float*, ...)`
+  (802F68EC; immediate contexts draw it at once, `ENgcRC::TriStrip` 80338484).
 - A wall holding a door or window is not deleted (GC: `ERoom::DeleteWallAtTile` 8002FF8C asks
   `KillArchitecturalObject` 80030104 without killing; the object's GUID is returned and the wall stays).
 - Room wallpaper (the wall painter with the trigger held): `CountWallsInRoomSelection` 802256FC /

@@ -8,7 +8,6 @@ RET_UNKNOWN GetAutonomyConstantsClient() { SIMMY_STUB("GetAutonomyConstantsClien
 void ObjectRecord::DoStream(ReconBuffer *, int) { SIMMY_STUB("ObjectRecord::DoStream(ReconBuffer *, int)", 0x8011ACFC); }
 void cXPersonImpl::EORDrawStickFigure(int) { SIMMY_STUB("cXPersonImpl::EORDrawStickFigure(int)", 0x8011AD64); }
 void cXPersonImpl::GetNextQueueStr(int) { SIMMY_STUB("cXPersonImpl::GetNextQueueStr(int)", 0x8011AD9C); }
-void cXPersonImpl::Reset(bool) { SIMMY_STUB("cXPersonImpl::Reset(bool)", 0x8011EB78); }
 RET_UNKNOWN cXPersonImpl::TryGetReachInfo(StackElem *, XPrimParam *, cXObject **, cXObject **, int *, float *) { SIMMY_STUB("cXPersonImpl::TryGetReachInfo(StackElem *, XPrimParam *, cXObject **, cXObject **, int *, float *)", 0x8012479C); return {}; }
 RET_UNKNOWN cXPersonImpl::TryReach(StackElem *, XPrimParam *) { SIMMY_STUB("cXPersonImpl::TryReach(StackElem *, XPrimParam *)", 0x801249F4); return {}; }
 RET_UNKNOWN cXPersonImpl::NetTrySnapTo(StackElem *, XPrimParam *) { SIMMY_STUB("cXPersonImpl::NetTrySnapTo(StackElem *, XPrimParam *)", 0x80124A4C); return {}; }

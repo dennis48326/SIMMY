@@ -3,7 +3,6 @@
 
 RET_UNKNOWN operator>>(EStream &, ISimsObjectModel *&) { SIMMY_STUB("operator>>(EStream &, ISimsObjectModel *&)", 0x8004C480); return {}; }
 RET_UNKNOWN operator>>(EFile &, ISimsObjectModel *&) { SIMMY_STUB("operator>>(EFile &, ISimsObjectModel *&)", 0x8004C4C0); return {}; }
-double ISimsObjectModel::GetHeightOffset() { SIMMY_STUB("ISimsObjectModel::GetHeightOffset(void)", 0x8004C7F0); return {}; }
 void ISimsObjectModel::SetPosStatic(EVec3 &, float) { SIMMY_STUB("ISimsObjectModel::SetPosStatic(EVec3 &, float)", 0x8004EB6C); }
 void ISimsObjectModel::SetOutOfWorld() { SIMMY_STUB("ISimsObjectModel::SetOutOfWorld(void)", 0x8004ED20); }
 void ISimsObjectModel::StartBurp(int) { SIMMY_STUB("ISimsObjectModel::StartBurp(int)", 0x8004ED24); }

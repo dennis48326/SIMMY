@@ -175,7 +175,7 @@ struct UIScreenManager : UIObjectBase {
   bool RemoveScreen(int id);  // 8017FEF8
   int GetScreenFlashName(char* out, int id);  // 8017FF44
   bool IsUIScreenUnloaded(int id);  // 8018003C
-  static bool IsUIScreenMarkedForUnloading(UIScreenID);  // 80180068
+  bool IsUIScreenMarkedForUnloading(int id);  // 80180068
   int SetHandlesInput(int id, bool handles);  // 801800BC
   void SetVariable(char* name, char* value) override;  // 8018019C
   void Update() override;  // 80180274

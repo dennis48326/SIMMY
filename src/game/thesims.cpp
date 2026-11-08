@@ -570,6 +570,9 @@ void TheSimsMainMenuState::Update(float) {
       Reset();
       return;
     }
+    // GC: GameData::GamePlayShutdown (8003B1E4: Globs::pHouse cleared, NeighborhoodImpl::Unload). Not
+    // ported: the PC's ELiveMode::QuitToMainMenu (8008DC90) does not yet free the house, its objects and
+    // people, which still point at the neighbours; unloading them here crashed the next game.
     SIMMY_STUB("TheSimsMainMenuState::Update: GameData::GamePlayShutdown", 0x80098838);
     OwnerSetNextState(TheSimsStateMachine::kEnterMainMenu, 0.0f);
     return;

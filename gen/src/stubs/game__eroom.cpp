@@ -24,11 +24,6 @@ double ERoom::GetOccludeAlpha(int, int) { SIMMY_STUB("ERoom::GetOccludeAlpha(int
 RET_UNKNOWN ERoom::IsRoomRoofOpaque(int, int) { SIMMY_STUB("ERoom::IsRoomRoofOpaque(int, int)", 0x8002E324); return {}; }
 void ERoom::CalRoofOpaque(int) { SIMMY_STUB("ERoom::CalRoofOpaque(int)", 0x8002E380); }
 void ERoom::CalShortDistToCam(int) { SIMMY_STUB("ERoom::CalShortDistToCam(int)", 0x8002E74C); }
-RET_UNKNOWN ERoomWall::HasSegment(TileWallsSegment, CTilePt &, CTilePt &) { SIMMY_STUB("ERoomWall::HasSegment(TileWallsSegment, CTilePt &, CTilePt &)", 0x8002F84C); return {}; }
-RET_UNKNOWN ERoomWall::DeleteWallAtTile(CTilePt &) { SIMMY_STUB("ERoomWall::DeleteWallAtTile(CTilePt &)", 0x8002FA34); return {}; }
-void ERoomWall::RemoveWallsFromWorld() { SIMMY_STUB("ERoomWall::RemoveWallsFromWorld(void)", 0x8002FBEC); }
-RET_UNKNOWN ERoom::FindWallContainingSegment(TNodeList<ERoomWall *> &, TileWallsSegment, CTilePt &, CTilePt &) { SIMMY_STUB("ERoom::FindWallContainingSegment(TNodeList<ERoomWall *> &, TileWallsSegment, CTilePt &, CTilePt &)", 0x8002FD08); return {}; }
-RET_UNKNOWN ERoom::DeleteERoomWallContainingSegment(TileWallsSegment, CTilePt &, CTilePt &) { SIMMY_STUB("ERoom::DeleteERoomWallContainingSegment(TileWallsSegment, CTilePt &, CTilePt &)", 0x8002FEAC); return {}; }
 void EIWallPart::RegisterType(unsigned short) { SIMMY_STUB("EIWallPart::RegisterType(unsigned short)", 0x800305A8); }
 void EIWallPart::CreateCopy() const { SIMMY_STUB("EIWallPart::CreateCopy(void) const", 0x800305FC); }
 RET_UNKNOWN EIWallPart::IsDiagonal() { SIMMY_STUB("EIWallPart::IsDiagonal(void)", 0x80030624); return {}; }

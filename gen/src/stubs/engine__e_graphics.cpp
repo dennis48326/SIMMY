@@ -1,7 +1,6 @@
 // GENERATED stubs for unported functions of engine/e_graphics.cpp. Do not edit.
 #include "simmy/types_gen.hpp"
 
-void EGraphics::DeselectTextures() { SIMMY_STUB("EGraphics::DeselectTextures(void)", 0x802F1034); }
 void EGraphics::DoSwapBuffer(int) { SIMMY_STUB("EGraphics::DoSwapBuffer(int)", 0x802F11A8); }
 void EGraphics::DoSetupFrameBuffer(int) { SIMMY_STUB("EGraphics::DoSetupFrameBuffer(int)", 0x802F11AC); }
 void EGraphics::LoadSystemFont() { SIMMY_STUB("EGraphics::LoadSystemFont(void)", 0x802F1BB8); }
