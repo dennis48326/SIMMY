@@ -258,6 +258,14 @@ void GameData::GamePlayReset() {
   SIMMY_STUB("GameData::GamePlayReset: EMemoryMeterWin::Init", 0x8003B22C);
 }
 
+// 8003B1E4
+// Back at the main menu after a game (TheSimsMainMenuState::Update): no current house, and the
+// neighbourhood unloaded (its neighbours, user selectors and families).
+void GameData::GamePlayShutdown() {
+  _globals.m_house = nullptr;  // DAT_80475E94
+  if (Globs_pNeighborhood) Globs_pNeighborhood->Unload();  // GetImpl (vtable 0x194), then Unload
+}
+
 // 8003B8F8
 // The house to enter: the player family's; a family not yet in a house (a new game) takes the start
 // lot (its goal data told, GC), any other case lot 9 in story mode (else the start lot). The
@@ -677,20 +685,28 @@ void EHouse::UpdateRoomAmbient(LevelLightingEntry& entry) {
 }
 
 // 80024CFC
+// The house's object instances leave the level, its room lights, walls and floors go, the level's
+// light grid and room count are reset and the level released; the rain goes. The objects themselves
+// (the object module's) are killed before (ELiveMode::QuitToMainMenu, the change of house); the
+// interactors go with InteractorModule::ShutdownInteractorModule.
 void EHouse::Cleanup() {
-  if (m_objectMan) {
-    if (m_level) m_objectMan->RemoveObjectsFromHouse(m_level);
-    delete m_objectMan;
-    m_objectMan = nullptr;
-  }
-  ShutdownDirectInteractors();  // PC (GC: InteractorModule::ShutdownInteractorModule)
-  RemoveFamilyFromLot();  // PC: the people MoveFamilyOntoLot made (GC: the object module's)
+  if (m_objectMan && m_level) m_objectMan->RemoveObjectsFromHouse(m_level);
+  // PC: the people MoveFamilyOntoLot made (person.cpp's list owns them; GC: the object module's, so they
+  // are gone with KillAllObjects before the house goes and this finds none).
+  RemoveFamilyFromLot();
+  CleanUpRoomLights();
   DestroyWalls();
   EIFloor::DestroyFloors();
-  // PC: the level resource outlives the house here (GC freed it), so its wall range is cleared for
-  // the next house built on it (after quitting to the main menu).
-  if (m_level) m_level->ClearWallIndexSaves();
+  if (m_objectMan) {
+    delete m_objectMan;
+    m_objectMan = nullptr;  // (GC leaves the pointer: the house is being deleted)
+  }
   if (m_level) {
+    m_level->InitializeLightingGrid();
+    m_level->SetRoomCount(0);
+    // PC: the level resource outlives the house here (GC freed it), so its wall range is cleared for
+    // the next house built on it (after quitting to the main menu).
+    m_level->ClearWallIndexSaves();
     if (_pEngine->m_currentLevel == m_level) _pEngine->m_currentLevel = nullptr;
     m_level->DelRef();
     m_level = nullptr;
@@ -698,6 +714,10 @@ void EHouse::Cleanup() {
   m_model = nullptr;
   m_field10 = 1;
   m_ready = 0;
+  if (m_rain) {
+    delete m_rain;
+    m_rain = nullptr;
+  }
 }
 
 // 80024430
@@ -883,20 +903,52 @@ void ELiveMode::Init(int arg) {
   _gd.m_fieldC8 = 0;  // DAT_80475C4C
 }
 
+namespace {
+// The heaps compacted, as ELiveMode::Reset does before and after (GC: each EAHeap::Compact, then the
+// next check point).
+void CompactLiveModeHeaps() {
+  for (EAHeap* heap : {RootHeap(), MainHeap(), ResourceHeap(), AudioHeap(), VMHeap(), ShaderHeap(), TextureHeap(),
+                       AnimationHeap(), ModelHeap(), FlashesHeap(), AptHeap(), DebugHeap(), CUIHeap()})
+    heap->Compact();
+  EAHeap::SetNextCheckPoint();
+}
+}  // namespace
+
 // 8008CA58
-// Leaving live mode: the house and everything the level used.
+// Leaving live mode (EGameStateMan::KillState: the main menu, the wardrobe's CAS, the ending movie): the
+// heaps compacted, the sounds fade (mode 3), the level's global data goes, the vibration stops, the
+// plumb bobs and interactors go, the house (EHouse) is deleted, the kill queue, the folder's unused data,
+// the people's static curves, the particles and effects, the folder's caches and the rooms are cleared.
 void ELiveMode::Reset(int) {
-  SIMMY_STUB("ELiveMode::Reset: heaps, plumb bobs, interactors, objects, particles, effects, rooms", 0x8008CA58);
+  CompactLiveModeHeaps();
   SoundFadeOutAndSetMode(cSoundPlayer::kLoading);
+  UnloadLevelGlobalData();
+  // GC: DAT_80475F2C = 0 (written here, by LiveModeInitState and the main menu; never read).
+  if (_globals.m_vibrate) _globals.m_vibrate->StopAllVibration();  // GC: DAT_80475EDC unchecked
   if (m_shader) {
     m_shader->DelRef();
     m_shader = nullptr;
   }
-  _globals.m_cam = nullptr;
-  delete _globals.m_house;
-  _globals.m_house = nullptr;
+  PlumbBob::ShutdownAll();
+  InteractorModule::ShutdownInteractorModule();
+  _globals.m_cam = nullptr;  // DAT_80475E9C
+  if (_globals.m_house) {
+    delete _globals.m_house;
+    _globals.m_house = nullptr;
+  }
   m_dontDraw = 1;
   m_initialized = 0;
+  if (Globs_pObjectModule) Globs_pObjectModule->ClearKillQueue();  // vtable 0x284
+  ObjectFolderImpl* folder = Globs_pObjectFolder;
+  if (folder) folder->FreeUnusedData();  // vtable 0x44 (PC: stub, the folder keeps its data loaded)
+  cXPersonImpl::CleanupStaticMemory();
+  // GC: PSystemIsEmpty on each (its result unused: a debug check), then each is cleaned.
+  for (psystem* sys : {g_pParticleSystem, g_pParticleWeatherSystem, g_pParticleModelSystem})
+    if (sys) PSystemClean(sys);
+  Effects__EffectsManager::GetSingleton()->DeleteAll();
+  if (folder) folder->ClearAllCaches();  // vtable 0xCC (PC: stub, no per-selector caches)
+  if (Globs_pRoomManager) Globs_pRoomManager->ResetRoomManager();
+  CompactLiveModeHeaps();
 }
 
 // 8008DC40
@@ -908,20 +960,26 @@ void ELiveMode::GotoStartMode() {
 }
 
 // 8008DC90
-// Back to the main menu once the loading screen is up: the game state goes (Reset tears the house
-// down) and InLevelBaseState returns to the front end (DAT_80475C18).
+// Back to the main menu once the loading screen is up: the plumb bobs, every object (the people too),
+// the interactors and the house's family go, the players' cached models are freed, the sounds quieted;
+// InLevelBaseState returns to the front end (DAT_80475C18), the live mode is left (KillState: Reset
+// deletes the house) and the simulator is stopped (mode 0) and paused.
 void ELiveMode::QuitToMainMenu() {
   _gd.m_field90 = 0;  // DAT_80475C14
+  if (auto* viewer = static_cast<AptViewer*>(_globals.m_aptViewer)) viewer->m_field3A8 = 0;  // GC: unchecked
   m_leaving = 0;
-  if (auto* viewer = static_cast<AptViewer*>(_globals.m_aptViewer)) viewer->m_field3A8 = 0;
-  SIMMY_STUB("ELiveMode::QuitToMainMenu: PlumbBob::ShutdownAll, the object module (vtable 0x68), "
-             "Globs::pHouse (vtable 0x90), the simulator (vtable 0x88 with 0, 0x50); the interactors "
-             "go with the house (EHouse::Cleanup)",
-             0x8008DC90);
+  PlumbBob::ShutdownAll();
+  if (Globs_pObjectModule) Globs_pObjectModule->KillAllObjects();  // vtable 0x6C
+  InteractorModule::ShutdownInteractorModule();
+  if (Globs_pHouse) Globs_pHouse->SetFamilyToNull();  // vtable 0x94
   ESim::DeletePlayerCachedModel();
   if (Globs_pSound) Globs_pSound->QuietAll();
   _gd.m_field94 = 1;  // DAT_80475C18
   _app.m_gameStates->KillState();
+  if (Globs_pSimulator) {
+    Globs_pSimulator->SetMode(cSimulator__Mode{0});  // vtable 0x8C
+    Globs_pSimulator->Pause();                       // vtable 0x54
+  }
 }
 
 // 8008DD70

@@ -720,6 +720,15 @@ EMat4 g_cameraDummyMat[2];
 EMat4 g_cameraObjectMat[2];
 }  // namespace
 
+// Part of ObjectModuleImpl::KillAllObjects (800F5E78): each player's pending camera animation released.
+void ReleasePendingCameraAnims() {
+  for (unsigned int& anim : sCameraAnimPending)
+    if (anim != 0) {
+      _animman.DelRefAsync(anim);
+      anim = 0;
+    }
+}
+
 // 80106D7C
 // Primitive 0x28, camera control. Operands: +0 the shot (0 cut, 1 interpolate, 2 release to the game
 // camera, 3 interpolate to it), +1 the animation in a two-player game (else +3), +2 what the shot looks

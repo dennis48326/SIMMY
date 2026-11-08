@@ -1,7 +1,6 @@
 // GENERATED stubs for unported functions of game/gamedata.cpp. Do not edit.
 #include "simmy/types_gen.hpp"
 
-void GameData::GamePlayShutdown() { SIMMY_STUB("GameData::GamePlayShutdown(void)", 0x8003B1E4); }
 void TMtraceNull(...) { SIMMY_STUB("TMtraceNull(...)", 0x8003B2AC); }
 void DrawNoCtrlMessage(ERC *, unsigned short *) { SIMMY_STUB("DrawNoCtrlMessage(ERC *, unsigned wchar_t *)", 0x8003CA54); }
 RET_UNKNOWN GameData::IsDrawCtrlMessageDisabled() { SIMMY_STUB("GameData::IsDrawCtrlMessageDisabled(void)", 0x8003CE7C); return {}; }

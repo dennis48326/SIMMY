@@ -13,6 +13,7 @@
 //
 // --headless skips the window and GPU so the boot path can run without a display.
 // Graphics settings (simmy.ini, --window, --resolution, --aspect, ...) are read by pc_settings.cpp.
+#include "simmy/version.hpp"
 #include "simmy/types_gen.hpp"
 #include "simmy/platform.hpp"
 #include "simmy/unported_globals.hpp"
@@ -513,7 +514,13 @@ static bool open_game_data(const std::string& dataDir) {
 }
 
 int main(int argc, char* argv[]) {  // aurora/main.h renames this to aurora_main
+  for (int i = 1; i < argc; ++i)
+    if (std::strcmp(argv[i], "--version") == 0) {
+      std::printf("%s\n", SIMMY_PORT_VERSION);  // include/simmy/version.hpp
+      return 0;
+    }
   std::fprintf(stderr, "[simmy] main\n");
+  std::fprintf(stderr, "[simmy] %s\n", SIMMY_PORT_VERSION);
   // Unbuffered logs, so nothing is lost if the process is killed or crashes.
   std::setvbuf(stdout, nullptr, _IONBF, 0);
   std::setvbuf(stderr, nullptr, _IONBF, 0);
@@ -595,6 +602,9 @@ int main(int argc, char* argv[]) {  // aurora/main.h renames this to aurora_main
       if (std::getenv("SIMMY_GPU_DEBUG")) config.logLevel = LOG_DEBUG;
     }
     const AuroraInfo info = aurora_initialize(argc, argv, &config);
+    // The window's title carries the port's version (appName stays "SIMMY": aurora also names the
+    // user and cache folders after it).
+    if (SDL_Window* win = aurora_get_window()) SDL_SetWindowTitle(win, SIMMY_PORT_VERSION);
     std::fprintf(stderr, "[gfx] backend in use: %s\n", simmy::settings_backend_name(info.backend));
     simmy::settings_after_init(simmy::dev_options().offscreen);
     // The window opens centred (settings_apply_config). If it is taller than the screen's work

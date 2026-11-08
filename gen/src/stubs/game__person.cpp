@@ -2,7 +2,6 @@
 #include "simmy/types_gen.hpp"
 
 void ActionQueue::DisableHUDAccess(int) { SIMMY_STUB("ActionQueue::DisableHUDAccess(int)", 0x8011A714); }
-void cXPersonImpl::CleanupStaticMemory() { SIMMY_STUB("cXPersonImpl::CleanupStaticMemory(void)", 0x8011A90C); }
 void MotiveInc::DoStream(ReconBuffer *, int) { SIMMY_STUB("MotiveInc::DoStream(ReconBuffer *, int)", 0x8011A984); }
 RET_UNKNOWN GetAutonomyConstantsClient() { SIMMY_STUB("GetAutonomyConstantsClient(void)", 0x8011A9E0); return {}; }
 void ObjectRecord::DoStream(ReconBuffer *, int) { SIMMY_STUB("ObjectRecord::DoStream(ReconBuffer *, int)", 0x8011ACFC); }

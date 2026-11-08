@@ -112,6 +112,10 @@ struct PassiveInfluenceSystem {
   int SetInfluenceMotiveDelta(cXObject* object, unsigned char motive, float delta, short limit);  // 80114E1C
   int ClearInfluenceMotiveDeltas(cXObject* object);  // 801150A0
   bool SetSkillNameID(cXObject* object, const AnimRef* skill);  // 8011513C
+  // PC: an object being freed stops being a target and is forgotten by the targets it influenced (GC:
+  // cXObjectImpl::SetLocation's MoveObjectInWorld drops a target when its object leaves the world, which
+  // a killed object does first; the port's SetLocation does not call it). Called by ~cXObjectImpl.
+  void ForgetObject(cXObject* object);
 
   static PassiveInfluenceSystem* s_passiveInfluenceSystem;
 

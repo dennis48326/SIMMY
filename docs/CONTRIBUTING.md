@@ -63,6 +63,17 @@ A new system that fits no page: add a page, link it from [README.md](README.md)'
   accessors**, **ids not pointers in 32-bit game data slots**: see [README.md](README.md#rules-for-new-code-summary-details-on-each-page).
 - **New `SIMMY_*` switches** are off by default and documented in [testing.md](testing.md).
 
+## Port version
+
+The port's version lives in one place: [`include/simmy/version.hpp`](../include/simmy/version.hpp).
+For each delivery change `SIMMY_PORT_BUILD` (e.g. `"build df"`) and `SIMMY_PORT_DATE`
+(`"YYYY-MM-DD"`); `SIMMY_PORT_VERSION` ("SIMMY port - build df (2026-11-08)") is made from them.
+It shows in the game window's title (window 2's too), SimmyLauncher's title bar and home page (top
+right), the first log lines of both (`[simmy] SIMMY port - ...`, `[launcher] SIMMY port - ...`, and
+each launch in `simmy_launcher_log.txt`), and `simmy --version` / `SimmyLauncher --version` print it.
+Keep it plain ASCII (a hyphen, not an em dash). The launcher's `.rc` file version (1.0.0.0) is the
+Windows file version, not this one.
+
 ## Checking links
 
 After editing, check that every relative link resolves, e.g.:

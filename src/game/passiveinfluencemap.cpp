@@ -314,6 +314,19 @@ void PassiveInfluenceSystem::FlushSystem() {
     PassiveInfluenceMap::s_passiveInfluenceMap->EmptyMap();
 }
 
+void PassiveInfluenceSystem::ForgetObject(cXObject* object) {
+  for (auto it = m_targets.begin(); it != m_targets.end();) {
+    PassiveInfluenceTarget* t = *it;
+    if (t->GetObject() == object) {
+      it = m_targets.erase(it);
+      delete t;
+      continue;
+    }
+    t->m_applied.remove_if([object](const PassiveInfluenceTarget::Applied& a) { return a.m_object == object; });
+    ++it;
+  }
+}
+
 // 80113F3C
 // Nothing is saved: the objects' load trees put their influences back.
 void PassiveInfluenceSystem::DoStream(ReconBuffer*, int) {}

@@ -17,6 +17,9 @@
 
 ObjectModuleImpl* Globs_pObjectModule = nullptr;  // 804FDC08 Globs::pObjectModule
 
+void ForgetLotPerson(cXObjectImpl* object);  // person.cpp
+void ReleasePendingCameraAnims();            // objectsim.cpp
+
 namespace {
 constexpr int kObjectModuleResType = 0x4f626a4d;  // 'ObjM'
 int s_loadedVersion = 0;  // PC: the version Load read (GC: HouseImpl::LoadFile passes it to PostLoad)
@@ -39,15 +42,29 @@ ObjectModuleImpl::ObjectModuleImpl() {}
 ObjectModuleImpl::~ObjectModuleImpl() { KillAllObjects(); }
 
 // 800F5E78
-// GC: each object is removed from the simulation (its instance, the object map, the people).
+// The players' pending camera animations released, then every object killed (KillObject: its people let
+// go of it, a selected person hands the selection on, its instance freed, its tile and links cleared)
+// while the module is killing all (+0x208C: KillObject neither recalculates the house nor tells the
+// room); the id and sim-flag lists cleared, the marked sprites removed, the passive influences flushed.
 void ObjectModuleImpl::KillAllObjects() {
-  RemoveFamilyFromLot();  // PC: the lot's people first (person.cpp's list owns them; they leave the module there)
-  while (m_first) {
-    cXObjectImpl* next = m_first->m_nextObject;
-    delete m_first;
-    m_first = next;
+  ReleasePendingCameraAnims();
+  m_killingAll = 1;
+  while (cXObjectImpl* first = m_first) {  // GetFirst (vtable 0x98)
+    KillObject(static_cast<short>(first->GetID()));  // vtable 0x58
+    if (m_first == first) {
+      // PC guard: an object KillObject cannot find by its id (not expected) is unlinked and freed here.
+      m_first = first->m_nextObject;
+      ForgetLotPerson(first);
+      delete first;
+    }
   }
+  m_killingAll = 0;
   m_byId.clear();
+  m_simFlags.clear();
+  // PC: the lot's people were in the module, so KillObject freed them; this only clears the family-on-lot
+  // flag and the players' selected persons (person.cpp).
+  RemoveFamilyFromLot();
+  ESpriteRenderMan::Instance()->RemoveMarkedSprites();  // DAT_80475ED8 (PC: made on first use)
   if (PassiveInfluenceSystem* influence = Globs_pSimulator ? Globs_pSimulator->GetPassiveInfluenceSystem() : nullptr)
     influence->FlushSystem();
 }
@@ -641,7 +658,6 @@ void ObjectModuleImpl::CleanupPeople(cXObject* object) {
   for (cXPersonImpl* p : people) p->Cleanup(object);
 }
 
-void ForgetLotPerson(cXObjectImpl* object);  // person.cpp
 
 // 800F5668
 // GC: also its room's lighting and impact (data 7), multi-tile parts, the house recalculated for
@@ -651,7 +667,7 @@ void ObjectModuleImpl::KillObject(short id) {
   cXObjectImpl* impl = object ? object->GetObjectImplementation() : nullptr;
   if (!impl) return;
   static int logged = 0;
-  if (logged++ < 20) std::printf("[vm] %s killed\n", impl->DebugName());
+  if (!m_killingAll && logged++ < 20) std::printf("[vm] %s killed\n", impl->DebugName());
   ObjPortalPartKilled(impl);  // GC: Pickup (vtable 0x12C): a door's or window's wall back to plain
   // GC: Pickup (cXMTObjectImpl::Pickup 800C63E4): a dynamic part leaves its group first
   // (RemoveFromDynamic: the rest and it learn their neighbours). PC: GC's Pickup then picks up the parts
@@ -682,10 +698,25 @@ void ObjectModuleImpl::KillObject(short id) {
       oi->m_data.WriteVar(0x1a, 0);
       oi->m_data.WriteVar(0xe, -1);
     }
-    if (auto* person = oi->GetType() == 2 ? dynamic_cast<cXPersonImpl*>(oi) : nullptr)
+    if (auto* person = oi->GetType() == 2 ? dynamic_cast<cXPersonImpl*>(oi) : nullptr) {
       for (auto& g : person->m_gosubObjects)
         if (g.m_object == impl) g.m_object = nullptr;
+      // GC ~cXPersonImpl (8011C77C): every person aware of a dying person forgets it
+      // (SAnimator2::GetAwareOfObject, ClearAwareOfObject: only an awareness a tree or the other sim set).
+      if (impl->GetType() == 2 && person->m_animator && person->m_animator->GetAwareOfObject() == object)
+        person->m_animator->ClearAwareOfObject(object);
+    }
   }
+  // GC ~cXPersonImpl (8011C77C) deletes a person's animator (+0x3F4) before its instance
+  // (EGlobal::DestroyInstance): the animator's awareness manager ends its reaction on the ESim's
+  // animation (MemoryAwarenessClearAction) and its props and particles hang on the ESim's model. PC: the
+  // instance goes here, before the person is deleted, so the animator goes first here too (it read and
+  // could write the freed ESim on every visitor or service NPC leaving the lot).
+  if (impl->GetType() == 2)
+    if (auto* person = dynamic_cast<cXPersonImpl*>(impl)) {
+      delete person->m_animator;
+      person->m_animator = nullptr;
+    }
   if (impl->m_instance && _globals.m_house && _globals.m_house->m_objectMan)
     _globals.m_house->m_objectMan->FreeSimsObjectInstance(impl->m_instance);
   impl->m_instance = nullptr;
@@ -734,6 +765,10 @@ void ObjectModuleImpl::AddToKillQueue(short id, bool now) {
     m_killQueue.push_back(i);
   }
 }
+
+// 800F69B0
+// The kill queue emptied (its objects are not killed). GC: from ELiveMode::Reset.
+void ObjectModuleImpl::ClearKillQueue() { m_killQueue.clear(); }
 
 namespace {
 // PC development aid: SIMMY_SAVE_SELFTEST=<tick> writes every object's stream (the lot save's

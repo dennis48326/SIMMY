@@ -44,6 +44,10 @@ struct AwarenessManager {
   void Init(SAnimator2* animator, EAnimController* anim);  // 80011F4C
   void Reset();  // 80012034
   ~AwarenessManager();  // 800120EC
+  // PC: the destructor's work done early (its memory action cleared, the passive-influence animation
+  // stopped) while the person's instance and its animation controller still exist, then nothing is left to
+  // do: ObjectModuleImpl::KillObject frees a person's instance before the person.
+  void Release();
   void AwarenessCheck(unsigned int animState);  // 80012140
   void handleAwarenessAnimations(unsigned int animState);  // 8001220C
   static void SetIsRaining(bool raining);  // 80012250

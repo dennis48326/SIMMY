@@ -13,7 +13,9 @@ data, its Flash movies and much of its code.
 - Front end: the players screen offers two players only when two controllers are connected
   (`MMU_Is_Two_Player_Enabled`, uiscreens.cpp); the choice calls `GameData::SetTwoPlayerMode`
   (UIDB `TwoPlayerGame`, **`_gd.m_fieldEC` = DAT_80475C70**, the two-player flag everything tests,
-  often through a local `TwoPlayers()` helper).
+  often through a local `TwoPlayers()` helper). Entering the main menu (`TheSimsEnterMainMenuState::Reset`
+  80097EF0) sets it back to one player, so a co-op game quit to the menu does not leak into the next game
+  (`SIMMY_TWO_PLAYER=1` turns it on again at the pre-game).
 - Dev: `SIMMY_TWO_PLAYER=1` sets it in `PreGameState` (pregame.cpp); the launcher's "quick co-op" adds it
   with `SIMMY_CAS_ACCEPT=300` and `SIMMY_SKIP_INTRO=1`.
 - Pre-game: player 1's CAS, then player 2's roommate (`PreGameState::InsertPlayer2Roommate` 800948D4:

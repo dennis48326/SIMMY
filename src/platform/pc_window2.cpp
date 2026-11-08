@@ -21,6 +21,7 @@
 //
 // Offscreen runs (tests) have no windows: a "virtual" second window of the window2= size (default
 // the first window's) takes part in the layout, and screenshots also write what each window would show.
+#include "simmy/version.hpp"
 #include "pc_window2.hpp"
 
 #include "simmy/platform.hpp"
@@ -191,7 +192,7 @@ void Open() {
   int x = 0, y = 0;
   Place(static_cast<int>(w), static_cast<int>(h), x, y);
   SDL_PropertiesID props = SDL_CreateProperties();
-  SDL_SetStringProperty(props, SDL_PROP_WINDOW_CREATE_TITLE_STRING, "SIMMY - Player 2");
+  SDL_SetStringProperty(props, SDL_PROP_WINDOW_CREATE_TITLE_STRING, SIMMY_PORT_VERSION " - Player 2");
   SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_X_NUMBER, x);
   SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_Y_NUMBER, y);
   SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_WIDTH_NUMBER, static_cast<int>(w));

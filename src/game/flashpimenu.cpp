@@ -27,11 +27,17 @@ std::string Narrow(const std::u16string& s) {
   return out;
 }
 
+// The object is still one of the module's (GC: compares pointers along the object list; the object
+// itself is not read, it may be gone: the go-here object of a game quit to the main menu).
 bool InModule(cXObjectImpl* object) {
   if (!object || !Globs_pObjectModule) return false;
-  if (object->GetType() == 2) return Globs_pObjectModule->GetObjectFromID(object->m_id) == object;  // PC: people by id
   for (cXObjectImpl* o = Globs_pObjectModule->m_first; o; o = o->m_nextObject)
     if (o == object) return true;
+  // PC: the lot's people by id too.
+  for (int id = 1; id <= Globs_pObjectModule->GetNumObjects(); ++id) {
+    cXObject* x = Globs_pObjectModule->GetObjectFromID(static_cast<short>(id));
+    if (x && x->GetObjectImplementation() == object) return true;
+  }
   return false;
 }
 

@@ -853,6 +853,22 @@ bool GetPlayerInteractorInfo(int player, InteractorModule__InteractorInfo& info)
   return true;
 }
 
+// 80210464
+// The camera manager's two cameras cleared, the interactor manager shut down (the players' interactor
+// sets, the visualizer, the input manager). PC: there is no CameraManager (CameraManager::GetCamera is
+// the player's camera, _gd.m_players[p].m_cam, which the players keep); the interactor manager is the
+// PC's stand-ins (direct and classic interactors, manipulators and build tools, social mode).
+void InteractorModule::ShutdownInteractorModule() {
+  // PC: each player's action menu (FlashPiMenu, kept by the Player across games) forgets its go-here
+  // object, killed with the house's objects (GC keeps the pointer and only compares it with the next
+  // game's objects; a new object at the same address would be killed in its place).
+  for (Player& p : _gd.m_players)
+    if (p.m_piMenu) p.m_piMenu->m_destination = nullptr;
+  ShutdownPlaceManipulators();
+  ShutdownSocialInteractors();
+  ShutdownDirectInteractors();
+}
+
 void ShutdownDirectInteractors() {
   for (auto*& d : s_direct) {
     if (d) d->OnStop();

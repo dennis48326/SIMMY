@@ -12,7 +12,6 @@ RET_UNKNOWN ObjectModuleImpl::GetObjectByGUID(int) { SIMMY_STUB("ObjectModuleImp
 void ObjectModuleImpl::KillOutOfWorldObject(short, bool) { SIMMY_STUB("ObjectModuleImpl::KillOutOfWorldObject(short, bool)", 0x800F50FC); }
 RET_UNKNOWN ObjectModuleImpl::PostSim(bool) { SIMMY_STUB("ObjectModuleImpl::PostSim(bool)", 0x800F59B4); return {}; }
 void ObjectModuleImpl::KillObjectsOutsideBounds(int, int, int, int) { SIMMY_STUB("ObjectModuleImpl::KillObjectsOutsideBounds(int, int, int, int)", 0x800F60CC); }
-void ObjectModuleImpl::ClearKillQueue() { SIMMY_STUB("ObjectModuleImpl::ClearKillQueue(void)", 0x800F69B0); }
 RET_UNKNOWN ObjectModuleImpl::DoCommand(short, int) { SIMMY_STUB("ObjectModuleImpl::DoCommand(short, int)", 0x800F6AB4); return {}; }
 void ObjectModuleImpl::PreviewAnimation(short, short, short, bool) { SIMMY_STUB("ObjectModuleImpl::PreviewAnimation(short, short, short, bool)", 0x800F6C48); }
 RET_UNKNOWN ObjectModuleImpl::ForceAllLocations() { SIMMY_STUB("ObjectModuleImpl::ForceAllLocations(void)", 0x800F6DDC); return {}; }

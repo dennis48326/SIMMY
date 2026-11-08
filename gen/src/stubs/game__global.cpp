@@ -7,7 +7,6 @@ bool EGlobal::IsObjectInUseByPlayer(int, cXObject *) { SIMMY_STUB("EGlobal::IsOb
 void EGlobal::LoadPreGlobalRequirements() { SIMMY_STUB("EGlobal::LoadPreGlobalRequirements(void)", 0x8003ECA8); }
 void EGlobal::SetupSubstitutionStrings() { SIMMY_STUB("EGlobal::SetupSubstitutionStrings(void)", 0x8003F0D4); }
 void EGlobal::Reset() { SIMMY_STUB("EGlobal::Reset(void)", 0x8003F450); }
-void EGlobal::ClearCurHouse() { SIMMY_STUB("EGlobal::ClearCurHouse(void)", 0x8003F968); }
 void EGlobal::SelectWin(ERC *) { SIMMY_STUB("EGlobal::SelectWin(ERC *)", 0x8003F9AC); }
 RET_UNKNOWN EGlobal::GetWin() { SIMMY_STUB("EGlobal::GetWin(void)", 0x8003F9FC); return {}; }
 RET_UNKNOWN EGlobal::TransformToScreen(EVec3 &, EVec2 &) { SIMMY_STUB("EGlobal::TransformToScreen(EVec3 &, EVec2 &)", 0x8003FA2C); return {}; }

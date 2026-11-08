@@ -46,11 +46,39 @@ on any global destructor running.
 Benign noise at the end of a log: aurora's `Buffer mapping Aborted` (staging buffers destroyed with a
 pending map) and Dawn's `Device lost: Device was destroyed`.
 
-Quit to the main menu (not a process exit): pause -> options -> quit -> card screen confirm ->
-flow MainMenu -> `InLevelBaseState::HandleExitToMainMenu` -> `ELiveMode::QuitToMainMenu` (8008DC90,
-partly stubbed: plumb bobs, object module, house, cached model, simulator calls) -> the house is torn
-down by `EHouse::Cleanup` when the state is killed. `EGlobal::SetDefaults` runs again at the main menu
-(build-set tables are looked up again on PC; `ERLevel::ClearWallIndexSaves` resets the wall range).
+Quit to the main menu (not a process exit): pause -> options -> Quit -> "save before quitting?"
+(yes saves first, no goes on) -> flow MainMenu -> `InLevelBaseState::HandleExitToMainMenu` (the pause
+menu, HUD and memory card targets go; quit request DAT_80475C20) -> once the loading screen is up,
+`ELiveMode::QuitToMainMenu` (8008DC90), all as on GC and in this order:
+
+1. `PlumbBob::ShutdownAll`; `ObjectModuleImpl::KillAllObjects` (800F5E78: pending camera animations
+   released, every object, people included, through `KillObject` with the "killing all" flag (+0x208C: no
+   house recalculation), id and sim-flag lists cleared, marked sprites removed, passive influences flushed);
+2. `InteractorModule::ShutdownInteractorModule` (80210464; PC: the stand-in interactors, place/grab
+   manipulators, build tools and social-mode state; there is no CameraManager to clear);
+3. `HouseImpl::SetFamilyToNull`, `ESim::DeletePlayerCachedModel`, `cSoundPlayer::QuietAll`, DAT_80475C18;
+4. `EGameStateMan::KillState` -> `ELiveMode::Reset` (8008CA58): heaps compacted, sounds fade (mode 3),
+   `UnloadLevelGlobalData`, vibration off, the shader, plumb bobs and interactors again, the camera,
+   `delete EHouse` (`EHouse::Cleanup` 80024CFC: instances out of the level, room lights, walls, floors, the
+   instance manager, the level's light grid and room count, the level, the rain), the kill queue, the
+   folder's unused data (stub), `cXPersonImpl::CleanupStaticMemory`, the particle systems, all effects, the
+   folder's caches (stub), the room manager;
+5. the simulator `SetMode(0)` and `Pause`.
+
+Back on the front end, `TheSimsEnterMainMenuState::Reset` (80097EF0) clears the two-player mode and the
+new-game / free-play / author-mode flags; `EGlobal::SetDefaults` runs again (build-set tables are looked up
+again on PC; `ERLevel::ClearWallIndexSaves` resets the wall range); `TheSimsMainMenuState::Update`
+(80098838) clears a leftover quit request and, when the game returns to it, calls
+`GameData::GamePlayShutdown` (8003B1E4): no current house, `NeighborhoodImpl::Unload` (neighbours, user
+selectors, families). The next New Game or load reads the neighbourhood afresh. PC additions: the players'
+model cache is emptied again on the way to the menu; a freed object stops being a passive-influence
+target (`PassiveInfluenceSystem::ForgetObject`; GC drops it when it leaves the world); `KillObject` lets a
+person's awareness release the animation controller before its instance goes; each player's action menu
+(`FlashPiMenu`, kept by the `Player` across games) forgets its go-here object, and its module check
+compares pointers only, as GC (it read the freed object: a crash when the next game's first action menu
+closed after a co-op quit). Start is refused while the player's camera director letterboxes a shot (GC),
+so a game cannot be quit during the lot's intro camera (that left the next game's loading screen "in
+progress" and every pad ignored).
 
 ## Crash capture (Windows, [`pc_crash_win.cpp`](../src/platform/pc_crash_win.cpp))
 

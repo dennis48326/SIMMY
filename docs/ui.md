@@ -93,7 +93,7 @@ variables, the clock in UIDB, pause counting (`IncPause`/`ReleasePause`), the ac
 targets `m_mod`, `m_csm`, `m_mot`, `m_skl`, `m_waf`, `m_act`, `m_int` (arrays of 2), runs them in a fixed
 per-frame order (side panels every sixth update), and handles the d-pad side panels (left motives, up
 skills, right wants and fears, down closes), Start (`H2D_PAUSE`: sets `PlayerNumber`,
-`Player1FirstName`... from the **selected** sim's neighbour), B cancel (`UpdateCancelButton`),
+`Player1FirstName`... from the **selected** sim's neighbour; refused while the player's camera director letterboxes a shot, `+0x234`, e.g. the lot's intro camera, as on GC), B cancel (`UpdateCancelButton`),
 `SelectedPersonChanged`, `NewWantFearIcon`, `SetMoodMeterValue`. The hourglass (`CXM_hourglass_swf`) shows
 while the CXM list is closed and the selected sim waits (`GetIdleState() == 3`) or routes
 (`CSMTarget::Update` 801A6E00).

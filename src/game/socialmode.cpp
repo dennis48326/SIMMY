@@ -54,6 +54,15 @@ bool SocialModeChooseAction(int player, const MenuInteraction* m) {
 }
 bool PlayerInSocialMode(int player) { return player >= 0 && player < 2 && s_interactor[player].active; }
 
+// PC: part of InteractorManager::DestroyPlayerInteractorSets (GC: the social-mode interactor, 7, goes with
+// the player's interactor set): no player is left in social mode.
+void ShutdownSocialInteractors() {
+  for (int p = 0; p < 2; ++p) {
+    s_interactor[p] = SocialInteractor{};
+    s_autoPicks[p] = 0;
+  }
+}
+
 // 8012B82C
 void cXPersonImpl::SetFirstPlayerInSocialMode(bool on) { m_firstInSocialMode = on ? 1 : 0; }
 // 8012B834

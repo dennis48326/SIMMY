@@ -86,6 +86,14 @@ AwarenessManager::~AwarenessManager() {
   StopPassiveInfluenceAnimation();
 }
 
+void AwarenessManager::Release() {
+  if (!m_animator) return;
+  MemoryAwarenessClearAction();
+  StopPassiveInfluenceAnimation();
+  m_animator = nullptr;
+  m_anim = nullptr;
+}
+
 // 80012140
 // A person in the world with its model, the simulator running: the memory check (not under player
 // control), the passive influences, the rain and the head's target.

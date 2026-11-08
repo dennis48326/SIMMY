@@ -360,6 +360,10 @@ void SetLocation(cXObjectImpl* o, const int pos[2], int level) {
   o->m_level = level;
   UpdateObjectRoomID(o);  // 800DF784: ResolveRoomID, data 0x1D
   InfluenceMapObjectArrived(o);
+  // 800DF784: an object that moved out of the world (both coordinates negative: picked up, being
+  // killed) closes a player's pie menu that lists it (HUDTarget::NotifyMenuRemoveObj, DAT_80475BC8).
+  if ((was[0] != pos[0] || was[1] != pos[1]) && pos[1] < 0 && pos[0] < 0 && _gd.m_hudTarget)
+    _gd.m_hudTarget->NotifyMenuRemoveObj(o);
   PassiveInfluenceLocationChanged(o, was[0], was[1]);
 }
 

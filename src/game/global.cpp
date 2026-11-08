@@ -270,6 +270,15 @@ void EGlobal::AllocPersonInstance(cXPerson* person) {
     if (cXObjectImpl* impl = object->GetObjectImplementation()) impl->m_instance = sim;
 }
 
+// 8003F968
+// The current house deleted (EHouse::Cleanup) and cleared.
+void EGlobal::ClearCurHouse() {
+  if (m_house) {
+    delete m_house;
+    m_house = nullptr;
+  }
+}
+
 // 8003FA24
 // The current director (+0xE0); each player's own stays at +0x118.
 void EGlobal::SetCameraDirector(CameraDirector* director) { m_cameraDirector = director; }

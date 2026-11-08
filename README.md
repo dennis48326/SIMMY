@@ -164,7 +164,9 @@ work if you keep them). The launcher:
 Mouse, keyboard (arrows, Enter, Esc) and controllers (D-pad / stick, A, B) all work. Test switches:
 `--screenshot out.bmp [--page home|coop|options|playing|error] [--frames N] [--scale S]`,
 `--test-iso <file>`, `--game-exe <file>`, `--fake-pads N`, `--auto-launch play|coop`,
-`--write-icon <dir>` (renders the plumbob icon; `src/launcher/res/simmy_launcher.ico` is made from it).
+`--write-icon <dir>` (renders the plumbob icon; `src/launcher/res/simmy_launcher.ico` is made from it),
+`--version` (prints the port's version and exits; the version is set in `include/simmy/version.hpp`,
+see [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md#port-version)).
 
 **Renderer test:** `simmy.exe --iso D:\Games\Sims2.iso --render-test` draws, through the game's own
 render context and renderer, the two shaders startup loads (the background gradient full screen and
@@ -177,6 +179,7 @@ Development options:
 --screenshot N out.bmp   save frame N as a BMP (uses aurora's EFB readback)
 --frames N               quit after N frames
 --offscreen              render without a window (tests, CI)
+--version                print the port's version ("SIMMY port - build df (2026-11-08)") and exit
 ```
 
 ## Graphics settings

@@ -178,14 +178,23 @@ Details are in the audit reports. In short:
    800C7434, `RemoveFromDynamic` 800C7240, `ObjectsAtTile` 800C6EBC). Left: buy-mode placement and the
    merge after load (mtobject.cpp `PostLoad`).
 5. **Vehicles.** Ported (see Low priority). The taxi on lot 9 and the carpool are type 0xC.
-6. **Neighbourhood unload.** A real gap, blocked. GC `TheSimsMainMenuState::Update` (80098838) calls
-   `GameData::GamePlayShutdown` (8003B1E4: `Globs::pHouse` = 0, `NeighborhoodImpl::Unload`) when a game
-   returns to the menu. Ported and run (story start, pause > options > quit > "No", then New Game): the
-   next game crashed, because the PC's `ELiveMode::QuitToMainMenu` (8008DC90) still leaves the house, its
-   object module and people alive (stub: `PlumbBob::ShutdownAll`, object module vtable 0x68, house vtable
-   0x90, simulator vtable 0x88) and those people point at the unloaded neighbours. Reverted to the stub; the
-   same run without it plays on (the next game's `NeighborhoodImpl::Load` unloads first, so no stale family
-   survives). Port `QuitToMainMenu`'s teardown first, then `GamePlayShutdown`.
+6. **Neighbourhood unload.** **Done** (sA). `ELiveMode::QuitToMainMenu` (8008DC90) is ported whole
+   (`PlumbBob::ShutdownAll`, `ObjectModuleImpl::KillAllObjects`, `InteractorModule::ShutdownInteractorModule`
+   80210464, `HouseImpl::SetFamilyToNull`, `ESim::DeletePlayerCachedModel`, `QuietAll`, `KillState`, the
+   simulator's `SetMode(0)` and `Pause`), with `ELiveMode::Reset` (8008CA58), `EHouse::Cleanup`
+   (80024CFC), `ObjectModuleImpl::KillAllObjects` (800F5E78: every object through `KillObject`),
+   `ClearKillQueue` (800F69B0), `cXPersonImpl::CleanupStaticMemory` (8011A90C), `EGlobal::ClearCurHouse`
+   (8003F968), `ChangeHouseUnloadHouse::Reset` (8008CE14), `TheSimsEnterMainMenuState::Reset` (80097EF0) and
+   `GameData::GamePlayShutdown` (8003B1E4) from `TheSimsMainMenuState::Update` (80098838). Checked: quit then
+   New Game, quit then load the same / another memory card, many cycles in one process (1P and co-op),
+   from build mode and the buy catalogue; ASan clean. The base crash after quit + New Game was a stale
+   passive-influence target (a freed person): `~cXObjectImpl` now drops it
+   (`PassiveInfluenceSystem::ForgetObject`, PC); `KillObject` lets a person's awareness release its
+   animation before freeing its instance (`AwarenessManager::Release`, PC; ASan). The HUD's Start now
+   refuses the pause while the camera director letterboxes a shot (GC `+0x234` check): quitting during the
+   lot's intro camera left the next game's loading screen "in progress" and every pad ignored. Each
+   player's `FlashPiMenu` forgets its go-here object at the quit and checks the module by pointer only
+   (a co-op quit soak crashed on the freed go-here object).
 7. **`EShader::ChangeMaterial`** (802FA390). No caller in the release build (the vtable slot is never
    called); ported anyway (12 words and `UpdateMaterialCoefficients`).
 8. **Input held back.** Not a gap: stick input given while the pause menu is open (200 frames) or while the

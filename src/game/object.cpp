@@ -67,8 +67,10 @@ cXObjectImpl::~cXObjectImpl() {
   delete[] m_attrs;
   delete[] m_sprites;
   delete m_relations;
-  if (PassiveInfluenceSystem* influence = Globs_pSimulator ? Globs_pSimulator->GetPassiveInfluenceSystem() : nullptr)
+  if (PassiveInfluenceSystem* influence = Globs_pSimulator ? Globs_pSimulator->GetPassiveInfluenceSystem() : nullptr) {
     influence->RemoveObjectFromMap(this);
+    influence->ForgetObject(this);  // PC (see passiveinfluence.hpp)
+  }
   // GC: the interaction influence map keeps the object unless ValidateMissing says otherwise (it never
   // does). PC: it is taken out of every tile so the map holds no freed object.
   if (InfluenceMap* map = Globs_pFixedWorld ? Globs_pFixedWorld->GetInfluenceMap() : nullptr) map->ForgetObject(this);

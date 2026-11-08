@@ -413,11 +413,20 @@ static void dev_pad_seq(PADStatus* pads, const char* seq) {
                 g2d ? g2d->m_state : -1);
   }
   if (_globals.m_house && houseSince < 0) houseSince = _framecount;
+  if (!_globals.m_house) houseSince = -1;  // (quit to the main menu: the next `house` waits for the next one)
   if (step >= steps.size()) return;
   std::string names = steps[step];
   if (names == "house") {
     if (houseSince >= 0 && _framecount - houseSince >= 120) {
       std::printf("[padseq] frame %d: house loaded\n", _framecount);
+      if (EController* pad = _pCtrlMan ? _pCtrlMan->GetController(0) : nullptr) {
+        std::printf("[padseq] load in progress %d; players mapped %d:%d %d:%d; pad 1 filters:",
+                    LoadingScreenStateMachine::LoadInProgress() ? 1 : 0, _pCtrlMan->GetPlayerMapped(0),
+                    _pCtrlMan->GetPlayerControllerIndex(0), _pCtrlMan->GetPlayerMapped(1), _pCtrlMan->GetPlayerControllerIndex(1));
+        for (int i = 0; i <= pad->m_topFilter && i < 32; ++i)
+          std::printf(" %u/%x", pad->m_filters[i].m_id, pad->m_filters[i].m_mask);
+        std::printf("\n");
+      }
       ++step;
       lastPress = _framecount;
       lastPressSec = now;

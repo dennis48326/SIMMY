@@ -2,7 +2,6 @@
 #include "simmy/types_gen.hpp"
 
 void InteractorModule::InitializeInteractorModule() { SIMMY_STUB("InteractorModule::InitializeInteractorModule(void)", 0x80210260); }
-void InteractorModule::ShutdownInteractorModule() { SIMMY_STUB("InteractorModule::ShutdownInteractorModule(void)", 0x80210464); }
 void InteractorModule::GetObjectPosition(EVec3 *, cXObject *) { SIMMY_STUB("InteractorModule::GetObjectPosition(EVec3 *, cXObject *)", 0x80210634); }
 void InteractorModule::GetCameraRelativeStickAngle(EVec2 &, ESimsCam *, float *) { SIMMY_STUB("InteractorModule::GetCameraRelativeStickAngle(EVec2 &, ESimsCam *, float *)", 0x80210804); }
 RET_UNKNOWN InteractorModule::IsPosOutsideWorld(EVec3 &) { SIMMY_STUB("InteractorModule::IsPosOutsideWorld(EVec3 &)", 0x8021109C); return {}; }

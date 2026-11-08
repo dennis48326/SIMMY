@@ -12,6 +12,11 @@ summary and the deliberate GC behaviour.
 
 - Stale header comments (they say "not ported" for ported code): livemode.cpp, hudtarget.hpp,
   aptviewer.cpp, `thesims.cpp`'s NewState comment.
+- One co-op soak (lot 9, seed 7, build mL) segfaulted once at frame ~32000 with no stack and never
+  again (6 gdb reruns, 3 soaks). Build df found and fixed a use after free on every visitor/NPC kill
+  (the person's animator was deleted after its ESim; it could write the freed animation tracks), the
+  likeliest cause; the crash itself was not reproduced in the build df soaks ([testing.md](testing.md),
+  sim-switch stress knobs).
 
 ## Simulation
 
@@ -63,9 +68,17 @@ summary and the deliberate GC behaviour.
   are PC stand-ins (the interactors are tied to the PC keyboard/mouse and co-op layers). Checked: a
   Create-a-Family family of 3 appears whole (the lot's load trees make every member), and stick input is
   held back while the pause menu or a modal dialog is up.
-- Quitting to the main menu: the house, its objects and people stay until the next game's load
-  (`ELiveMode::QuitToMainMenu` 8008DC90 partial), so `GameData::GamePlayShutdown` (8003B1E4: neighbourhood
-  unload) is not called yet; the next game's neighbourhood load unloads the old one.
+- Quitting to the main menu tears the game down as on GC (`ELiveMode::QuitToMainMenu` 8008DC90,
+  `ELiveMode::Reset` 8008CA58, `GameData::GamePlayShutdown` 8003B1E4: see
+  [shutdown-and-crashes.md](shutdown-and-crashes.md)). Still stubbed on that path (memory only, nothing
+  reads what they would free): `ObjectFolderImpl::FreeUnusedData` / `ClearAllCaches` (the PC folder keeps
+  every selector's data loaded and has no per-selector anim-table caches), `Path::DeallocateAllPathData`
+  (the PC route walker keeps no space partition), `GameData::StageInitTiming` (loading meter timing).
+  The interactor manager is a PC stand-in, so `InteractorModule::ShutdownInteractorModule` (80210464)
+  shuts down the PC's interactors, manipulators, build tools and social-mode state instead.
+  Memory: quit -> New Game cycles keep RSS flat after the second game (~0.2 MB a cycle); soaks that
+  re-enter a lot from the development menu grew more (co-op 107 -> 144 MB over five re-entries), not
+  chased.
 
 ## UI
 
@@ -125,6 +138,10 @@ pad motor through `EVibrate` and aurora's `PADControlMotor` (one on/off motor, a
   both players (in both windows with `split=windows`).
 - `ProcessFrameEffects` and EGraphics bloom/blur parameters are empty in the release build.
 - "call of undefined method" in movies is silent (`SIMMY_APT_WARN=1` to see).
+- Signed integer wraparound the GC code relies on (UBSan reports it; PowerPC and x86 wrap the same):
+  the particle random seed (`psystem.cpp`), `SAnimator2::Update`'s event frame (a looping animation
+  with no duration stores its overshoot as the fraction and doubles each frame, as on GC), the social
+  interest fixed-point step (`cXPersonImpl::IncrementSimSocialInterest`).
 
 ## Known limitations of PC features
 

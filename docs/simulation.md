@@ -203,7 +203,12 @@ or an autonomy check during an action does not change what the running tree read
   visitor).
 - **Killing a person** (`ObjectModuleImpl::KillObject`, GC `KillOutOfWorldObject` 800F50FC): a player's
   selected person hands the selection on (`AdvanceSelectedPerson`; none left: no selection) before the
-  other people clean up after it (`CleanupPeople`).
+  other people clean up after it (`CleanupPeople`); every person aware of it forgets it (GC
+  `~cXPersonImpl` 8011C77C: `GetAwareOfObject` / `ClearAwareOfObject`), and its animator is deleted
+  before its ESim (GC order: the animator's awareness clean-up still uses the ESim's animation; the port
+  used to free the ESim first, a use after free on every visitor or service NPC leaving, found by an
+  ASan co-op soak). An object moving out of the world (picked up, or queued for killing) closes a pie
+  menu that lists it (`cXObjectImpl::SetLocation` 800DF784 -> `HUDTarget::NotifyMenuRemoveObj` 80188CC4).
 - **Load** (`PostLoad` 8011EC7C): a placeholder person is cleaned up and killed, saves before 0x32 lose
   object relationships to people, the motive effects are loaded, a dying person (a frame of tree 0x189 on
   its stack, `IsPersonDying` 8012B784) is not drawn. `Initialize` also redraws all wants and fears when the

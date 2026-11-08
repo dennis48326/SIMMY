@@ -678,7 +678,9 @@ void H2DTarget::SetVariable(char* name, char* value) {
         UIDB::UIDBSetString(const_cast<char*>(p == 0 ? "Player1LastName" : "Player2LastName"), last);
       }
     }
-    // GC: not while the player's camera director (DAT_80475EE4[p] +0x234) is in a cinematic.
+    // Not while the player's camera director (DAT_80475EE4[p]) letterboxes a shot (+0x234: the lot's
+    // intro camera, a cinematic): the pause menu (and so quitting) waits for it.
+    if (CameraDirector* d = _globals.CameraDirectorOf(p); d && d->m_field234) return;
     UIObjectBase::UIRouter_FlowGoto(const_cast<char*>("Pause"));
   } else if (!std::strcmp("H2D_SELECT", name)) {
     // A reaches the movie only through the cancel mode's filter.

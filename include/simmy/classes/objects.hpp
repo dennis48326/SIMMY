@@ -346,6 +346,7 @@ struct ObjectModuleImpl {
   std::vector<cXObject*> m_byId;          // +0x2090 by id - 1
   std::vector<unsigned int> m_simFlags;   // +0x1C by id - 1: flags << 16 | idle ticks
   std::vector<short> m_killQueue;          // +0x2088 objects to kill at the end of the tick
+  int m_killingAll = 0;                    // +0x208C KillAllObjects runs
 };
 
 // An object's data variables (game/object.cpp): 72 shorts, of which only the ones set are kept (GC: a

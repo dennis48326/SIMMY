@@ -2,7 +2,7 @@
 // run_simmy.bat / run_simmy_coop.bat: pick the disc, play alone or in co-op, change the settings in
 // simmy.ini, and come back when the game ends (with a friendly report if it crashed).
 //
-//   SimmyLauncher [--test-iso <file>] [--game-exe <file>]
+//   SimmyLauncher [--test-iso <file>] [--game-exe <file>] [--version]
 //   Tests: --screenshot <out.bmp> [--page home|coop|options|playing|error] [--frames N] [--scale S]
 //          [--fake-pads N] [--focus N] [--mouse X,Y] [--auto-launch play|coop] [--write-icon <dir>]
 //
@@ -21,6 +21,7 @@
 #include "gcm_disc.hpp"
 #include "launcher_ini.hpp"
 #include "sfx.hpp"
+#include "simmy/version.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -438,7 +439,7 @@ bool App::createWindow() {
     std::fprintf(stderr, "[launcher] no video (%s); drawing into a surface\n", SDL_GetError());
   }
   if (SDL_WasInit(SDL_INIT_VIDEO)) {
-    window_ = SDL_CreateWindow("SIMMY", static_cast<int>(kW), static_cast<int>(kH), SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_HIDDEN);
+    window_ = SDL_CreateWindow(SIMMY_PORT_VERSION, static_cast<int>(kW), static_cast<int>(kH), SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_HIDDEN);
     if (window_) renderer_ = SDL_CreateRenderer(window_, nullptr);
     if (!renderer_ && window_) {
       SDL_DestroyWindow(window_);
@@ -853,6 +854,7 @@ void App::launch(bool coop) {
     const std::time_t now = std::time(nullptr);
     std::strftime(when, sizeof when, "%Y-%m-%d %H:%M:%S", std::localtime(&now));
     SDL_IOprintf(log, "%s start: %s\n", when, command.c_str());
+    SDL_IOprintf(log, "    launcher: %s\n", SIMMY_PORT_VERSION);
     if (!stripped.empty()) SDL_IOprintf(log, "    removed from the game's environment:%s\n", stripped.c_str());
     SDL_CloseIO(log);
   }
@@ -1161,6 +1163,8 @@ void App::drawHome() {
   draw_wordmark(canvas_, kW * 0.5f, 232);
   canvas_.textShadow(kFontHeading, kW * 0.5f, 272, "The Sims 2 \xC2\xB7 GameCube \xC2\xB7 now on your PC", rgb(0xFFFFFF),
                      rgb(0x0B2F6B, 0.7f), Align::Center, 2.0f);
+  // The port's version (include/simmy/version.hpp), top right.
+  canvas_.textShadow(kFontTiny, kW - 24, 30, SIMMY_PORT_VERSION, rgb(0xFFFFFF, 0.8f), rgb(0x0B2F6B, 0.45f), Align::Right);
 
   // The disc card.
   const Rect card{60, 298, 520, 318};
@@ -1671,6 +1675,12 @@ int WriteIcons(const std::string& dir) {
 
 int main(int argc, char** argv) {
   launcher::Options o;
+  for (int i = 1; i < argc; ++i)
+    if (std::strcmp(argv[i], "--version") == 0) {
+      std::printf("%s\n", SIMMY_PORT_VERSION);  // include/simmy/version.hpp
+      return 0;
+    }
+  std::fprintf(stderr, "[launcher] %s\n", SIMMY_PORT_VERSION);
   for (int i = 1; i < argc; ++i) {
     const std::string a = argv[i];
     auto next = [&]() -> std::string { return i + 1 < argc ? argv[++i] : ""; };

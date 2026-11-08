@@ -370,6 +370,14 @@ void cXPersonImpl::InitializeStaticMemory() {
   sHappyCurvesSetup = true;
 }
 
+// 8011A90C
+// Leaving live mode (ELiveMode::Reset): the adult curves' points freed, set up again by the next person.
+void cXPersonImpl::CleanupStaticMemory() {
+  if (!sHappyCurvesSetup) return;
+  for (HappyCurve& c : sAdultHappyWeightCurves) c.m_fn.SetMaxPoints(0);
+  sHappyCurvesSetup = false;
+}
+
 // 80125550
 // The mood (motive 3): the happy motives' mean weighted by each one's curve at its value (a low
 // motive weighs more). Energy is not one of them; the room (0xD) is.

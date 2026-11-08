@@ -20,6 +20,11 @@
 // aborts (so a debugger shows every thread) when the frame counter has not moved for SIMMY_SOAK_HANG
 // seconds (default 90). SIMMY_SOAK_STALL=<seconds> raises SIGUSR1 once a frame has taken that long
 // (meant for runs under a debugger: it stops there and shows the threads).
+//
+// Sim-switch stress (test only): SIMMY_SOAK_SWITCH=<weight> adds a "switch" macro of that weight: Y (next
+// sim) on pad 1, pad 2 or both in the same frame, alone, right after A (pie menu up) or during a walk.
+// SIMMY_SOAK_SWAP=<weight> adds a "swap" macro that calls EGlobal::SwapSelectedSims (800420B4) directly
+// (GC reaches it only through generic sim call 0x1E, which no disc tree uses).
 #include "simmy/types_gen.hpp"
 #include "simmy/platform.hpp"
 #include "simmy/unported_globals.hpp"
@@ -76,6 +81,8 @@ struct SoakState {
   int quitWeight = 1;    // SIMMY_SOAK_QUIT: the quit macro's weight (0 never)
   int speed = 0;         // SIMMY_SOAK_SPEED
   int startDelay = 300;  // SIMMY_SOAK_START: frames from the house load to the first macro
+  int switchWeight = 0;  // SIMMY_SOAK_SWITCH
+  int swapWeight = 0;    // SIMMY_SOAK_SWAP
 };
 
 SoakState& St() {
@@ -184,7 +191,8 @@ void NewMacro(int frame) {
     int weight;
   } kMacros[] = {{"walk", 20}, {"camera", 6}, {"interact", 12}, {"interact2", 6}, {"b", 10}, {"y", 6},
                  {"x", 3},     {"classic", 6}, {"pause", 6},      {"pausetab", 6}, {"buy", 5}, {"dpad", 4},
-                 {"lr", 3},    {"wait", 4},    {"build", 3},     {"quit", s.quitWeight}};
+                 {"lr", 3},    {"wait", 4},    {"build", 3},     {"quit", s.quitWeight},
+                 {"switch", s.switchWeight}, {"swap", s.swapWeight}};
   int total = 0;
   for (const auto& m : kMacros) total += m.weight;
   int r = Rand(0, total - 1);
@@ -229,14 +237,27 @@ void NewMacro(int frame) {
     }
     add("b", 2, 120), add("b", 2, 120), add("b", 2, 90);
   } else if (n == "quit") {
-    // The options tab, its last item (quit), yes: back to the main menu (the menu driver re-enters).
+    // The options tab, its second item (quit), then, once the dialog box is up, "save before quitting?"
+    // (yes / no / cancel): no, back to the main menu (the menu driver re-enters).
     add("start", 2, 120);
     add("@paz:main_game_options", 0, 0);
-    add("a", 2, 300), add("down", 2, 100), add("a", 2, 200), add("up", 2, 100), add("a", 2, 300);
+    add("a", 2, 300), add("down", 2, 100), add("a", 2, 30), add("@dlg", 0, 0), add("down", 2, 60), add("a", 2, 300);
     add("b", 2, 120), add("b", 2, 120);  // (when it was not quit after all)
   } else if (n == "dpad") add(Pick({"up", "down", "left", "right"}), 2, 60);
   else if (n == "lr") add(Pick({"l", "r"}), Rand(2, 30), 40);
-  else add("", Rand(100, 600), 0);
+  else if (n == "switch") {
+    // Y on this pad, on both pads at once, after A (its pie menu up), or while walking.
+    const int how = Rand(0, 3);
+    if (how == 0) add("y", 2, Rand(5, 60));
+    else if (how == 1) s.steps.push_back({two ? "y+p2:y" : "y", 2, Rand(5, 60)});
+    else if (how == 2) add("a", 2, Rand(20, 90)), add("y", 2, Rand(5, 60));
+    else {
+      const char* dir = Pick({"lup", "ldown", "lleft", "lright"});
+      s.steps.push_back({pre + "y+" + pre + dir, 2, 0}), add(dir, Rand(5, 60), 10);
+    }
+  } else if (n == "swap") {
+    s.steps.push_back({"@swap", 0, Rand(5, 60)});
+  } else add("", Rand(100, 600), 0);
   ++s.macros;
   std::printf("[soak] frame %d: %s%s\n", frame, pre.c_str(), name);
 }
@@ -319,12 +340,19 @@ void dev_pad_soak(PADStatus* pads) {
     s.lot = EnvInt("SIMMY_SOAK_LOT", 0);
     s.ngh = EnvInt("SIMMY_SOAK_NGH", 0);
     s.p2 = EnvInt("SIMMY_SOAK_P2", 1) != 0;
+    s.switchWeight = EnvInt("SIMMY_SOAK_SWITCH", 0);
+    s.swapWeight = EnvInt("SIMMY_SOAK_SWAP", 0);
     if (const char* d = std::getenv("SIMMY_SOAK_DOWN")) s.down = d;
     if (s.lot <= 0) s.phase = 4;
     std::printf("[soak] seed %s lot %d ngh %d every %d\n", seed, s.lot, s.ngh, s.every);
     std::thread(Watchdog, s.hangSec, EnvInt("SIMMY_SOAK_STALL", 0)).detach();
   }
   if (!s.on) return;
+  // Pad 1 (and pad 2 in a two-player game) stays plugged in between presses, as SIMMY_PAD_SEQ keeps it: a
+  // pad that comes and goes with each press loses the press, and the dialog box takes a pad pulled out
+  // for a cancel (the quit macro's "save before quitting?" was cancelled that way).
+  pads[0].err = PAD_ERR_NONE;
+  if (dev_two_player() && s.p2) pads[1].err = PAD_ERR_NONE;
   const int frame = _framecount;
   g_watchFrame.store(frame);
 
@@ -387,6 +415,34 @@ void dev_pad_soak(PADStatus* pads) {
     } else if (paz && t >= 60 && t % 40 < 2) {
       Press(pads, "right");
     }
+    return;
+  }
+  if (st.names == "@dlg" || st.names == "p2:@dlg") {
+    // The dialog box up and waiting for input (G2DTarget state 3) for 60 frames (at most 1500 frames).
+    auto* g2d = static_cast<G2DTarget*>(_globals.m_g2dTarget);
+    static int readySince = -1;
+    const bool ready = g2d && g2d->m_active && g2d->m_state == 3;
+    if (!ready) readySince = -1;
+    else if (readySince < 0) readySince = frame;
+    if ((readySince >= 0 && frame - readySince >= 60) || t > 1500) {
+      readySince = -1;
+      ++s.step;
+      s.stepStart = frame;
+    }
+    return;
+  }
+  if (st.names == "@swap") {
+    // SIMMY_SOAK_SWAP: the players' selected sims change places (once, at the step's start).
+    if (t == 0) {
+      cXPerson* a = _globals.GetSelectedPerson(0);
+      cXPerson* b = _globals.GetSelectedPerson(1);
+      _globals.SwapSelectedSims();
+      std::printf("[soak] frame %d: swapped sims (%s)\n", frame, a && b ? "both selected" : "not both selected");
+    }
+  }
+  if (st.names.compare(0, 1, "@") == 0) {
+    if (t >= st.hold + st.gap) ++s.step, s.stepStart = frame;
+    if (s.step >= s.steps.size()) s.nextAt = frame + Rand(s.every / 3, s.every * 5 / 3);
     return;
   }
   if (t < st.hold) {

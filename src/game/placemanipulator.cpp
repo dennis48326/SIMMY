@@ -899,6 +899,19 @@ void StopPlaceManipulator(int player) {
   StopBuildTool(player);  // the build tools (interactors 3, 4, 5) too
 }
 
+// PC: part of InteractorManager::DestroyPlayerInteractorSets (GC: the players' place and grab manipulators
+// and build tools go with their interactor sets, InteractorModule::ShutdownInteractorModule): each player's
+// stopped and its placement (the object it held, already killed with the house's objects) forgotten.
+void ShutdownPlaceManipulators() {
+  for (int p = 0; p < 2; ++p) {
+    StopPlaceManipulator(p);
+    for (ObjectManipulator* m : {static_cast<ObjectManipulator*>(&s_manipulators[p]), static_cast<ObjectManipulator*>(&s_grabbers[p])}) {
+      m->m_placement.DestroyGridObject();
+      m->m_placement = PlacementObject();
+    }
+  }
+}
+
 // GC: InteractorManager::ChangeActiveInteractor to interactor 2 (the grab manipulator) with
 // GrabManipulator::OnStart: the cursor kept from the place manipulator when asked (+0xC4), the
 // PlacementObject initialised.

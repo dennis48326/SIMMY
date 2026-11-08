@@ -29,11 +29,11 @@ use `SIMMY_FIXED_DT=1` or `SIMMY_DET=1` for repeatable timing.
 | Switch | Syntax |
 |---|---|
 | `SIMMY_PAD_SCRIPT` | `"frame:names[/hold],..."` presses at fixed game frames (pad 1; `p2:` prefix for pad 2); with `SIMMY_PAD_SEQ` too, added to the sequence's presses (e.g. a button-code cheat once the house is up) |
-| `SIMMY_PAD_SEQ` | `"start,a,right,a,up,a,a,left,a,house,cdown/150"`: each step fires once the watched UI state (managed screens, main menu state, dialog box) has been stable 90 frames / 1.5 s and 60 frames after the previous press; a press with no reaction in 300 frames is repeated up to 3 times; `house` waits for a house + 120 frames; `name/N` holds N frames; unknown names (`none/N`, `wait/N`) press nothing. `SIMMY_PAD_SEQ_UI=1` also counts UI variable changes as reactions (CAS, free play) |
+| `SIMMY_PAD_SEQ` | `"start,a,right,a,up,a,a,left,a,house,cdown/150"`: each step fires once the watched UI state (managed screens, main menu state, dialog box) has been stable 90 frames / 1.5 s and 60 frames after the previous press; a press with no reaction in 300 frames is repeated up to 3 times; `house` waits for a house + 120 frames (after a quit to the main menu, for the next house; it logs the player-to-pad mapping, whether a load is in progress and pad 1's filter stack); `name/N` holds N frames; unknown names (`none/N`, `wait/N`) press nothing. `SIMMY_PAD_SEQ_UI=1` also counts UI variable changes as reactions (CAS, free play) |
 | Names | `start a b x y z l r up down left right`, sticks `lup ldown lleft lright` / `cup cdown cleft cright` (full deflection), joined with `+`, `p2:` for pad 2 |
 | `SIMMY_PAD_HOLD` | default hold frames (6) |
 | `SIMMY_PAD_GATE` | holds pad 1's scripted presses in the house until conditions hold (`any free dlg idle calm soc rmd bb t<hex> nt<hex> on<id> g<guid> e<guid> w<n> x<cond> k !c a\|b`; see [`padgate.cpp`](../src/game/padgate.cpp)) |
-| `SIMMY_SOAK=<seed>` | random play (walks, camera, interactions, B, Y, X, Z, d-pad, pause tabs, buy/build, quit) with RSS/slow-frame/hang watchdog ([`pc_soak.cpp`](../src/platform/pc_soak.cpp)); its `[soak] rss` lines also give the lot's clock (days running, hour:minute) |
+| `SIMMY_SOAK=<seed>` | random play (walks, camera, interactions, B, Y, X, Z, d-pad, pause tabs, buy/build, quit to the main menu: options, Quit, then once the dialog box is up "No" to "save before quitting?"; the development menu re-enters the lot with `SIMMY_SOAK_LOT`; pad 1, and pad 2 in co-op, stay plugged in between presses; a quit during the lot's intro camera is refused as on GC, and story mode's tutorial dialogs take the pad, so quit soaks run best with `SIMMY_STORY=0`) with RSS/slow-frame/hang watchdog ([`pc_soak.cpp`](../src/platform/pc_soak.cpp)); its `[soak] rss` lines also give the lot's clock (days running, hour:minute). Sim-switch stress (test only, off by default): `SIMMY_SOAK_SWITCH=<weight>` adds a "switch" macro (Y on pad 1, pad 2 or both in the same frame, alone, right after A or while walking); `SIMMY_SOAK_SWAP=<weight>` a "swap" macro that calls `EGlobal::SwapSelectedSims` directly (GC: generic sim call 0x1E, used by no disc tree). Switching only succeeds where a family has more members than players, e.g. lot 13 (the Freebers) with `SIMMY_SOAK_LOT=13`; on lot 9 in co-op Y finds no other sim |
 | `SIMMY_KBM_TEST` | `"<frame>:<action>;..."`: `key: keyup: tap: move:x,y glide:x,y/n at:<id> ldown lup lclick rdown rup rclick mdown mup wheel:n drag:dx,dy/n mouseout`; the mouse is drawn as a cross in shots |
 | `SIMMY_OVERLAY_TEST` | `"<frame>:<action>,..."`: `f1 open close up down left right a b start l r set:<key>=<value> save sdlquit close2`; the overlay is painted into shots |
 | `SIMMY_DET_REPLAY` | replay a recorded input file ([determinism-and-netplay.md](determinism-and-netplay.md)) |
@@ -51,7 +51,7 @@ still. `SIMMY_SIM_START=x,y` puts the sims on a tile (e.g. 12,22 toilet, 18,11 s
 | Story start | default story, `SIMMY_CAS_ACCEPT=300`, ~7000 frames | lot 9 up, tutorial dialogs, no TREEASSERT |
 | Two players | `SIMMY_TWO_PLAYER=1 --split=wide` (and `windows`, `gc`, `4x3`) offscreen | both views/HUDs, no crash |
 | Save / Continue | save from the pause menu (O2T -> Save -> slot A), quit, Continue in a **new process** | `[save] house 9 saved: funds ...`, same funds/objects after Continue |
-| Quit + re-enter | quit to the main menu and start again in one process | second game reaches live mode |
+| Quit + re-enter | quit to the main menu and start again in one process: New Game, load the same and another memory card, several cycles, 1P and co-op, from buy/build mode (pause on the options tab: `start,a,down,a,down,a` once the pause menu remembers that tab; the first time `right` x6 first), RSS sampled per cycle; under ASan too | each game reaches live mode with fresh object ids (player 1's sim is object 149 again), no crash, RSS flat after the first two games |
 | Free play | dev menu or FAM screens: enter lot 13, evict/move/bulldoze, Create-a-Family | logs `[hood] ...`, no crash |
 | Exit path | the cases in [shutdown-and-crashes.md](shutdown-and-crashes.md) | exit 0, `[simmy] clean exit (code 0)` last |
 | Determinism | record + replay with perturbations | hashes match ([determinism-and-netplay.md](determinism-and-netplay.md)) |
@@ -59,7 +59,14 @@ still. `SIMMY_SIM_START=x,y` puts the sims on a tile (e.g. 12,22 toilet, 18,11 s
 | New stubs | diff the `[stub #n] ADDR` lines of a run before/after | only expected ones |
 
 ASan: a gcc build with `-fsanitize=address` (headless runs, `detect_leaks=0`) found the CAS
-use-after-free bugs; worth repeating after memory-sensitive changes.
+use-after-free bugs and the person-kill one (animator after ESim); worth repeating after
+memory-sensitive changes. With gcc 13, `-fsanitize=undefined` (its `null` check) breaks abseil's
+constant expressions in the precompiled header: use
+`-fsanitize=address,bounds,return,shift,signed-integer-overflow,vla-bound,bool,enum`; configure with
+gcc and the `SDL_*`/`AURORA_*`/`FETCHCONTENT_SOURCE_DIR_*` cache values of a working build (headless:
+`SDL_UNIX_CONSOLE_BUILD=ON`). Known UBSan reports that are GC behaviour: `psystem.cpp` random seed
+overflow, `SAnimator2::Update`'s event frame doubling for a looping animation with no duration (GC
+also stores the overshoot as the fraction).
 
 ## Scripts worth adding to `tools/` (not in the repo yet)
 
@@ -212,7 +219,7 @@ Development only: the launcher removes all of them except `SIMMY_INI` from the g
 
 `SIMMY_PAD_SCRIPT`, `SIMMY_PAD_SEQ`, `SIMMY_PAD_SEQ_UI`, `SIMMY_PAD_HOLD`, `SIMMY_PAD_GATE`,
 `SIMMY_KBM_TEST`, `SIMMY_OVERLAY_TEST` (above); `SIMMY_SOAK` with `SIMMY_SOAK_START`, `_EVERY`, `_QUIT`,
-`_P2`, `_SPEED`, `_LOT`, `_NGH`, `_DOWN`, `_RSS`, `_HANG`, `_STALL` ([`pc_soak.cpp`](../src/platform/pc_soak.cpp));
+`_P2`, `_SPEED`, `_LOT`, `_NGH`, `_DOWN`, `_RSS`, `_HANG`, `_STALL`, `_SWITCH`, `_SWAP` ([`pc_soak.cpp`](../src/platform/pc_soak.cpp));
 `SIMMY_DET`, `SIMMY_DET_SEED`, `_RECORD`, `_REPLAY`, `_BOOT`, `_HASH`, `_DUMP`, `_DUMP_TICKS`, `_REF`,
 `_REF_AFTER`, `_REF_QUIT`, `_LINES`, `_RANDLOG`, `_SPEED`, `_JITTER`, `_NOPACE`, `_QUIT`
 ([determinism-and-netplay.md](determinism-and-netplay.md)).

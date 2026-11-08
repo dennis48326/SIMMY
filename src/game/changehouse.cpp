@@ -160,22 +160,24 @@ void UnloadLevelGlobalData() {
 }
 
 // 8008CE14
-// The house goes (its objects, people, walls, floors, interactors: EHouse::Cleanup) and the current house
-// is cleared. PC: as ELiveMode::Reset when the game leaves live mode. GC: also the level's global data, the
-// room manager, the object folder, the particle systems and effects.
+// The house goes: the sounds fade (mode 3), the house's family is dropped, the house (its objects'
+// instances, walls, floors, lights: EHouse::Cleanup) deleted, the camera cleared; then the level's global
+// data, the rooms, the folder's caches, the interactors, the particles and effects. (The objects were
+// killed by ChangeHouseDemolishHouse.)
 void ChangeHouseUnloadHouse::Reset() {
   SoundFadeOutAndSetMode(cSoundPlayer::kLoading);  // the music and effects fade (0x20), mode 3
-  if (Globs_pHouse) Globs_pHouse->SetFamilyToNull();  // vtable 0x94 (as flows 5 / 10: inlevel.cpp)
-  delete _globals.m_house;
-  _globals.m_house = nullptr;
-  _globals.m_cam = nullptr;
+  if (Globs_pHouse) Globs_pHouse->SetFamilyToNull();  // vtable 0x94
+  _globals.ClearCurHouse();
+  _globals.m_cam = nullptr;  // DAT_80475E9C
+  _gd.m_field98 = 1;         // DAT_80475C1C
   UnloadLevelGlobalData();
   if (Globs_pRoomManager) Globs_pRoomManager->ResetRoomManager();
+  if (Globs_pObjectFolder) Globs_pObjectFolder->ClearAllCaches();  // vtable 0xCC (PC: stub, no per-selector caches)
+  InteractorModule::ShutdownInteractorModule();
+  // GC: PSystemIsEmpty on each (its result unused: a debug check), then each is cleaned.
   for (psystem* sys : {g_pParticleSystem, g_pParticleWeatherSystem, g_pParticleModelSystem})
     if (sys) PSystemClean(sys);
-  SIMMY_STUB("ChangeHouseUnloadHouse::Reset: ObjectFolder vtable 0xCC, InteractorModule::ShutdownInteractorModule "
-             "(PC: with the house), Effects::EffectsManager::DeleteAll",
-             0x8008CE14);
+  Effects__EffectsManager::GetSingleton()->DeleteAll();
 }
 
 // 8008CF10

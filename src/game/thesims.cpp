@@ -408,13 +408,18 @@ TheSimsEnterMainMenuState::~TheSimsEnterMainMenuState() = default;
 void TheSimsEnterMainMenuState::Reset() {
   CompactAllHeaps();
   if (_globals.m_vibrate) _globals.m_vibrate->StopAllVibration();
-  // PC: the port tears the house down after ELiveMode::QuitToMainMenu (which empties the players'
-  // model cache on GC after the house is gone), so the sims' last models went into the cache again:
-  // emptied here, on the way to the main menu.
+  // PC: the players' model cache emptied on the way to the main menu (GC: ELiveMode::QuitToMainMenu does
+  // it after the people are killed; this also covers the lot left for the ending movie, which never
+  // empties it, so no cached model outlives the user selectors GamePlayShutdown deletes).
   ESim::DeletePlayerCachedModel();
   m_stage = 0;
-  SIMMY_STUB("TheSimsEnterMainMenuState::Reset: GameData stage timing, two-player mode and front-end flags",
-             0x80097EF0);
+  // GC: GameData::StageInitTiming(0, 7) (the loading meter's stage timing: not ported, nothing reads it).
+  _gd.m_fieldE4 = 0;  // DAT_80475C68
+  _gd.m_fieldE8 = 0;  // DAT_80475C6C free play
+  _gd.SetTwoPlayerMode(false);
+  // GC: DAT_80475F2C = 0 (never read).
+  _gd.m_field84 = 0;  // DAT_80475C08
+  _gd.m_fieldF0 = 0;  // DAT_80475C74 author mode
 }
 
 // 80097FDC
@@ -563,6 +568,8 @@ void TheSimsMainMenuState::Update(float) {
     g_pWorldMap->Update();
     g_pWorldMap->m_drawLogo = 1;
   }
+  if (_gd.m_field9C) _gd.m_field9C = 0;  // DAT_80475C20: a quit request left over
+  // GC: DAT_804761A0 (never set in this build) would set DAT_80475C38.
   auto* owner = static_cast<TheSimsStateMachine*>(m_owner);
   if (const int ret = owner->m_returnVal) {
     owner->m_returnVal = 0;
@@ -570,10 +577,7 @@ void TheSimsMainMenuState::Update(float) {
       Reset();
       return;
     }
-    // GC: GameData::GamePlayShutdown (8003B1E4: Globs::pHouse cleared, NeighborhoodImpl::Unload). Not
-    // ported: the PC's ELiveMode::QuitToMainMenu (8008DC90) does not yet free the house, its objects and
-    // people, which still point at the neighbours; unloading them here crashed the next game.
-    SIMMY_STUB("TheSimsMainMenuState::Update: GameData::GamePlayShutdown", 0x80098838);
+    _gd.GamePlayShutdown();
     OwnerSetNextState(TheSimsStateMachine::kEnterMainMenu, 0.0f);
     return;
   }

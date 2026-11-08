@@ -137,5 +137,10 @@ bool GetPlayerInteractorInfo(int player, InteractorModule__InteractorInfo& info)
 // PC stand-in for InteractorManager::GetPlayerInteractor(player, 0): the player's direct interactor or
 // null.
 InteractorModule__DirectInteractor* PlayerDirectInteractor(int player);
-// PC: the interactors go with the house (GC: ShutdownInteractorModule).
+// PC stand-in for InteractorManager::Shutdown (from InteractorModule::ShutdownInteractorModule): the
+// players' direct and classic interactors and the visualizer go.
 void ShutdownDirectInteractors();
+// PC: the players' place / grab manipulators and build tools (placemanipulator.cpp) and social-mode
+// interactors (socialmode.cpp) go, as with GC's interactor sets.
+void ShutdownPlaceManipulators();
+void ShutdownSocialInteractors();
