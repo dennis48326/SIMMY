@@ -8,6 +8,7 @@
 #include "simmy/inventory_pc.hpp"
 #include "simmy/sn_qsort.hpp"
 #include "simmy/mp4.hpp"  // PC mod: 4 players
+#include "simmy/detmath.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -3656,7 +3657,7 @@ int cXObjectImpl::TryIsPersonInArea(StackElem*, const unsigned char* params) {
     SAnimator2* anim = p->GetSAnimator();
     const double dir = anim ? anim->GetRealDir() : 0.0;
     const float turned = static_cast<float>(dir + 1.5707963705062866);
-    const float s = std::sin(turned), c = std::cos(turned);
+    const float s = simmy::dm::sin(turned), c = simmy::dm::cos(turned);
     if (static_cast<float>(static_cast<double>(s * -dA + c * -dB) / dist) < 0.866f) continue;
     return 1;
   }

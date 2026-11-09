@@ -92,13 +92,26 @@ A small compare script (first differing tick and which parts differ) is worth ad
   iterate where order affects the simulation).
 - New input goes through `ENgcControllerManager::Update` before `det_pads`, or into `KbmTick`.
 - Background work that changes simulation state must be awaited deterministically (det mode flushes).
-- Floats: keep x64 SSE2, MSVC `/fp:precise` (never `/fp:fast`), no FMA contraction (add
-  `-ffp-contract=off` if a build ever enables FMA). `sin/cos/atan2/acos/hypot` may differ by 1 ulp between
-  glibc and the MSVC CRT; they are used in sanimator2.cpp, person.cpp, xrouting.cpp, directinteractor.cpp,
-  camera.cpp, esim.cpp, objectsim.cpp (door test), passiveinfluencemap.cpp (influence shapes).
+- Floats: x64 SSE2, no FMA contraction, no fast-math: CMakeLists.txt sets `-ffp-contract=off -fno-fast-math`
+  (GCC/Clang) and `/fp:precise` (MSVC; never `/fp:fast`, `/fp:contract` or `/arch:AVX2` contraction) for
+  the whole build, aurora included. Plain `+ - * /`, `sqrt`, `floor/ceil/round/trunc/fmod` and float<->int
+  casts are then IEEE-exact and identical everywhere.
+- **Transcendentals: always `simmy::dm::`** ([`detmath.hpp`](../include/simmy/detmath.hpp)), never
+  `std::sin`/`cos`/`tan`/`asin`/`acos`/`atan`/`atan2`/`exp`/`log`/`log10`/`pow` (or the `f` variants) in
+  src/base, engine, game or libaptz. The C libraries' results differ in the last bits (glibc's are correctly
+  rounded; MSVC's UCRT picks FMA3 code paths per CPU): a Linux-vs-Windows replay (build di, AMD) first
+  differed at tick 2145 in a sim's model matrix (`sin` of its facing, 0.147888437 vs 0.147888422) and, from
+  tick 2516, in a walking sim's direction (`atan2f` of the route leg) and position. `simmy::dm` is the
+  GameCube's own libm ([`detmath.cpp`](../src/platform/detmath/detmath.cpp): SN Systems' libm.a = newlib's
+  float fdlibm, ported from the disassembly with its fused multiply-adds done in portable code), so it is
+  both GC-faithful and bit-identical on every compiler and CPU. Only float versions exist (the GC had no
+  others); double arguments do not compile (write `static_cast<float>`). `simmy --mathcheck [file]` hashes
+  100k fixed inputs per function: the value must be `3a67a7608e988c00` on every build (Linux GCC and
+  Clang, any `-O`, `-march=native` included; Windows: checked by the det_check script). It also prints the
+  C library's hash for comparison (differs per platform). Remaining host-dependent float code is PC-only
+  (launcher, overlay, split-screen layout, audio mixer), not part of the simulation.
 - Sorts with ties: use `simmy::SnQsort` ([`sn_qsort.hpp`](../include/simmy/sn_qsort.hpp), the game's BSD
-  qsort) where GC used `qsort`, not `std::sort` (its tie order is implementation-defined). Same-exe Windows-only play avoids this; mixed Linux/Windows needs a check (and
-  maybe fdlibm-style replacements in sim paths).
+  qsort) where GC used `qsort`, not `std::sort` (its tie order is implementation-defined).
 
 ## Remaining work for lockstep netplay
 
@@ -111,7 +124,11 @@ A small compare script (first differing tick and which parts differ) is worth ad
    movies end on the wall clock (`e_ngcmovie.cpp`); memory-card results differ per machine; `SIMMY_*`
    dev switches act on frames.
 4. Desync detection: send the per-tick total hash (or every N ticks); add the unhashed state above first.
-5. Cross-compiler floats: a Windows (MSVC) replay of a Linux recording has not been run yet; the notes'
-   plan was a PowerShell script replaying a recording twice and against the Linux hashes (not in the repo).
+5. Cross-compiler floats: the Windows check (det_check.ps1, kept with the recording outside the repo: it runs
+   `--mathcheck` against the Linux value, then replays L.rec twice and against the Linux hashes with a
+   per-part breakdown) showed, before detmath, MSVC self-consistent (jitter included) and rng/sim/ngh equal
+   to Linux over 24000 ticks, with inst/per/obj differing from the C library's trig. With detmath the
+   Linux reference hashes changed (inst from tick 2145, per from 2277: the GameCube's libm differs from
+   glibc's in last bits; rng/sim/obj/ngh unchanged); the next Windows run should match them exactly.
 6. Old house-start recordings can diverge after front-end changes (the front end before tick 1 is not
    recorded); boot recordings (`SIMMY_DET_BOOT=1`) are the robust kind.

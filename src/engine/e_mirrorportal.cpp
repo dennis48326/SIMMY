@@ -2,6 +2,7 @@
 // emirrorportal.hpp.
 #include "simmy/types_gen.hpp"
 #include "simmy/unported_globals.hpp"
+#include "simmy/detmath.hpp"
 
 #include <cmath>
 
@@ -94,11 +95,11 @@ void EMirrorPortal::CalcMirrorMatrix() {
   if (n.x != 0.0f || n.y != 0.0f || n.z != 0.0f) PSVECNormalize(&n, &n);
   Vec axis{0.0f, 0.0f, 1.0f};
   int flip = 2;
-  float angle = std::acos(PSVECDotProduct(&n, &axis));
+  float angle = simmy::dm::acos(PSVECDotProduct(&n, &axis));
   if (angle > 3.0543261f) {  // 175 degrees
     axis = Vec{0.0f, 1.0f, 0.0f};
     flip = 1;
-    angle = std::acos(PSVECDotProduct(&n, &axis));
+    angle = simmy::dm::acos(PSVECDotProduct(&n, &axis));
   }
   Vec r{n.y * axis.z - n.z * axis.y, n.z * axis.x - n.x * axis.z, n.x * axis.y - n.y * axis.x};
   if (r.x != 0.0f || r.y != 0.0f || r.z != 0.0f) PSVECNormalize(&r, &r);

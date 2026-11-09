@@ -2,6 +2,7 @@
 // timelines), AptRenderingContext.cpp and the update/render entry points of Apt.cpp.
 #include "simmy/types_gen.hpp"
 #include "simmy/platform.hpp"
+#include "simmy/detmath.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -621,7 +622,7 @@ float AptCIH::GetProperty(int index) {
       if (empty) return 0.0f;
       return index == 8 ? r.right - r.left : r.bottom - r.top;
     }
-    case 10: return std::atan2(m_matrix.b, m_matrix.a) * 180.0f / 3.14159265f;
+    case 10: return simmy::dm::atan2(m_matrix.b, m_matrix.a) * 180.0f / 3.14159265f;
     case 12: return Timeline() ? static_cast<float>(Timeline()->frameCount) : 1.0f;
     default: return 0.0f;
   }
@@ -631,13 +632,13 @@ float AptCIH::GetProperty(int index) {
 void AptCIH::SetProperty(int index, float v) {
   m_scriptChanged = true;
   const float sx = Length(m_matrix.a, m_matrix.b), sy = Length(m_matrix.c, m_matrix.d);
-  const float rot = std::atan2(m_matrix.b, m_matrix.a);
+  const float rot = simmy::dm::atan2(m_matrix.b, m_matrix.a);
   auto rebuild = [&](float scaleX, float scaleY, float r) {
-    const float skew = std::atan2(-m_matrix.c, m_matrix.d) - rot;  // keep any skew
-    m_matrix.a = scaleX * std::cos(r);
-    m_matrix.b = scaleX * std::sin(r);
-    m_matrix.c = -scaleY * std::sin(r + skew);
-    m_matrix.d = scaleY * std::cos(r + skew);
+    const float skew = simmy::dm::atan2(-m_matrix.c, m_matrix.d) - rot;  // keep any skew
+    m_matrix.a = scaleX * simmy::dm::cos(r);
+    m_matrix.b = scaleX * simmy::dm::sin(r);
+    m_matrix.c = -scaleY * simmy::dm::sin(r + skew);
+    m_matrix.d = scaleY * simmy::dm::cos(r + skew);
   };
   switch (index) {
     case 0: m_matrix.tx = v; break;

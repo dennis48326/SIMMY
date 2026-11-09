@@ -7,6 +7,7 @@
 #include "simmy/types_gen.hpp"
 #include "simmy/unported_globals.hpp"
 #include "simmy/classes/epointlight.hpp"
+#include "simmy/detmath.hpp"
 
 #include <cfloat>
 #include <cmath>
@@ -290,13 +291,13 @@ void EISpotLight::Setup() {
   const float pos[3] = {m_pos.x, m_pos.y, m_pos.z};
   const float dir[3] = {m_dir.x, m_dir.y, m_dir.z};
   for (int i = 0; i < 3; ++i) {
-    if (std::acos(dir[i]) < reach) {          // +axis . dir
-      if (reach <= std::acos(-dir[i])) b[i] = pos[i];  // -axis out of reach
+    if (simmy::dm::acos(dir[i]) < reach) {          // +axis . dir
+      if (reach <= simmy::dm::acos(-dir[i])) b[i] = pos[i];  // -axis out of reach
     } else {
       b[3 + i] = pos[i];
     }
   }
   SetBounds(*reinterpret_cast<EBound3*>(b));
-  m_cosInner = std::cos(m_innerAngle * 0.5f);
-  m_cosOuter = std::cos(m_outerAngle * 0.5f);
+  m_cosInner = simmy::dm::cos(m_innerAngle * 0.5f);
+  m_cosOuter = simmy::dm::cos(m_outerAngle * 0.5f);
 }

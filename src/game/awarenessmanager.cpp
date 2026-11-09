@@ -6,6 +6,7 @@
 #include "simmy/classes/passiveinfluence.hpp"
 #include "simmy/classes/placement.hpp"
 #include "simmy/classes/spriteslot.hpp"
+#include "simmy/detmath.hpp"
 
 #include <cmath>
 #include <cstdio>
@@ -724,10 +725,10 @@ double AwarenessManager::GetDeltaAngleToTargetObject(cXObject* object) {
   if (holder && holder->GetObjectImplementation() && holder->GetObjectImplementation()->m_id == me->m_id) {
     EVec3 hand;
     m_animator->GetBonePos(0, hand);
-    delta = std::atan2(-hand.x, hand.y);
+    delta = simmy::dm::atan2(-hand.x, hand.y);
   } else {
     const float ty = static_cast<float>(target->m_location[0]), tx = static_cast<float>(target->m_location[1]);
-    const float a = std::atan2(-(ty - py), tx - px);
+    const float a = simmy::dm::atan2(-(ty - py), tx - px);
     delta = m_animator->getDeltaDirFromDesiredDir(a);
   }
   if (std::fabs(delta) < 9.999999747378752e-05) delta = 0.0;

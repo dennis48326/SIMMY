@@ -6,6 +6,7 @@
 // mixer lock.
 #include "simmy/types_gen.hpp"
 #include "simmy/pc_audio.hpp"
+#include "simmy/detmath.hpp"
 
 #include <cmath>
 
@@ -35,7 +36,7 @@ SfxVoice voices[kVoices];  // 804DB4D4
 int VolumeToDb(unsigned char volume) {
   float f = 1.0f - static_cast<float>(0x7F - volume) / 127.0f;
   if (f < 0.1f) f = 0.1f;
-  int db = static_cast<int>(std::log10(f) * 904.0f);
+  int db = static_cast<int>(simmy::dm::log10(f) * 904.0f);
   if (db > -904) db >>= 2;
   return db;
 }

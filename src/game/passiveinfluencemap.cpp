@@ -3,6 +3,7 @@
 #include "simmy/types_gen.hpp"
 #include "simmy/unported_globals.hpp"
 #include "simmy/classes/placement.hpp"
+#include "simmy/detmath.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -173,8 +174,8 @@ void PassiveInfluenceMap::FilledArc_Polygon(int sides, int radius, int angle, in
       ++n;
       const float rad = static_cast<float>(static_cast<float>(static_cast<double>(a) * static_cast<double>(3.14159f)) / 180.0);
       a -= 60;
-      v[0] = static_cast<float>(static_cast<float>(r * std::cos(rad) + static_cast<float>(cx)) + 0.5);
-      v[1] = static_cast<float>(static_cast<float>(r * std::sin(rad) + static_cast<float>(cy)) + 0.5);
+      v[0] = static_cast<float>(static_cast<float>(r * simmy::dm::cos(rad) + static_cast<float>(cx)) + 0.5);
+      v[1] = static_cast<float>(static_cast<float>(r * simmy::dm::sin(rad) + static_cast<float>(cy)) + 0.5);
       v += 2;
     }
   }

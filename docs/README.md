@@ -106,7 +106,8 @@ ported since (e.g. [`person.hpp`](../include/simmy/classes/person.hpp), [`livemo
   32-bit slots of game data (store object ids instead, as the shadow/light callbacks do).
 - **Determinism:** simulation code draws only from `GetNextRandomNumber` / `simmy::sim_rand()`, UI code
   from `simmy::ui_rand()`, sound code from `simmy_sound_rand()`; never `std::rand`, never wall-clock time
-  in the simulation ([determinism-and-netplay.md](determinism-and-netplay.md)).
+  in the simulation; sin/cos/atan2/pow/... only through `simmy::dm::` (simmy/detmath.hpp, the GC's libm), never
+  `std::sin` & co. ([determinism-and-netplay.md](determinism-and-netplay.md)).
 - **UI must stay per player.** Anything a player opens takes that player's pad, draws in that player's
   half/window and uses that player's selected sim ([coop-and-players.md](coop-and-players.md)).
 - **Do not run the game's static destructors** and do not add exit paths that bypass

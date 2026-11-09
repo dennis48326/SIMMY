@@ -10,6 +10,7 @@
 #include "simmy/unported_globals.hpp"
 #include "simmy/roomresolve.hpp"
 #include "simmy/classes/placement.hpp"
+#include "simmy/detmath.hpp"
 
 #include <cmath>
 #include <cstdlib>
@@ -1378,7 +1379,7 @@ void SAnimator2::handleFreeMoveWalkRunAnimation() {
     const float prev = (out->m_flags & 2) ? StyleVelocity(m_prevWalkStyle) : 0.0f;
     v = (v - prev) * m_walkBlend + prev;
   }
-  const float c = std::cos(-m_dir), s = std::sin(-m_dir);
+  const float c = simmy::dm::cos(-m_dir), s = simmy::dm::sin(-m_dir);
   m_pos[0] += c * dt * v;
   m_pos[1] += s * dt * v;
   EVec2 to{m_pos[0], m_pos[1]};
@@ -2158,7 +2159,7 @@ double SAnimator2::getDesiredDir() {
     dy = static_cast<float>(p[i].p[0] - p[i - 1].p[0]);
   }
   if (dx <= -0.001f || 0.001f <= dx || dy <= -0.001f || 0.001f <= dy) {
-    double d = std::atan2(-dy, dx);
+    double d = simmy::dm::atan2(-dy, dx);
     if (m_followMode == 4) d = std::floor(static_cast<float>(d + 0.39269909262657166) / 0.7853982f) * 0.7853981852531433;
     return static_cast<float>(d);
   }
@@ -2845,7 +2846,7 @@ void SAnimator2::getSidestepSkillIDs(const AnimRef*& side, const AnimRef*& walk,
 
 // 8006B4D0
 double SAnimator2::getSidestepIntensity() {
-  const float s = std::sin(m_walkBlend);
+  const float s = simmy::dm::sin(m_walkBlend);
   double i = s * s;
   if (9.999999747378752e-05 <= i) {
     if (0.9998999834060669 < i) i = 1.0;
@@ -2979,7 +2980,7 @@ void SAnimator2::setAwarenessFollowEnd() {
       dy = static_cast<float>(p[i].p[0] - p[i - 1].p[0]);
     }
     float d;
-    if (dx <= -0.001f || 0.001f <= dx || dy <= -0.001f || 0.001f <= dy) d = std::atan2(-dy, dx);
+    if (dx <= -0.001f || 0.001f <= dx || dy <= -0.001f || 0.001f <= dy) d = simmy::dm::atan2(-dy, dx);
     else d = m_dir;
     m_desiredDir = d;
   } else {

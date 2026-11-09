@@ -5,6 +5,7 @@
 #include "simmy/types_gen.hpp"
 #include "simmy/unported_globals.hpp"
 #include "simmy/classes/buildtools.hpp"
+#include "simmy/detmath.hpp"
 
 #include <cmath>
 #include <cstdio>
@@ -75,8 +76,8 @@ void StickToGround(ESimsCam* cam, float sx, float sy, float& gx, float& gy) {
   float dx = cam->m_target.x - cam->m_eye.x, dy = cam->m_target.y - cam->m_eye.y, dz = cam->m_target.z - cam->m_eye.z;
   const float l = std::sqrt(dx * dx + dy * dy + dz * dz);
   if (l != 0.0f) dx /= l, dy /= l;
-  const float a = std::atan2(dx, dy);
-  const float c = std::cos(a), s = std::sin(a);
+  const float a = simmy::dm::atan2(dx, dy);
+  const float c = simmy::dm::cos(a), s = simmy::dm::sin(a);
   gx = sx * c + sy * s;
   gy = -sx * s + sy * c;
 }

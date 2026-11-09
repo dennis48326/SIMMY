@@ -11,6 +11,7 @@
 #include "simmy/classes/placement.hpp"
 #include "simmy/classes/buildtools.hpp"
 #include "simmy/mp4.hpp"  // PC mod: 4 players
+#include "simmy/detmath.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -673,7 +674,7 @@ void InteractorModule__InteractorVisualizer::Draw(InteractorModule__WallPainter&
     }
     const bool moved = !SameVec(in.m_savedPos, in.m_anchor);
     if (moved) {
-      const float a = std::atan2(in.m_savedPos.y - in.m_anchorDraw.y, in.m_savedPos.x - in.m_anchorDraw.x);
+      const float a = simmy::dm::atan2(in.m_savedPos.y - in.m_anchorDraw.y, in.m_savedPos.x - in.m_anchorDraw.x);
       m.PreRotateZ(a + in.m_cursorRotation);
     }
     EVec3* color;
@@ -817,7 +818,7 @@ void InteractorModule__InteractorVisualizer::Draw(InteractorModule__WallManipula
   float a = 0.0f;
   const bool dragging = (in.m_flags & 1) || (in.m_flags & 0x10);
   if (dragging) {
-    a = std::atan2(in.m_savedPos.y - in.m_anchorDraw.y, in.m_savedPos.x - in.m_anchorDraw.x);
+    a = simmy::dm::atan2(in.m_savedPos.y - in.m_anchorDraw.y, in.m_savedPos.x - in.m_anchorDraw.x);
     if (a != 0.0f) m.PreRotateZ(a);
   }
   DrawResource(in, 0x5072619, Player::GetInteractorColor(), &m);

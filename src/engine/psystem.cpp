@@ -8,6 +8,7 @@
 #include "simmy/types_gen.hpp"
 #include "simmy/unported_globals.hpp"
 #include "simmy/classes/psystem.hpp"
+#include "simmy/detmath.hpp"
 
 #include <chrono>
 #include <cmath>
@@ -156,8 +157,8 @@ void ParticleBirthPlane(pemitter* e, PVector4* pos, PVector4* dir) {
   pos->z = b * info->m_volume[1] - info->m_volume[1] * 0.5f;
   const float angle = c * 6.2831855f;
   const float spread = d * info->m_volume[2];
-  dir->x = (info->m_flags & 0x100) ? 0.0f : spread * std::cos(angle);
-  dir->z = (info->m_flags & 0x200) ? 0.0f : spread * std::sin(angle);
+  dir->x = (info->m_flags & 0x100) ? 0.0f : spread * simmy::dm::cos(angle);
+  dir->z = (info->m_flags & 0x200) ? 0.0f : spread * simmy::dm::sin(angle);
   dir->y = 10.0f;
   dir->w = 1.0f;
   Normalize3(*dir);
@@ -169,7 +170,7 @@ void ParticleBirthSphere(pemitter* e, PVector4* pos, PVector4* dir) {
   const pemitterinfo* info = e->m_info;
   const float phi = TableRand() * 3.1415927f;
   const float theta = TableRand() * 6.2831855f;
-  const float st = std::sin(theta), sp = std::sin(phi), ct = std::cos(theta), cp = std::cos(phi);
+  const float st = simmy::dm::sin(theta), sp = simmy::dm::sin(phi), ct = simmy::dm::cos(theta), cp = simmy::dm::cos(phi);
   const float x = info->m_volume[0] * st * cp;
   const float z = info->m_volume[1] * st * sp;
   const float y = info->m_volume[1] * ct;
@@ -187,12 +188,12 @@ void ParticleBirthCone(pemitter* e, PVector4* pos, PVector4* dir) {
   const float theta = TableRand() * 6.2831855f;
   pos->y = h;
   const float r = info->m_volume[0] - info->m_volume[0] * h / info->m_volume[1];
-  pos->z = r * std::sin(theta);
-  pos->x = r * std::cos(theta);
+  pos->z = r * simmy::dm::sin(theta);
+  pos->x = r * simmy::dm::cos(theta);
   const float angle = TableRand() * 6.2831855f;
   const float spread = TableRand() * info->m_volume[2];
-  dir->x = spread * std::cos(angle);
-  dir->z = spread * std::sin(angle);
+  dir->x = spread * simmy::dm::cos(angle);
+  dir->z = spread * simmy::dm::sin(angle);
   dir->w = 1.0f;
   dir->y = 10.0f;
   Normalize3(*dir);
@@ -204,7 +205,7 @@ void ParticleBirthCylinder(pemitter* e, PVector4* pos, PVector4* dir) {
   const pemitterinfo* info = e->m_info;
   const float h = TableRand() * info->m_volume[1];
   const float theta = TableRand() * 6.2831855f;
-  const float x = info->m_volume[0] * std::cos(theta), z = info->m_volume[0] * std::sin(theta);
+  const float x = info->m_volume[0] * simmy::dm::cos(theta), z = info->m_volume[0] * simmy::dm::sin(theta);
   pos->y = h, pos->z = z, pos->x = x;
   *dir = PVector4{x, h, z, 1.0f};
   Normalize3(*dir);
@@ -260,7 +261,7 @@ int ParticleCreate(pemitter* e, int count) {
       p->m_pos.x = a * info->m_volume[0] - info->m_volume[0] * 0.5f;
       p->m_pos.z = b * info->m_volume[1] - info->m_volume[1] * 0.5f;
       const float angle = c * 6.2831855f;
-      const float s = std::sin(angle), co = std::cos(angle);
+      const float s = simmy::dm::sin(angle), co = simmy::dm::cos(angle);
       const float spread = d * info->m_volume[2];
       dir.x = (info->m_flags & 0x100) ? 0.0f : spread * co;
       dir.z = (info->m_flags & 0x200) ? 0.0f : spread * s;

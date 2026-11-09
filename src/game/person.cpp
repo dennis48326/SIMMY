@@ -6,6 +6,7 @@
 #include "simmy/types_gen.hpp"
 #include "simmy/classes/placement.hpp"
 #include "simmy/unported_globals.hpp"
+#include "simmy/detmath.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -1078,8 +1079,8 @@ int cXPersonImpl::TryLookTowards(StackElem* frame, const unsigned char* params) 
       float yaw = 0.0f;
       std::memcpy(&yaw, &_globals.m_field164, sizeof yaw);
       const float a = (yaw + 45.0f) * 0.017453292f;
-      target.p[0] = static_cast<int>(-std::cos(a) * 100.0f) * 0x10 + me.p[0];
-      target.p[1] = static_cast<int>(-static_cast<double>(std::sin(a)) * 100.0) * 0x10 + me.p[1];
+      target.p[0] = static_cast<int>(-simmy::dm::cos(a) * 100.0f) * 0x10 + me.p[0];
+      target.p[1] = static_cast<int>(-static_cast<double>(simmy::dm::sin(a)) * 100.0) * 0x10 + me.p[1];
     } else {
       cXObject* o = GetObjectFromID(frame->m_stackObject);
       cXObjectImpl* t = o ? o->GetObjectImplementation() : nullptr;
@@ -2352,7 +2353,7 @@ void LotEntryPoint(float& x, float& y, int& dir) {
   y = static_cast<float>(bestY);
   // Facing the lot's middle, in eighths of a turn as people face (SAnimator2::setPersonDirection):
   // 2 along +x, 4 along +y, 0 along -y.
-  const float a = std::atan2(ys * 0.5f - y, xs * 0.5f - x);
+  const float a = simmy::dm::atan2(ys * 0.5f - y, xs * 0.5f - x);
   dir = (static_cast<int>(std::lround(a / (3.1415927f * 0.25f))) + 2) & 7;
 }
 }  // namespace

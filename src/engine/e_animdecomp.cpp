@@ -3,6 +3,7 @@
 // See eanimdecomp.hpp for the stream format.
 #include "simmy/types_gen.hpp"
 #include "simmy/unported_globals.hpp"
+#include "simmy/detmath.hpp"
 
 #include <cfloat>
 #include <cmath>
@@ -106,7 +107,7 @@ void EQuat::ToMat4(EMat4& out) const {
 void EQuat::ToAxisAngle(EVec3& axis, float& angle) const {
   const float s2 = 1.0f - w * w;
   if (s2 > 0.0f) {
-    angle = std::acos(w) * 2.0f;
+    angle = simmy::dm::acos(w) * 2.0f;
     const float inv = 1.0f / std::sqrt(s2);
     axis = EVec3{x * inv, y * inv, z * inv};
   } else {
@@ -126,7 +127,7 @@ float EQuat::ExtractAxisRotation(EVec3& axis) const {
 
 // 802CD7B4
 EQuat& EQuat::Set(EVec3& axis, float angle) {
-  const float s = std::sin(angle * 0.5f), c = std::cos(angle * 0.5f);
+  const float s = simmy::dm::sin(angle * 0.5f), c = simmy::dm::cos(angle * 0.5f);
   x = axis.x * s, y = axis.y * s, w = c, z = axis.z * s;
   return *this;
 }
@@ -182,9 +183,9 @@ EQuat& EQuat::Slerp(float t, EQuat& a, EQuat b) {
   } else if (cosom >= 0.999f) {
     *this = Normalized(a + t * (b - a));
   } else {
-    const float om = std::acos(cosom);
-    const float inv = 1.0f / std::sin(om);
-    const float sa = std::sin((1.0f - t) * om) * inv, sb = std::sin(t * om) * inv;
+    const float om = simmy::dm::acos(cosom);
+    const float inv = 1.0f / simmy::dm::sin(om);
+    const float sa = simmy::dm::sin((1.0f - t) * om) * inv, sb = simmy::dm::sin(t * om) * inv;
     *this = EQuat{sa * a.x + sb * b.x, sa * a.y + sb * b.y, sa * a.z + sb * b.z, sa * a.w + sb * b.w};
   }
   return *this;

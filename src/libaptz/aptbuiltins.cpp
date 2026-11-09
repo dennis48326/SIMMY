@@ -4,6 +4,7 @@
 // functions, and the MovieClip / TextField members (AptCharacterInst::objectMemberLookup/Set and
 // the sMethod_* natives of AptCharacter.cpp).
 #include "simmy/types_gen.hpp"
+#include "simmy/detmath.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -436,20 +437,20 @@ MATH1(ceil, std::ceil(x))
 MATH1(floor, std::floor(x))
 MATH1(round, std::floor(x + 0.5))
 MATH1(sqrt, x >= 0 ? std::sqrt(x) : 0.0)
-MATH1(sin, std::sin(x))
-MATH1(cos, std::cos(x))
-MATH1(tan, std::tan(x))
-MATH1(asin, std::asin(x))
-MATH1(acos, std::acos(x))
-MATH1(atan, std::atan(x))
-MATH1(exp, std::exp(x))
-MATH1(log, x > 0 ? std::log(x) : 0.0)
+MATH1(sin, simmy::dm::sin(static_cast<float>(x)))
+MATH1(cos, simmy::dm::cos(static_cast<float>(x)))
+MATH1(tan, simmy::dm::tan(static_cast<float>(x)))
+MATH1(asin, simmy::dm::asin(static_cast<float>(x)))
+MATH1(acos, simmy::dm::acos(static_cast<float>(x)))
+MATH1(atan, simmy::dm::atan(static_cast<float>(x)))
+MATH1(exp, simmy::dm::exp(static_cast<float>(x)))
+MATH1(log, x > 0 ? simmy::dm::log(static_cast<float>(x)) : 0.0)
 #undef MATH1
 AptVar Math_atan2(AptActionInterpreter&, const AptVar&, const Args& a) {
-  return AptVar::Number(std::atan2(Arg(a, 0).ToFloat(), Arg(a, 1).ToFloat()));
+  return AptVar::Number(simmy::dm::atan2(Arg(a, 0).ToFloat(), Arg(a, 1).ToFloat()));
 }
 AptVar Math_pow(AptActionInterpreter&, const AptVar&, const Args& a) {
-  return AptVar::Number(std::pow(Arg(a, 0).ToFloat(), Arg(a, 1).ToFloat()));
+  return AptVar::Number(simmy::dm::pow(Arg(a, 0).ToFloat(), Arg(a, 1).ToFloat()));
 }
 AptVar Math_min(AptActionInterpreter&, const AptVar&, const Args& a) {
   const AptVar x = Arg(a, 0), y = Arg(a, 1);

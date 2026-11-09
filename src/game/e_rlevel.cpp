@@ -6,6 +6,7 @@
 #include "simmy/classes/psystem.hpp"
 #include "simmy/classes/epointlight.hpp"
 #include "simmy/classes/weather.hpp"
+#include "simmy/detmath.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -676,7 +677,7 @@ void ERLevel::OutsideLightsUpdate(float hour, LevelLightingEntry& entry) {
   s_levelLightingTuning.ProcessOverrides(entry);
   const float pitch = entry.m_sunPitch * 0.017453292f;
   const float yaw = (m_sunYawOffset + entry.m_sunYaw) * 0.017453292f;
-  EVec3 dir{std::cos(pitch) * std::cos(yaw), std::cos(pitch) * std::sin(yaw), std::sin(pitch)};
+  EVec3 dir{simmy::dm::cos(pitch) * simmy::dm::cos(yaw), simmy::dm::cos(pitch) * simmy::dm::sin(yaw), simmy::dm::sin(pitch)};
   m_sun.m_dir = dir;
   m_sun.m_color = entry.m_sunColor;
   m_sun.m_intensity = entry.m_sunIntensity;

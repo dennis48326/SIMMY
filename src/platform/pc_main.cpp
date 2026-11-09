@@ -1,6 +1,7 @@
 // PC process entry and main-thread loop.
 //
 //   simmy [--iso <disc image>] [--headless] [--data <files dir>] [--fs-test] [game args...]
+//   simmy --version | --mathcheck [file]
 //
 // The game's files come from the GameCube disc image (--iso, else iso= in simmy.ini, which
 // SimmyLauncher writes); --data <dir> (an extracted disc, for development and tests) wins over it.
@@ -17,6 +18,7 @@
 #include <sanitizer/lsan_interface.h>
 #endif
 #include "simmy/version.hpp"
+#include "simmy/detmath.hpp"
 #include "simmy/types_gen.hpp"
 #include "simmy/platform.hpp"
 #include "simmy/unported_globals.hpp"
@@ -530,6 +532,10 @@ int main(int argc, char* argv[]) {  // aurora/main.h renames this to aurora_main
     if (std::strcmp(argv[i], "--version") == 0) {
       std::printf("%s\n", SIMMY_PORT_VERSION);  // include/simmy/version.hpp
       return 0;
+    } else if (std::strcmp(argv[i], "--mathcheck") == 0) {
+      // The deterministic math's self-test (simmy/detmath.hpp): one hash per function, the same on
+      // every build and CPU. Optional output file (simmy.exe may have no console).
+      return simmy::dm::mathcheck(i + 1 < argc ? argv[i + 1] : nullptr);
     }
   std::fprintf(stderr, "[simmy] main\n");
   std::fprintf(stderr, "[simmy] %s\n", SIMMY_PORT_VERSION);

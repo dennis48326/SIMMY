@@ -6,6 +6,7 @@
 #include "simmy/types_gen.hpp"
 #include "simmy/unported_globals.hpp"
 #include "simmy/classes/siminteractor.hpp"
+#include "simmy/detmath.hpp"
 
 #include <cmath>
 #include <cstdio>
@@ -899,7 +900,7 @@ void ESim::Draw(ELevelDrawData& data) {
     const EVec3 pos = GetSimPos();
     const float nearPlane = cam3d->GetNearPlane();
     const float fov = cam3d->GetFov();
-    const float s = std::sin(fov * 0.017453292f);
+    const float s = simmy::dm::sin(fov * 0.017453292f);
     const float reach = nearPlane * 4.32f - (s + s);
     const float dx = pos.x - cam3d->m_eye.x, dy = pos.y - cam3d->m_eye.y, dz = 2.0f - cam3d->m_eye.z;
     const float d2 = dx * dx + dy * dy + dz * dz;

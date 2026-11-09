@@ -5,6 +5,7 @@
 #include "simmy/types_gen.hpp"
 #include "simmy/classes/placement.hpp"
 #include "simmy/unported_globals.hpp"
+#include "simmy/detmath.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -278,7 +279,7 @@ void TransformToWorldCoords(float x, float y, const int origin[2], int dir, int 
     case 6: p1 = y, p2 = -x; break;
     default: {
       const float a = static_cast<float>(dir & 7) * 0.7853982f;
-      const float c = std::cos(a), s = std::sin(a);
+      const float c = simmy::dm::cos(a), s = simmy::dm::sin(a);
       p1 = std::round(x * c - y * s);
       p2 = std::round(x * s + y * c);
       break;

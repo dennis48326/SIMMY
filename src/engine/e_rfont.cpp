@@ -2,6 +2,7 @@
 // effects (ProcessFontFX).
 #include "simmy/types_gen.hpp"
 #include "simmy/unported_globals.hpp"
+#include "simmy/detmath.hpp"
 
 #include <cmath>
 #include <cstdio>
@@ -354,7 +355,7 @@ void ERFont::ProcessFontFX(fontFXcommand* command, EMat4* m, int index) {
     } else if (kind == 2) {
       const float a = (static_cast<float>(fx[3]) * 0.234375f * static_cast<float>(index) + static_cast<float>(fx[1])) *
                       1.40625f * 0.017453292f;
-      m->m[3][1] = std::sin(a) * (static_cast<float>(fx[2]) / 12800.0f) + m->m[3][1];
+      m->m[3][1] = simmy::dm::sin(a) * (static_cast<float>(fx[2]) / 12800.0f) + m->m[3][1];
     } else if (kind == 3) {
       const int reach = fx[2];
       const int d = std::abs(static_cast<int>(static_cast<signed char>(fx[3])) - index);

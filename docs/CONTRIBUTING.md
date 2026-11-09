@@ -57,7 +57,8 @@ A new system that fits no page: add a page, link it from [README.md](README.md)'
 - **Address markers**: `// XXXXXXXX` above a function marks it ported (the generator stops stubbing it).
   Put the marker only on real ports of that function; a PC helper that stands in for one should say
   `GC XXXXXXXX` and leave the member to its stub, but then **callers of the member still hit the stub**.
-- **Determinism**: no `std::rand`, no wall time in simulation code; the right RNG stream per subsystem;
+- **Determinism**: no `std::rand`, no wall time in simulation code; transcendental math only through
+  `simmy::dm::sin`/`cos`/`atan2`/... (simmy/detmath.hpp), never `std::sin` & co.; the right RNG stream per subsystem;
   new input only at `ENgcControllerManager::Update`; new simulation state added to the det hash.
 - **Per-player UI**, **no static destructors / one exit path**, **big-endian data read through
   accessors**, **ids not pointers in 32-bit game data slots**: see [README.md](README.md#rules-for-new-code-summary-details-on-each-page).

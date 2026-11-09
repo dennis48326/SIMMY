@@ -2,6 +2,7 @@
 // see unlockdisplay.hpp.
 #include "simmy/types_gen.hpp"
 #include "simmy/unported_globals.hpp"
+#include "simmy/detmath.hpp"
 
 #include <cmath>
 #include <cstdint>
@@ -295,7 +296,7 @@ void CUnlockDisplay::Draw(ERC* rc) {
     EVec3 n{eye.x - center.x, eye.y - center.y, eye.z - center.z};
     if (n.x != 0.0f || n.y != 0.0f || n.z != 0.0f) Normalize(n);
     const float half = fov * 0.5f * 0.017453292f;
-    const float d = m_radius * std::sin(1.5707963146269321f - half) / std::sin(half);
+    const float d = m_radius * simmy::dm::sin(1.5707963146269321f - half) / simmy::dm::sin(half);
     const float dist = (d + m_radius) * 1.05f / m_zoom;
     const EVec3& pos = m_objects->m_pos;
     eye = EVec3{center.x + n.x * dist - pos.x, center.y + n.y * dist - pos.y, center.z + n.z * dist - pos.z};

@@ -55,7 +55,7 @@ still. `SIMMY_SIM_START=x,y` puts the sims on a tile (e.g. 12,22 toilet, 18,11 s
 | Quit + re-enter | quit to the main menu and start again in one process: New Game, load the same and another memory card, several cycles, 1P and co-op, from buy/build mode (pause on the options tab: `start,a,down,a,down,a` once the pause menu remembers that tab; the first time `right` x6 first), RSS sampled per cycle; under ASan too. Run cycles with `SIMMY_STORY=0`: story mode's tutorial dialogs take the quit presses, and `SIMMY_PAD_SEQ`'s `house` step then goes on without a quit (count the `player 1's sim: object` lines: one per game). Also lot changes (`SIMMY_LEAVE_LOT_TEST=600,5,2,19`) and development-menu re-entry soaks (`SIMMY_SOAK_LOT`) | each game reaches live mode with fresh object ids (player 1's sim is object 149 again), no crash; RSS flat after the first few games except for a few one-off steps (caches filling, the allocator: see "Memory growth" below) |
 | Free play | dev menu or FAM screens: enter lot 13, evict/move/bulldoze, Create-a-Family | logs `[hood] ...`, no crash |
 | Exit path | the cases in [shutdown-and-crashes.md](shutdown-and-crashes.md) | exit 0, `[simmy] clean exit (code 0)` last |
-| Determinism | record + replay with perturbations | hashes match ([determinism-and-netplay.md](determinism-and-netplay.md)) |
+| Determinism | record + replay with perturbations; `simmy --mathcheck` | hashes match; mathcheck prints `mathcheck 3a67a7608e988c00` on every build and CPU ([determinism-and-netplay.md](determinism-and-netplay.md)) |
 | Visual | the same script on the old and new binary, `--screenshot`/`SIMMY_SHOTS`, diff images (only wall-clock animated pixels may differ) | |
 | New stubs | diff the `[stub #n] ADDR` lines of a run before/after | only expected ones |
 
@@ -97,7 +97,8 @@ reachable by a cache or a list that grows: that is what mtrack is for.
 - `exit_test.sh`: the exit-path cases.
 - `det_cmp.py`: first divergent tick of two `SIMMY_DET_HASH` files and which parts differ; `lines_cmp.py`
   for `SIMMY_DET_LINES`.
-- A Windows replay check (PowerShell) for cross-compiler determinism.
+- A Windows replay check (PowerShell) for cross-compiler determinism (exists outside the repo as
+  det_check.ps1: `--mathcheck` vs the Linux value, then the L.rec replay vs the Linux hashes).
 - Apt helpers: extract a movie's BIG (`resdump.py save flashes <movie>` then unpack), an ActionScript
   disassembler, a timeline dumper.
 - Save inspectors: list/validate sections of a `.ngh`/`.gci` (strip the 0x40-byte GCI header), decode
@@ -247,6 +248,7 @@ Development only: the launcher removes all of them except `SIMMY_INI` from the g
 `_P2`, `_SPEED`, `_LOT`, `_NGH`, `_DOWN`, `_RSS`, `_HANG`, `_STALL`, `_SWITCH`, `_SWAP` ([`pc_soak.cpp`](../src/platform/pc_soak.cpp));
 `SIMMY_DET`, `SIMMY_DET_SEED`, `_RECORD`, `_REPLAY`, `_BOOT`, `_HASH`, `_DUMP`, `_DUMP_TICKS`, `_REF`,
 `_REF_AFTER`, `_REF_QUIT`, `_LINES`, `_RANDLOG`, `_SPEED`, `_JITTER`, `_NOPACE`, `_QUIT`
-([determinism-and-netplay.md](determinism-and-netplay.md)).
+([determinism-and-netplay.md](determinism-and-netplay.md)); `simmy --mathcheck [file]` (the deterministic
+math's self-test, same docs page).
 
 When you add a switch, add it here (and keep it off by default).

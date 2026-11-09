@@ -1,5 +1,6 @@
 // Port of base/e_vec3.cpp, engine/e_vec4.cpp and the basics of base/e_mat4.cpp.
 #include "simmy/types_gen.hpp"
+#include "simmy/detmath.hpp"
 
 #include <cmath>
 #include <utility>
@@ -214,7 +215,7 @@ void EMat4::PreScale(float s) {
 // 802C985C
 EMat4& EMat4::RotateX(float angle) {
   Id();
-  const float s = std::sin(angle), c = std::cos(angle);
+  const float s = simmy::dm::sin(angle), c = simmy::dm::cos(angle);
   m[1][1] = c;
   m[2][1] = -s;
   m[1][2] = s;
@@ -224,7 +225,7 @@ EMat4& EMat4::RotateX(float angle) {
 // 802C98C8
 EMat4& EMat4::RotateY(float angle) {
   Id();
-  const float s = std::sin(angle), c = std::cos(angle);
+  const float s = simmy::dm::sin(angle), c = simmy::dm::cos(angle);
   m[0][0] = c;
   m[0][2] = -s;
   m[2][0] = s;
@@ -234,7 +235,7 @@ EMat4& EMat4::RotateY(float angle) {
 // 802C9934
 EMat4& EMat4::RotateZ(float angle) {
   Id();
-  const float s = std::sin(angle), c = std::cos(angle);
+  const float s = simmy::dm::sin(angle), c = simmy::dm::cos(angle);
   m[0][0] = c;
   m[1][0] = -s;
   m[0][1] = s;
@@ -244,7 +245,7 @@ EMat4& EMat4::RotateZ(float angle) {
 // 802C9EF0
 // Rotates the result about x afterwards (columns 1 and 2 of every row).
 EMat4& EMat4::PostRotateX(float angle) {
-  const float s = std::sin(angle), c = std::cos(angle);
+  const float s = simmy::dm::sin(angle), c = simmy::dm::cos(angle);
   for (int r = 0; r < 4; ++r) {
     const float y = m[r][1], z = m[r][2];
     m[r][2] = y * s + z * c;
@@ -255,7 +256,7 @@ EMat4& EMat4::PostRotateX(float angle) {
 // 802CA078
 // this = this * (rotation about y by `angle`): columns 0 and 2 of every row.
 EMat4& EMat4::PostRotateY(float angle) {
-  const float s = std::sin(angle), c = std::cos(angle);
+  const float s = simmy::dm::sin(angle), c = simmy::dm::cos(angle);
   for (int r = 0; r < 4; ++r) {
     const float x = m[r][0], z = m[r][2];
     m[r][2] = x * -s + z * c;
@@ -266,7 +267,7 @@ EMat4& EMat4::PostRotateY(float angle) {
 // 802C9E3C
 // this = (rotation about x by `angle`) * this: rows 1 and 2 turned.
 EMat4& EMat4::PreRotateX(float angle) {
-  const float s = std::sin(angle), c = std::cos(angle);
+  const float s = simmy::dm::sin(angle), c = simmy::dm::cos(angle);
   for (int col = 0; col < 3; ++col) {
     const float r1 = m[1][col], r2 = m[2][col];
     m[2][col] = -s * r1 + c * r2;
@@ -277,7 +278,7 @@ EMat4& EMat4::PreRotateX(float angle) {
 // 802C9FC4
 // this = (rotation about y by `angle`) * this: rows 0 and 2 turned.
 EMat4& EMat4::PreRotateY(float angle) {
-  const float s = std::sin(angle), c = std::cos(angle);
+  const float s = simmy::dm::sin(angle), c = simmy::dm::cos(angle);
   for (int col = 0; col < 3; ++col) {
     const float r0 = m[0][col], r2 = m[2][col];
     m[2][col] = s * r0 + c * r2;
@@ -288,7 +289,7 @@ EMat4& EMat4::PreRotateY(float angle) {
 // 802CA14C
 // this = (rotation about z by `angle`) * this: rows 0 and 1 turned.
 EMat4& EMat4::PreRotateZ(float angle) {
-  const float s = std::sin(angle), c = std::cos(angle);
+  const float s = simmy::dm::sin(angle), c = simmy::dm::cos(angle);
   for (int col = 0; col < 3; ++col) {
     const float r0 = m[0][col], r1 = m[1][col];
     m[1][col] = -s * r0 + c * r1;
@@ -299,7 +300,7 @@ EMat4& EMat4::PreRotateZ(float angle) {
 // 802CA200
 // this = this * (rotation about z by `angle`).
 EMat4& EMat4::PostRotateZ(float angle) {
-  const float s = std::sin(angle), c = std::cos(angle);
+  const float s = simmy::dm::sin(angle), c = simmy::dm::cos(angle);
   for (int r = 0; r < 4; ++r) {
     const float x = m[r][0], y = m[r][1];
     m[r][1] = x * s + y * c;
@@ -377,7 +378,7 @@ EMat4& EMat4::LookAtPos(EVec3& eye, EVec3& target, EVec3& up) {
 EMat4& EMat4::Projection(float fovY, float aspect, float zNear, float zFar) {
   Id();
   const float half = fovY * 0.017453292f * 0.5f;
-  const float cot = std::cos(half) / std::sin(half);
+  const float cot = simmy::dm::cos(half) / simmy::dm::sin(half);
   m[2][3] = -1.0f;
   m[3][3] = 0.0f;
   m[1][1] = cot;
@@ -432,7 +433,7 @@ int MatrixInvert(float** a, int n) {
 // 802C9D34
 // A rotation by `angle` (radians) about the unit `axis` (row vectors).
 EMat4& EMat4::Rotate(EVec3& axis, float angle) {
-  const float s = std::sin(angle), c = std::cos(angle), t = 1.0f - c;
+  const float s = simmy::dm::sin(angle), c = simmy::dm::cos(angle), t = 1.0f - c;
   const float x = axis.x, y = axis.y, z = axis.z;
   m[0][0] = x * x * t + c;
   m[0][1] = x * y * t + z * s;

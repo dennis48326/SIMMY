@@ -9,6 +9,7 @@
 #include "simmy/classes/epointlight.hpp"
 #include "simmy/classes/psystem.hpp"
 #include "simmy/roomresolve.hpp"
+#include "simmy/detmath.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -501,7 +502,7 @@ void ISimsObjectModel::Update() {
         EVec3 flip(1.0f, 1.0f, -1.0f);
         hand.PreScale(flip);
         SetOrient(hand);
-        m_rot = static_cast<float>(m_xob->GetData(1)) * 3.1415927f * 0.25f + std::atan2(dir.y, dir.x);
+        m_rot = static_cast<float>(m_xob->GetData(1)) * 3.1415927f * 0.25f + simmy::dm::atan2(dir.y, dir.x);
         if (m_cursFlags & 0x100) dynamic = true;
       }
     }

@@ -7,6 +7,7 @@
 #include "simmy/types_gen.hpp"
 #include "simmy/unported_globals.hpp"
 #include "simmy/sound_trace.hpp"
+#include "simmy/detmath.hpp"
 
 #include <cmath>
 
@@ -66,8 +67,8 @@ int AmbientSoundPlayer::Start() {
                                       static_cast<unsigned int>(m_sound->m_angleSpread));
     const float rad = (static_cast<float>(base) + static_cast<float>(static_cast<int>(r)) / 10.0f) * 0.017453292f;
     const float speed = static_cast<float>(static_cast<double>(static_cast<float>(m_sound->m_speed)) / 10.0);
-    m_vel[1] = std::sin(rad) * speed;
-    m_vel[0] = std::cos(rad) * speed;
+    m_vel[1] = simmy::dm::sin(rad) * speed;
+    m_vel[0] = simmy::dm::cos(rad) * speed;
   }
   SetInitialSoundPosition();
   if (!(m_sound->m_flags & ERAmbientSound::kRoomCheck)) {

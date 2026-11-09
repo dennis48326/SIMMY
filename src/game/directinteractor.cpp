@@ -15,6 +15,7 @@
 #include "simmy/classes/collisionmap.hpp"
 #include "simmy/classes/placement.hpp"
 #include "simmy/mp4.hpp"  // PC mod: 4 players
+#include "simmy/detmath.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -66,13 +67,13 @@ float GetCameraRelativeStickAngle(EVec2& stick, ESimsCam* cam, float* stickAngle
     const float l = std::sqrt(hx * hx + hy * hy);
     hx /= l, hy /= l;
   }
-  const float heading = std::atan2(hy, hx);
+  const float heading = simmy::dm::atan2(hy, hx);
   float sx = stick.x, sy = stick.y;
   if (sx != 0.0f || sy != 0.0f) {
     const float l = std::sqrt(sx * sx + sy * sy);
     sx /= l, sy /= l;
   }
-  const float a = std::atan2(-sy, -sx);
+  const float a = simmy::dm::atan2(-sy, -sx);
   if (stickAngle) *stickAngle = a;
   return Wrap(a + heading);
 }
@@ -112,7 +113,7 @@ bool IsOnRightOf(EVec2 p, EVec2 a, EVec2 b) { return (p.y - a.y) * (b.x - a.x) -
 RET_UNKNOWN IsRectTouchingArc(EVec2 centre, EVec2 dir, float angle, EVec2 lo, EVec2 hi) {
   if (!(centre.x < lo.x || centre.y < lo.y || hi.x < centre.x || hi.y < centre.y)) return 1;
   const EVec2 corners[4] = {{lo.x, lo.y}, {hi.x, hi.y}, {lo.x, hi.y}, {hi.x, lo.y}};
-  const float c = std::cos(angle), s = std::sin(angle);
+  const float c = simmy::dm::cos(angle), s = simmy::dm::sin(angle);
   const EVec2 left{centre.x + (c * dir.x - s * dir.y), centre.y + (s * dir.x + c * dir.y)};
   const EVec2 right{centre.x + (c * dir.x - -s * dir.y), centre.y + (-s * dir.x + c * dir.y)};
   bool rightOfLeft = false, leftOfRight = false;
@@ -576,7 +577,7 @@ RET_UNKNOWN InteractorModule__DirectInteractor::ShouldHighlightObject(cXObject* 
   if (!inst || !anim) return 0;
   const float a = static_cast<float>(anim->GetRealDir() + 1.5707963705062866);
   EVec2 centre{m_pos.x, m_pos.y};
-  EVec2 dir{std::cos(a), std::sin(a)};
+  EVec2 dir{simmy::dm::cos(a), simmy::dm::sin(a)};
   EVec2 lo{inst->m_bounds[0], inst->m_bounds[1]};
   EVec2 hi{inst->m_bounds[3], inst->m_bounds[4]};
   if (!IsRectTouchingArc(centre, dir, m_coneAngle, lo, hi)) return 0;

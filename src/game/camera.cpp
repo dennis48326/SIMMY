@@ -6,6 +6,7 @@
 #include "simmy/unported_globals.hpp"
 #include "simmy/platform.hpp"
 #include "simmy/classes/buildtools.hpp"
+#include "simmy/detmath.hpp"
 
 bool PlayerInSocialMode(int player);  // socialmode.cpp
 bool IsUsingDirectControlInteractor(int player);  // inlevel.cpp
@@ -472,7 +473,7 @@ float ESimsCam::CalcPitch(EVec3& dir) {
   const float len = std::sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
   if (len < 1e-5f) return 0.0f;
   const float flat = std::sqrt(dir.x * dir.x + dir.y * dir.y);
-  float a = std::acos(flat / len);
+  float a = simmy::dm::acos(flat / len);
   if (dir.z > 0.0f) a = 6.2831855f - a;
   return a;
 }
@@ -487,7 +488,7 @@ float ESimsCam::CalcZAxisTheta(EVec3& dir) {
   }
   if (x > 1.0f) x = 1.0f;
   if (x < -1.0f) x = -1.0f;
-  float a = std::acos(x);
+  float a = simmy::dm::acos(x);
   if (y < 0.0f) a = 6.2831855f - a;
   return a;
 }

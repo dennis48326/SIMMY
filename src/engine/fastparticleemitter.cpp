@@ -13,6 +13,7 @@
 // UpdateBurst, RotateEmitter, the colour bits of AddBurst), the assembly.
 #include "simmy/types_gen.hpp"
 #include "simmy/unported_globals.hpp"
+#include "simmy/detmath.hpp"
 
 #include <cmath>
 #include <cstdint>
@@ -484,7 +485,7 @@ int Effects__FastParticleEmitter::AddBurst(int count, float birth) {
             const float* v1 = win->m_lookAt.m[1];
             const float a = v0[0] * d[0] + v0[1] * d[1] + v0[2] * d[2];
             const float b = v1[0] * d[0] + v1[1] * d[1] + v1[2] * d[2];
-            s->m_rot = -std::atan2(a, b);
+            s->m_rot = -simmy::dm::atan2(a, b);
             s->m_spin = (m_init->m_flags & 2) ? -m_init->m_spin : -m_init->m_spin * a;
             s->m_rot += m_init->m_rotation;
           }
@@ -748,8 +749,8 @@ void Effects__FastParticleEmitter::ComputeDispersionPositionAndVelocity(State* s
   if (ei->m_flags2 & 0x8000) {
     // Evenly spread over the sphere zone between the elevation and elevation + range.
     const float range = ei->m_azimuthRange;
-    const float sTop = std::sin(ei->m_elevation + ei->m_elevationRandom);
-    const float dz = sTop - std::sin(ei->m_elevation);
+    const float sTop = simmy::dm::sin(ei->m_elevation + ei->m_elevationRandom);
+    const float dz = sTop - simmy::dm::sin(ei->m_elevation);
     const float area = std::fabs(dt * range * dz);
     if (area <= 1e-12f) {
       azimuth = 0.0f;
@@ -759,10 +760,10 @@ void Effects__FastParticleEmitter::ComputeDispersionPositionAndVelocity(State* s
       const float a = t * dz * inv;
       const float b = t * range * inv;
       azimuth = (a - static_cast<float>(static_cast<int>(a))) * range;
-      float z = (b - static_cast<float>(static_cast<int>(b))) * dz + std::sin(m_init->m_elevation);
+      float z = (b - static_cast<float>(static_cast<int>(b))) * dz + simmy::dm::sin(m_init->m_elevation);
       if (z < -1.0f) z = -1.0f;
       else if (1.0f < z) z = 1.0f;
-      elevation = std::asin(z);
+      elevation = simmy::dm::asin(z);
     }
   }
   float sa, ca, se, ce;

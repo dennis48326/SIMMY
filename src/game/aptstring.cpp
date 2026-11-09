@@ -3,6 +3,7 @@
 // drawn with the Apt font (gpFont, aptauxpceorgl.cpp) at the paragraph's size.
 #include "simmy/types_gen.hpp"
 #include "simmy/unported_globals.hpp"
+#include "simmy/detmath.hpp"
 
 #include <cmath>
 #include <cstdlib>
@@ -94,7 +95,7 @@ void AptFormat::Draw(EMat4* matrix, EVec4* scale, EVec4* translate) {
     const float now = Now();
     if (m_startTime == 0.0f) m_startTime = now;
     if (m_matrixFx == 1 || m_matrixFx == 2) {
-      const float s = std::sin((now - m_startTime) * m_fxSpeed) * m_fxAmount;
+      const float s = simmy::dm::sin((now - m_startTime) * m_fxSpeed) * m_fxAmount;
       s_restoreMatrix = *matrix;
       if (m_fx) {  // GC: written through a null pointer when there was none
         m_fx[0] = m_matrixFx == 2 ? 7 : 8;
@@ -106,7 +107,7 @@ void AptFormat::Draw(EMat4* matrix, EVec4* scale, EVec4* translate) {
       s_restoreMatrix = *matrix;
       if (m_fx) {
         if (t < m_fxSpeed) {
-          float a = (-std::cos(t / m_fxSpeed * 3.1415927f) * 0.5f + 0.5f) * 6.2831855f;
+          float a = (-simmy::dm::cos(t / m_fxSpeed * 3.1415927f) * 0.5f + 0.5f) * 6.2831855f;
           if (std::fmod(now - m_startTime, m_fxAmount + m_fxAmount) >= m_fxAmount) a = 6.2831855f - a;
           m_fx[0] = 7;
           const short v = static_cast<short>(static_cast<int>(a * 32767.0f));
@@ -255,7 +256,7 @@ void AptWord::Draw(ERC* rc, EMat4* matrix, EVec4* scale, EVec4* translate) {
     }
     if (m_format->m_searchlightOn) {
       const float a = m_format->m_searchAngle;
-      const float vx = std::cos(a) + std::cos(a), vy = std::sin(a);
+      const float vx = simmy::dm::cos(a) + simmy::dm::cos(a), vy = simmy::dm::sin(a);
       EMat4 r;
       r.RotateZ(0.7853982f);
       const float wx = vx * r.m[0][0] + vy * r.m[1][0], wy = vx * r.m[0][1] + vy * r.m[1][1];

@@ -5,6 +5,17 @@ project(simmy LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Deterministic floats (lockstep netplay: Windows and Linux builds must compute the same simulation,
+# docs/determinism-and-netplay.md): IEEE single/double on SSE2, no fused multiply-add contraction (a
+# build for an FMA-capable -march would otherwise fuse a*b+c differently per compiler), no fast-math.
+# For everything, aurora included (its PSVEC/PSMTX math feeds game state). The game's sin/cos/atan2/...
+# are src/platform/detmath (the GameCube's libm), never the C library's.
+if (MSVC)
+  add_compile_options(/fp:precise)  # MSVC 2022: no contraction unless /fp:contract; never /fp:fast
+else ()
+  add_compile_options(-ffp-contract=off -fno-fast-math)
+endif ()
+
 set(SIMMY_AURORA_DIR "" CACHE PATH "Local aurora checkout (leave empty to fetch it with git)")
 set(SIMMY_AURORA_TAG "505b5ebc91d585948f41ff5b6ec14694af078891" CACHE STRING "aurora git ref to fetch when SIMMY_AURORA_DIR is empty")
 
