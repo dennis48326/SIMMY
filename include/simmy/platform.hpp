@@ -171,6 +171,21 @@ void window2_present(bool windows);
 bool window2_open();
 bool window2_pixel_size(unsigned& width, unsigned& height);
 bool dev_two_player();
+// ---- PC mod: 4 players (pc_splitscreen.cpp, pc_window2.cpp; the game side is src/game/mp4.cpp) ----
+// players= in simmy.ini (SIMMY_PLAYERS): the most players a game takes, 1..4 (default 2, the GC's).
+int settings_max_players();
+// split=windows: how many windows a split frame is cut into: 2 as before, up to kMaxPlayers while
+// extra free-play players have joined (the EFB is that many windows wide, window k shows the k-th
+// strip). Live mode sets it each frame before split_screen_frame.
+void split_set_window_count(int windows);
+int split_window_count();            // this frame's strips (2 outside a split=windows frame)
+int split_window_count_requested();  // what live mode asked for last (the windows to keep open)
+// Window 3 or 4 was closed by its player (once per close): the game drops that player out.
+bool split_window_take_close_request(int index);
+// Window `index` (0 = aurora's, player 1's; 1 = player 2's; 2, 3 = players 3 and 4) is there to draw
+// into (shown, or a virtual one in offscreen runs), and its size in pixels.
+bool split_window_open(int index);
+bool split_window_pixel_size(int index, unsigned& width, unsigned& height);
 // fire_code_limit= in simmy.ini (pc_settings.cpp): the GameCube's lot object limit (fire-code meter) is on.
 bool settings_fire_code_limit();
 

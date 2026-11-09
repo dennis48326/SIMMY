@@ -313,7 +313,8 @@ int simmy_apt_hud_enter(AptCIH* inst, const AptMatrix& m) {
         // screen covers it on the GC; the shared clock-and-money bar stays up for the other player).
         if (window == simmy::coop_private_player()) passes = 0, how = "hidden under a private screen";
       } else if (window == 2) {
-        e.window = 0, e.whole = true, e.a = kUndecided, passes = 2, how = "both windows";
+        // (PC mod: 4 players: every window, one pass each.)
+        e.window = 0, e.whole = true, e.a = kUndecided, passes = simmy::split_window_count(), how = "both windows";
       }
     }
     if (e.window >= 0 && e.a == kUndecided) {
@@ -412,10 +413,11 @@ int simmy_apt_hud_enter(AptCIH* inst, const AptMatrix& m) {
   return 1;
 }
 
-// split=windows, a dialog over the whole stage: its second drawing goes into player 2's window.
+// split=windows, a dialog over the whole stage: its second drawing goes into player 2's window (PC mod:
+// 4 players: each further drawing into the next window).
 void simmy_apt_hud_next_pass() {
   if (g_stack.empty()) return;
-  g_stack.back().window = 1;
+  g_stack.back().window = static_cast<signed char>(g_stack.back().window + 1);
   Use(g_stack.back());
 }
 

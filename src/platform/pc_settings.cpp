@@ -75,6 +75,7 @@ std::string NormalizeKey(const std::string& key) {
   if (out == "player1input" || out == "p1controls" || out == "player1controls" || out == "input") return "p1input";
   if (out == "edgepan" || out == "edgepanning" || out == "mouseedgepanning") return "mouseedgepan";
   if (out == "firecode" || out == "firecodemeter") return "firecodelimit";
+  if (out == "maxplayers" || out == "numplayers" || out == "playercount") return "players";  // PC mod: 4 players
   return out;
 }
 
@@ -82,7 +83,7 @@ const char* const kKeys[] = {"window", "fullscreen", "resolution", "aspect", "hu
                              "anisotropy", "vsync", "fpscap", "backend", "resampler", "split",
                              "window2", "window2pos", "window2display", "fullscreen2", "iso",
                              "p1input", "mouseedgepan", "mouserotatespeed", "mousezoomspeed", "mouseinvertx",
-                             "mouseinverty", "mouseinvertwheel", "firecodelimit"};
+                             "mouseinverty", "mouseinvertwheel", "firecodelimit", "players"};
 bool KnownKey(const std::string& k) {
   for (const char* known : kKeys)
     if (k == known) return true;
@@ -232,6 +233,11 @@ void ApplyValue(GraphicsSettings& g, const std::string& key, const std::string& 
     if (v == "default" || v == "auto") g.window2Display = -1;
     else if (end && *end == '\0' && n >= 0 && n < 64) g.window2Display = static_cast<int>(n);
     else Warn(key, v, "a display number (0 = the first) or auto");
+  } else if (key == "players") {  // PC mod: 4 players
+    char* end = nullptr;
+    const long n = std::strtol(v.c_str(), &end, 10);
+    if (end && *end == '\0' && n >= 1 && n <= 4) g.maxPlayers = static_cast<int>(n);
+    else Warn(key, v, "1, 2, 3 or 4");
   } else if (key == "fullscreen2") {
     bool b = false;
     if (v == "borderless" || v == "desktop" || v == "exclusive") g.fullscreen2 = true;
@@ -464,6 +470,7 @@ void settings_load(const char* argv0) {
   }
   if (const char* b = std::getenv("SIMMY_BACKEND")) ApplyValue(g, "backend", b);  // the older switch
   if (const char* s = std::getenv("SIMMY_SPLIT")) ApplyValue(g, "split", s);      // the older switch
+  if (const char* s = std::getenv("SIMMY_PLAYERS")) ApplyValue(g, "players", s);  // PC mod: 4 players (tests)
   for (const auto& kv : g_cliValues) ApplyValue(g, kv.first, kv.second);
 }
 
@@ -718,11 +725,16 @@ std::string settings_value_string(const GraphicsSettings& g, const char* rawKey)
     return g.mouseInvertWheel ? "on" : "off";
   } else if (key == "firecodelimit") {
     return g.fireCodeLimit ? "on" : "off";
+  } else if (key == "players") {
+    std::snprintf(buf, sizeof buf, "%d", g.maxPlayers);
   }
   return buf;
 }
 
 bool settings_fire_code_limit() { return graphics_settings().fireCodeLimit; }
+
+// PC mod: 4 players.
+int settings_max_players() { return graphics_settings().maxPlayers; }
 
 std::string settings_ini_path() {
   const GraphicsSettings& g = graphics_settings();
@@ -747,7 +759,7 @@ const char* const kNames[] = {"window", "fullscreen", "resolution", "aspect", "h
                               "anisotropy", "vsync", "fps_cap", "backend", "resampler", "split",
                               "window2", "window2_pos", "window2_display", "fullscreen2", "iso",
                               "p1_input", "mouse_edge_pan", "mouse_rotate_speed", "mouse_zoom_speed",
-                              "mouse_invert_x", "mouse_invert_y", "mouse_invert_wheel", "fire_code_limit"};
+                              "mouse_invert_x", "mouse_invert_y", "mouse_invert_wheel", "fire_code_limit", "players"};
 bool SaveNames(const char* const* names, size_t count, std::string& message);
 }  // namespace
 

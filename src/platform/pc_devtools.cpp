@@ -308,7 +308,8 @@ static void RenderSurfaceTest(ERC* rc) {
 }
 
 // Presses the '+'-joined button/stick names in `names` on pad 1 (pads[0]); a name prefixed "p2:" goes to
-// pad 2 (pads[1]), e.g. "lup+p2:lleft" runs player 1 up and player 2 left at once.
+// pad 2 (pads[1]), e.g. "lup+p2:lleft" runs player 1 up and player 2 left at once ("p3:", "p4:": pads 3
+// and 4, PC mod: 4 players).
 static void dev_press_pad(PADStatus* pads, const std::string& names) {
   static const struct {
     const char* name;
@@ -325,6 +326,11 @@ static void dev_press_pad(PADStatus* pads, const std::string& names) {
     PADStatus* pad = &pads[0];
     if (name.compare(0, 3, "p2:") == 0) {
       pad = &pads[1];
+      pad->err = PAD_ERR_NONE;
+      name.erase(0, 3);
+    } else if (name.compare(0, 3, "p3:") == 0 || name.compare(0, 3, "p4:") == 0) {
+      // PC mod: 4 players: pads 3 and 4.
+      pad = &pads[name[1] - '1'];
       pad->err = PAD_ERR_NONE;
       name.erase(0, 3);
     }
@@ -482,6 +488,14 @@ void dev_pad_script(PADStatus* pads) {
   // A script that drives pad 2 ("p2:" steps) keeps it plugged in throughout, as pad 1.
   static const bool usesPad2 = (seq && std::strstr(seq, "p2:")) || (script && std::strstr(script, "p2:"));
   if (usesPad2) pads[1].err = PAD_ERR_NONE;
+  // PC mod: 4 players: pads 3 and 4 likewise ("p3:", "p4:" steps), or SIMMY_FAKE_PADS=<n> (pads 1..n
+  // plugged in from the start, so the extra players' pads count as connected before they press).
+  static const bool usesPad3 = (seq && std::strstr(seq, "p3:")) || (script && std::strstr(script, "p3:"));
+  static const bool usesPad4 = (seq && std::strstr(seq, "p4:")) || (script && std::strstr(script, "p4:"));
+  static const int fakePads = std::getenv("SIMMY_FAKE_PADS") ? std::atoi(std::getenv("SIMMY_FAKE_PADS")) : 0;
+  if (usesPad3 || fakePads >= 3) pads[2].err = PAD_ERR_NONE;
+  if (usesPad4 || fakePads >= 4) pads[3].err = PAD_ERR_NONE;
+  if (fakePads >= 2) pads[1].err = PAD_ERR_NONE;
   if (seq) {
     pads[0].err = PAD_ERR_NONE;
     dev_pad_seq(pads, seq);

@@ -154,6 +154,12 @@ pad motor through `EVibrate` and aurora's `PADControlMotor` (one on/off motor, a
   downsampled); the first frame after entering/leaving the split view is at the previous EFB size; window
   2 is not vsynced (may tear without mailbox); no F1 and no keyboard in window 2; Alt+Enter and
   multi-monitor placement untested on real displays.
+- 3-4 players (PC mod, [multiplayer.md](multiplayer.md)): Free Play two-player games with
+  `split=windows` only; extra players have direct control only, a PC HUD and action menu (no Flash HUD,
+  build/buy, social-mode menu, classic cursor or pause menu of their own), no object highlights, no
+  audio listener; windows 3 and 4 are not remembered in simmy.ini. Four views draw the lot four times
+  (offscreen, software GPU, 640x480 windows: main-thread time per frame about 14 ms with four views against
+  8 ms with two; the same scripted run took 337 s against 217 s).
 - Food creation in co-op: one at a time (one ING instance); costs game time; meanwhile the other player
   cannot pause, use a wardrobe or leave the lot.
 - F1 overlay: movies keep playing under it; in 16:9 "extended" Apt art updates only when the game resumes.

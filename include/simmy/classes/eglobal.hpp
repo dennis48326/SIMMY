@@ -118,10 +118,10 @@ struct EGlobal {
   int m_fieldAC = 0;  // +0xAC
   int m_fieldB0 = 0;  // +0xB0
   void* m_aptViewer = nullptr;  // +0xB4 AptViewer (the Flash UI)
-  unsigned char m_usedSimInteractor[2] = {};  // +0xB8 DAT_80475E84/85: the player last used the classic
+  unsigned char m_usedSimInteractor[kMaxPlayers] = {};  // PC mod: 4 players (GC [2]). +0xB8 DAT_80475E84/85: the player last used the classic
                                               // control (SimInteractor::OnStop 1, DirectInteractor::OnStop 0)
   unsigned char m_fieldBA[2] = {};  // +0xBA
-  cXPerson* m_selectedPerson[2] = {};  // +0xBC each player's selected sim (DAT_80475E88)
+  cXPerson* m_selectedPerson[kMaxPlayers] = {};  // PC mod: 4 players (GC [2], [2..3] free play only). +0xBC each player's selected sim (DAT_80475E88)
   int m_fieldC4 = 0;  // +0xC4
   EHouse* m_house = nullptr;  // +0xC8 the current house (DAT_80475E94)
   int m_fieldCC = 0;  // +0xCC the player being drawn (DAT_80475E98: highlights)
@@ -143,7 +143,7 @@ struct EGlobal {
   int m_field10C = 0;  // +0x10C
   EVibrate* m_vibrate = nullptr;  // +0x110 (DAT_80475EDC)
   void* m_cheats = nullptr;  // +0x114 ECheats
-  CameraDirector* m_cameraDirectors[2] = {};  // +0x118 one per player (SetDefaults)
+  CameraDirector* m_cameraDirectors[kMaxPlayers] = {};  // PC mod: 4 players (GC [2]; [2..3] made when they join). +0x118 one per player (SetDefaults)
   CameraDirector* CameraDirectorOf(int player) const { return m_cameraDirectors[player]; }
   int m_field120 = 0;  // +0x120
   void* m_uiQDTarget = nullptr;  // +0x124 UIQDTarget

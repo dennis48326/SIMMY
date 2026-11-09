@@ -18,6 +18,13 @@
 ; (Developers: --data <folder> reads an extracted disc instead and wins over this.)
 ;iso =
 
+; PC mod: up to 4 players (docs/multiplayer.md). 2 (default) is the GameCube's two-player co-op; 1
+; turns co-op off. 3 or 4: in a two-player Free Play game with split = windows, players 3 and 4 press
+; Start on their own controller to join, each taking a household sim no player has, with their own
+; camera, plumb bob, action menu and window ("SIMMY - Player 3"). Start then A drops out. Story mode
+; stays at two players. Environment: SIMMY_PLAYERS=4.
+;players = 2
+
 [graphics]
 
 ; Window size in pixels (default 1280x960; 1280x720 with aspect=16:9). With fullscreen=exclusive this

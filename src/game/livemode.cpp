@@ -12,6 +12,8 @@
 #include "simmy/types_gen.hpp"
 #include "simmy/platform.hpp"
 #include "simmy/unported_globals.hpp"
+#include "simmy/mp4.hpp"  // PC mod: 4 players
+#include <algorithm>
 
 #include <cmath>
 #include <cstdio>
@@ -726,8 +728,11 @@ void EHouse::Draw(ERC* rc) {
   if (!m_level) return;
   SetupInterestFade();
   ESimsCam* cam = _globals.m_cam;
-  if (cam) EInstance::SetContext(cam->m_player);
-  if (m_room) m_room->UpdateWallFade(cam ? cam->m_player : 0);
+  // PC mod: 4 players: an extra player's view draws in the second view's context (the walls' and
+  // instances' per-view state, GC [2]: it is worked out again from the camera before each view draws).
+  const int context = cam ? std::min(cam->m_player, kGcPlayers - 1) : 0;
+  if (cam) EInstance::SetContext(context);
+  if (m_room) m_room->UpdateWallFade(cam ? context : 0);
   if (m_rain) m_rain->RainModeUpdate(_gd.m_fieldEC ? m_minutesPassed * 0.5f : m_minutesPassed);  // DAT_80475C70: two players
   m_level->Draw(rc);
 }
@@ -1252,16 +1257,20 @@ void ELiveMode::Update() {
   if (Globs_pSimulator) Globs_pSimulator->Simulate();
   for (int i = 0; i < 2; ++i)
     if (CameraDirector* d = _globals.CameraDirectorOf(i)) d->Update();
+  for (int i = kGcPlayers; i < kMaxPlayers; ++i)  // PC mod: 4 players: the extra players' directors
+    if (CameraDirector* d = Mp4Joined(i) ? _globals.CameraDirectorOf(i) : nullptr) d->Update();
   if (m_introCamera) UpdateIntroCamera();
   // GC: after the cameras, the rooms' statistics when something changed them.
   if (Globs_pRoomManager) Globs_pRoomManager->UpdateRooms();
   if (_globals.m_house && !m_paused) {
     // InteractorManager::Update (PC: the direct-control interactors), then CameraManager::Update
     // moves each player's camera (ESimsCam::Update).
-    const int count = _gd.m_fieldEC ? 2 : 1;
+    // PC mod: 4 players: extra players join / drop out first; then their slots run too.
+    Mp4Update();
+    const int count = std::max(_gd.m_fieldEC ? 2 : 1, Mp4PlayerSlots());
     UpdateDirectInteractors(count, _dt);
     for (int i = 0; i < count; ++i)
-      if (players[i].m_cam) players[i].m_cam->Update();
+      if (players[i].m_cam && (i < kGcPlayers || Mp4Joined(i))) players[i].m_cam->Update();
   }
   if (_gd.m_field9C) {
     if (Globs_pSimulator) Globs_pSimulator->RestoreTrueDt();
@@ -1270,7 +1279,7 @@ void ELiveMode::Update() {
   const double speed = !Globs_pSimulator ? 1.0 : Globs_pSimulator->IsPausedAtAll() ? 0.0 : Globs_pSimulator->GetSpeedMultiplier();
   _gamedt = m_paused ? 0.0f : static_cast<float>(speed * _dt) * (_gd.m_fieldEC ? 0.5f : 1.0f);
   if (_globals.m_house) {
-    const int count = _gd.m_fieldEC ? 2 : 1;
+    const int count = _gd.m_fieldEC ? 2 : 1;  // (PC mod: 4 players: as on GC; the last one stays selected)
     for (int i = 0; i < count; ++i) {
       ESimsCam* cam = m_paused ? nullptr : players[i].m_cam;
       if (cam) {
@@ -1372,13 +1381,18 @@ void ELiveMode::DrawMain(ERC* rc) {
   int views = _gd.m_fieldEC ? 2 : 1;
   Player* players = _gd.m_players;
   if (players[0].m_cam && players[0].m_cam->m_fullScreen) views = 1;
-  const bool single = views != 2;
+  // PC mod: 4 players: a two-player game with extra players draws a view per player slot, one window
+  // each (split=windows).
+  if (views == 2) views = std::max(2, Mp4PlayerSlots());
+  simmy::split_set_window_count(std::max(2, Mp4PlayerSlots()));
+  const bool single = views < 2;  // (GC: views != 2)
   const int buildBuy = _gd.GetBuildBuyPlayer();
   // PC: the frame is stretched over the window while the halves are drawn (platform.hpp), which sets
   // the aspect GetScreenAspect gives.
   simmy::split_screen_frame(!single && buildBuy == -1);
   for (int i = 0; i < views; ++i) {
     if (!single && buildBuy != -1 && i != buildBuy) continue;
+    if (i >= kGcPlayers && !Mp4Joined(i)) continue;  // PC mod: 4 players: an empty slot
     SIMMY_STUB("ELiveMode::DrawMain: EInstance::SetContext, plumb bob visibility", 0x8008F7AC);
     ESimsCam* cam = m_paused ? nullptr : players[i].m_cam;
     if (!cam) continue;
@@ -1416,6 +1430,8 @@ void ELiveMode::DrawMain(ERC* rc) {
     else if (buildBuy == -1) InitPlayerXWindow(rc, players[0].m_cam->m_win, 0);
     players[0].m_cam->ForceFullScreenViewport();
     if (players[1].m_cam) players[1].m_cam->ForceFullScreenViewport();
+    for (int i = kGcPlayers; i < views; ++i)  // PC mod: 4 players
+      if (players[i].m_cam && Mp4Joined(i)) players[i].m_cam->ForceFullScreenViewport();
   }
 }
 
@@ -1473,6 +1489,13 @@ void ELiveMode::InitPlayerXWindow(ERC* rc, E3DWindow& win, int player) {
   win.SetProjection(fov, _pGfx->GetScreenAspect() * 0.5f, cam->GetNearPlane(), cam->GetFarPlane());
   cam->SetWinPos(win);
   TRect<float> half = player == 0 ? TRect<float>{0.0f, 0.0f, 0.5f, 1.0f} : TRect<float>{0.5f, 0.0f, 1.0f, 1.0f};
+  // PC mod: 4 players: with more than two windows each player has a strip of the frame (window k
+  // shows strip k).
+  const int strips = simmy::split_windows_frame() ? simmy::split_window_count() : 2;
+  if (strips > 2) {
+    const float w = 1.0f / static_cast<float>(strips);
+    half = TRect<float>{w * static_cast<float>(player), 0.0f, w * static_cast<float>(player + 1), 1.0f};
+  }
   win.SetViewport(half);
   win.SetClip(half);
   win.Select(rc);

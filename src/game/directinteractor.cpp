@@ -14,6 +14,7 @@
 #include "simmy/classes/influencemap.hpp"
 #include "simmy/classes/collisionmap.hpp"
 #include "simmy/classes/placement.hpp"
+#include "simmy/mp4.hpp"  // PC mod: 4 players
 
 #include <algorithm>
 #include <cmath>
@@ -76,8 +77,8 @@ float GetCameraRelativeStickAngle(EVec2& stick, ESimsCam* cam, float* stickAngle
   return Wrap(a + heading);
 }
 
-// PC: the interactor manager's per-player direct-control interactors.
-InteractorModule__DirectInteractor* s_direct[2] = {};
+// PC: the interactor manager's per-player direct-control interactors (PC mod: 4 players: kMaxPlayers).
+InteractorModule__DirectInteractor* s_direct[kMaxPlayers] = {};
 
 cXPersonImpl* PersonOf(cXPerson* p) {
   cXObject* o = p ? p->AsObject() : nullptr;
@@ -189,7 +190,7 @@ void InteractorModule__DirectInteractor::OnStart(int player) {
   m_person = person;
   ResetInputState();
   // The player's plumb bob, bouncing and spinning.
-  m_plumbBob = static_cast<unsigned int>(player) < 2 ? PlumbBob::s_pPlumbBob[player] : nullptr;
+  m_plumbBob = static_cast<unsigned int>(player) < kMaxPlayers ? PlumbBob::s_pPlumbBob[player] : nullptr;  // (PC mod: 4 players)
   if (auto* bob = static_cast<PlumbBob*>(m_plumbBob))
     if (bob->m_model) bob->m_model->m_bounce = bob->m_model->m_spin = 1;
   ResetIdleTime();
@@ -202,8 +203,8 @@ void InteractorModule__DirectInteractor::OnStart(int player) {
 // GC: the player's selected-person slot (DAT_80475E84) is cleared, the input session closes and the
 // plumb bob goes back to its idle state.
 void InteractorModule__DirectInteractor::OnStop() {
-  _globals.m_usedSimInteractor[m_player & 1] = 0;  // EGlobal +0xB8: the player left direct control
-  m_plumbBob = static_cast<unsigned int>(m_player) < 2 ? PlumbBob::s_pPlumbBob[m_player] : nullptr;
+  _globals.m_usedSimInteractor[Mp4Slot(m_player)] = 0;  // EGlobal +0xB8: the player left direct control
+  m_plumbBob = static_cast<unsigned int>(m_player) < kMaxPlayers ? PlumbBob::s_pPlumbBob[m_player] : nullptr;  // (PC mod: 4 players)
   if (m_plumbBob) static_cast<PlumbBob*>(m_plumbBob)->SetState(3);
 }
 
@@ -474,7 +475,7 @@ void InteractorModule__DirectInteractor::ResetInputState() {
 // The player's camera, following the sim.
 void InteractorModule__DirectInteractor::SetupCamera() {
   Player* players = _gd.m_players;
-  m_cam = players ? players[m_player & 1].m_cam : nullptr;
+  m_cam = players ? players[Mp4Slot(m_player)].m_cam : nullptr;  // (PC mod: 4 players: Mp4Slot; GC: player & 1)
   if (m_cam) m_cam->SetMode(ESimsCam__CameraMode{1});
 }
 
@@ -513,6 +514,15 @@ bool InteractorModule__DirectInteractor::CameraDirectorPermitsDirectControl() {
 // the object manager's order; the one the sim holds first), or the refuse sound when the HUD's menu is
 // not available (or the sim's idle state is 3) or nothing is highlighted.
 void InteractorModule__DirectInteractor::ExecuteActionMenu() {
+  // PC mod: 4 players: an extra player's menu is the PC one (mp4.cpp): the GC HUD has two players' menus.
+  if (m_player >= kGcPlayers) {
+    std::vector<cXObjectImpl*> objects;
+    Mp4CollectHighlightable(m_player, objects);
+    if (!Mp4ShowActionMenu(m_player, objects)) UIAUDIO::Instance()->PlaySound(0x3804219f);
+    else UIAUDIO::Instance()->PlaySound(0x374bdcea);
+    ResetInputState();
+    return;
+  }
   HUDTarget* hud = _gd.m_hudTarget;
   cXPersonImpl* me = PersonOf(m_person);
   if (!hud || !hud->IsMenuAvailable(m_player) || (me && me->GetIdleState() == 3)) {
@@ -579,6 +589,7 @@ RET_UNKNOWN InteractorModule__DirectInteractor::ShouldHighlightObject(cXObject* 
 // tiles that pass it with no wall between the player's sim and them.
 void InteractorModule__DirectInteractor::UpdateObjectHighlights(EIObjectMan* objects) {
   if (!objects) return;
+  if (m_player >= kGcPlayers) return;  // PC mod: 4 players: no highlight flags for the extra players
   objects->TurnOffAllHighlights(static_cast<unsigned int>(m_player));
   InfluenceMap* map = Globs_pFixedWorld ? Globs_pFixedWorld->GetInfluenceMap() : nullptr;
   ObjectList* list = map ? map->GetObjectList(static_cast<int>(m_pos.y), static_cast<int>(m_pos.x)) : nullptr;
@@ -610,6 +621,56 @@ void InteractorModule__DirectInteractor::UpdateObjectHighlights(EIObjectMan* obj
       inst->PropigateFlagsToSubModels();
     }
   }
+}
+
+// PC mod: 4 players: what UpdateObjectHighlights would light for an extra player (no flags: the GC has
+// highlight flags for two players), people last, the object the sim holds first (as ExecuteActionMenu).
+void Mp4CollectHighlightable(int player, std::vector<cXObjectImpl*>& out) {
+  out.clear();
+  InteractorModule__DirectInteractor* d = player >= kGcPlayers && player < kMaxPlayers ? s_direct[player] : nullptr;
+  if (!d) return;
+  auto add = [&out](cXObjectImpl* o) {
+    if (o && std::find(out.begin(), out.end(), o) == out.end()) out.push_back(o);
+  };
+  InfluenceMap* map = Globs_pFixedWorld ? Globs_pFixedWorld->GetInfluenceMap() : nullptr;
+  ObjectList* list = map ? map->GetObjectList(static_cast<int>(d->m_pos.y), static_cast<int>(d->m_pos.x)) : nullptr;
+  if (list)
+    for (cXObject* object : list->m_objects)
+      if (d->ShouldHighlightObject(object, 5.0f)) add(object->GetObjectImplementation());
+  cXPerson* sel = _globals.GetSelectedPerson(player);
+  cXObjectImpl* selImpl = sel && sel->AsObject() ? sel->AsObject()->GetObjectImplementation() : nullptr;
+  if (Globs_pObjectModule && selImpl)
+    for (int id = 1; id <= Globs_pObjectModule->GetNumObjects(); ++id) {
+      cXObject* x = Globs_pObjectModule->GetObjectFromID(static_cast<short>(id));
+      cXObjectImpl* o = x ? x->GetObjectImplementation() : nullptr;
+      if (!o || o->GetType() != 2 || !dynamic_cast<cXPersonImpl*>(o)) continue;
+      if (!d->ShouldHighlightObject(o, 1.5f)) continue;
+      EVec2 to{static_cast<float>(o->m_location[0]) * 0.0625f, static_cast<float>(o->m_location[1]) * 0.0625f};
+      EVec2 from{static_cast<float>(selImpl->m_location[0]) * 0.0625f, static_cast<float>(selImpl->m_location[1]) * 0.0625f};
+      EVec2 hit;
+      if (CollisionMap::DoesCollideEnvironment(from, to, 0.0625f, false, false, hit)) continue;
+      add(o);
+    }
+  if (selImpl)
+    if (cXObjectImpl* held = selImpl->GetContainedObject(0)) {
+      out.erase(std::remove(out.begin(), out.end(), held), out.end());
+      out.insert(out.begin(), held);
+    }
+  // PC test aid: SIMMY_MP4_OBJECTS="3:27,4:21" puts that object (by id) first in player 3's / 4's menu
+  // wherever their sim stands (scripted runs: the sim then walks there).
+  if (const char* list = std::getenv("SIMMY_MP4_OBJECTS"))
+    for (const char* p = list; *p;) {
+      int who = 0, id = 0;
+      if (std::sscanf(p, "%d:%d", &who, &id) == 2 && who == player + 1 && Globs_pObjectModule)
+        if (cXObject* x = Globs_pObjectModule->GetObjectFromID(static_cast<short>(id))) {
+          cXObjectImpl* o = x->GetObjectImplementation();
+          out.erase(std::remove(out.begin(), out.end(), o), out.end());
+          if (o) out.insert(out.begin(), o);
+        }
+      const char* comma = std::strchr(p, ',');
+      if (!comma) break;
+      p = comma + 1;
+    }
 }
 
 // 80206180
@@ -696,7 +757,8 @@ void UpdateDirectInteractorsOf(int count, float dt);
 // each active interactor's update, the camera's cursor area (ESimsCam::ValidateCursorPosition).
 void UpdateDirectInteractors(int count, float dt) {
   UpdateDirectInteractorsOf(count, dt);
-  for (int player = 0; player < count && player < 2; ++player) {
+  for (int player = 0; player < count && player < kMaxPlayers; ++player) {  // PC mod: 4 players (GC: 2)
+    if (player >= kGcPlayers && !Mp4Joined(player)) continue;
     ESimsCam* cam = _gd.m_players[player].m_cam;
     InteractorModule__InteractorInfo info;
     if (!cam || !GetPlayerInteractorInfo(player, info)) continue;
@@ -707,8 +769,12 @@ void UpdateDirectInteractors(int count, float dt) {
 
 namespace {
 void UpdateDirectInteractorsOf(int count, float dt) {
-  EController* pads[2] = {};
-  for (int player = 0; player < count && player < 2; ++player) {
+  EController* pads[kMaxPlayers] = {};
+  for (int player = 0; player < count && player < kMaxPlayers; ++player) {  // PC mod: 4 players (GC: 2)
+    // PC mod: 4 players: an extra player's slot runs only while they are in; their action menu (PC)
+    // has the pad while it is open (as the GC menu's priority filter does).
+    const bool extra = player >= kGcPlayers;
+    if (extra && !Mp4Joined(player)) continue;
     if (UpdatePlaceManipulator(player, dt)) continue;  // the player's active interactor is the place manipulator
     if (UpdateSimInteractor(player, dt)) continue;     // ... or the classic control (siminteractor.cpp)
     InteractorModule__DirectInteractor*& d = s_direct[player];
@@ -726,6 +792,11 @@ void UpdateDirectInteractorsOf(int count, float dt) {
     }
     // The pad's left stick (and C stick) as the input manager's stick commands would give them.
     pads[player] = _pCtrlMan->GetController(static_cast<unsigned int>(_pCtrlMan->GetPlayerControllerIndex(player)));
+    if (extra && Mp4MenuOpen(player)) {
+      d->OnCommandUpdate(0x12, 0.0f), d->OnCommandUpdate(0x13, 0.0f), d->OnCommandUpdate(0x0b, 0.0f), d->OnCommandUpdate(0x0c, 0.0f);
+      d->ResetIdleTime();
+      pads[player] = nullptr;
+    }
     if (EController* pad = pads[player]) {
       const unsigned int filter = d->m_cam ? d->m_cam->m_filterId : 0u;
       d->OnCommandUpdate(0x12, static_cast<float>(pad->GetStick(0, 0, filter)));
@@ -752,7 +823,8 @@ void UpdateDirectInteractorsOf(int count, float dt) {
       // A opens the action menu as usual (co-op tests).
       static const bool pickAny = std::getenv("SIMMY_INTERACT_PICK") != nullptr;
       static const int pickPlayer = std::getenv("SIMMY_INTERACT_PICK_PLAYER") ? std::atoi(std::getenv("SIMMY_INTERACT_PICK_PLAYER")) : 0;
-      const bool pick = pickAny && (pickPlayer <= 0 || pickPlayer == player + 1);
+      // (PC mod: 4 players: the extra players' A always opens their PC menu, mp4.cpp.)
+      const bool pick = pickAny && !extra && (pickPlayer <= 0 || pickPlayer == player + 1);
       if (pad->GetCmdResult(5, pad->GetBtnPressedMask(filter), pad->GetBtnDownMask(filter), false)) {
         if (pick) {
           // A reward moment or a modal dialog has the pad.
@@ -762,8 +834,10 @@ void UpdateDirectInteractorsOf(int count, float dt) {
       }
       if (pad->GetCmdResult(6, pad->GetBtnPressedMask(filter), pad->GetBtnDownMask(filter), false))
         d->OnCommandPressed(InteractorModule__InteractorInputManager__InteractorCommand{4}, 1.0f);
-      // Z (controller command 0x31) -> 0x11 (803FCA60).
-      if (pad->GetCmdResult(0x31, pad->GetBtnPressedMask(filter), pad->GetBtnDownMask(filter), false)) {
+      // Z (controller command 0x31) -> 0x11 (803FCA60). (PC mod: 4 players: not for the extra players,
+      // who have the direct control only.)
+      if (extra) {
+      } else if (pad->GetCmdResult(0x31, pad->GetBtnPressedMask(filter), pad->GetBtnDownMask(filter), false)) {
         PcSetMouseClassic(player, false);
         d->OnCommandPressed(InteractorModule__InteractorInputManager__InteractorCommand{0x11}, 1.0f);
       } else if (player == KbmPlayer() && (simmy::kbm_tick().flags & simmy::kKbmCursor) && d->m_cam &&
@@ -828,26 +902,26 @@ void UpdateDirectInteractorsOf(int count, float dt) {
 // PC stand-in for InteractorManager::GetPlayerInteractor(player, 0) != 0: the player's active
 // interactor is direct control (not classic, social mode or a build/buy manipulator).
 bool PlayerUsesDirectInteractor(int player) {
-  if (player < 0 || player > 1 || !s_direct[player]) return false;
+  if (player < 0 || player >= kMaxPlayers || !s_direct[player]) return false;  // (PC mod: 4 players; GC: 0..1)
   InteractorModule__InteractorInfo info;
   return PlayerInteractorType(player) != 1 && !PlayerInSocialMode(player) && !PlaceManipulatorInfo(player, info);
 }
 
 InteractorModule__DirectInteractor* PlayerDirectInteractor(int player) {
-  return PlayerInteractorType(player) == 1 ? nullptr : s_direct[player & 1];  // GetPlayerInteractor(player, 0)
+  return PlayerInteractorType(player) == 1 ? nullptr : s_direct[Mp4Slot(player)];  // GetPlayerInteractor(player, 0)
 }
 
 InteractorModule__Interactor* PcPlayerInteractor(int player) {
   InteractorModule__InteractorInfo info;
   if (PlaceManipulatorInfo(player, info)) return nullptr;  // (the build/buy manipulators are PC structs)
   if (PlayerInteractorType(player) == 1) return PlayerSimInteractor(player);
-  return s_direct[player & 1];
+  return s_direct[Mp4Slot(player)];  // (PC mod: 4 players; GC: player & 1)
 }
 
 bool GetPlayerInteractorInfo(int player, InteractorModule__InteractorInfo& info) {
   if (PlaceManipulatorInfo(player, info)) return true;
   if (SimInteractorInfo(player, info)) return true;
-  InteractorModule__DirectInteractor* d = s_direct[player & 1];
+  InteractorModule__DirectInteractor* d = s_direct[Mp4Slot(player)];  // (PC mod: 4 players; GC: player & 1)
   if (!d) return false;
   d->GetInteractorInfo(info);
   return true;
@@ -859,6 +933,7 @@ bool GetPlayerInteractorInfo(int player, InteractorModule__InteractorInfo& info)
 // the player's camera, _gd.m_players[p].m_cam, which the players keep); the interactor manager is the
 // PC's stand-ins (direct and classic interactors, manipulators and build tools, social mode).
 void InteractorModule::ShutdownInteractorModule() {
+  Mp4DropAll("the lot is left");  // PC mod: 4 players: the extra players drop out (nothing of theirs is saved)
   // PC: each player's action menu (FlashPiMenu, kept by the Player across games) forgets its go-here
   // object, killed with the house's objects (GC keeps the pointer and only compares it with the next
   // game's objects; a new object at the same address would be killed in its place).
@@ -867,6 +942,15 @@ void InteractorModule::ShutdownInteractorModule() {
   ShutdownPlaceManipulators();
   ShutdownSocialInteractors();
   ShutdownDirectInteractors();
+}
+
+// PC mod: 4 players: one player's direct interactor goes (an extra player dropping out, mp4.cpp).
+void ShutdownDirectInteractorOf(int player) {
+  if (player < 0 || player >= kMaxPlayers) return;
+  InteractorModule__DirectInteractor*& d = s_direct[player];
+  if (d) d->OnStop();
+  delete d;
+  d = nullptr;
 }
 
 void ShutdownDirectInteractors() {

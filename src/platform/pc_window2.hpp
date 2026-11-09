@@ -23,7 +23,9 @@ bool window2_fullscreen();
 void window2_shutdown();
 // Screenshots (--screenshot, SIMMY_SHOTS) in split=windows: also <name>_p1 / <name>_p2 with what each
 // window shows: its half of the frame (`windows`) scaled to the window's size, else the whole frame.
+// PC mod: 4 players: `windows` is the number of strips of a split frame (0: not one), and every
+// window gets its image (_p3, _p4).
 void window2_write_shots(const std::string& path, const unsigned char* rgba, unsigned width, unsigned height,
-                         bool windows, void (*writeBmp)(const std::string&, const unsigned char*, unsigned, unsigned));
+                         int windows, void (*writeBmp)(const std::string&, const unsigned char*, unsigned, unsigned));
 
 }  // namespace simmy

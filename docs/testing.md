@@ -28,7 +28,7 @@ use `SIMMY_FIXED_DT=1` or `SIMMY_DET=1` for repeatable timing.
 
 | Switch | Syntax |
 |---|---|
-| `SIMMY_PAD_SCRIPT` | `"frame:names[/hold],..."` presses at fixed game frames (pad 1; `p2:` prefix for pad 2); with `SIMMY_PAD_SEQ` too, added to the sequence's presses (e.g. a button-code cheat once the house is up) |
+| `SIMMY_PAD_SCRIPT` | `"frame:names[/hold],..."` presses at fixed game frames (pad 1; `p2:` prefix for pad 2, `p3:` / `p4:` for pads 3 and 4); with `SIMMY_PAD_SEQ` too, added to the sequence's presses (e.g. a button-code cheat once the house is up) |
 | `SIMMY_PAD_SEQ` | `"start,a,right,a,up,a,a,left,a,house,cdown/150"`: each step fires once the watched UI state (managed screens, main menu state, dialog box) has been stable 90 frames / 1.5 s and 60 frames after the previous press; a press with no reaction in 300 frames is repeated up to 3 times; `house` waits for a house + 120 frames (after a quit to the main menu, for the next house; it logs the player-to-pad mapping, whether a load is in progress and pad 1's filter stack); `name/N` holds N frames; unknown names (`none/N`, `wait/N`) press nothing. `SIMMY_PAD_SEQ_UI=1` also counts UI variable changes as reactions (CAS, free play) |
 | Names | `start a b x y z l r up down left right`, sticks `lup ldown lleft lright` / `cup cdown cleft cright` (full deflection), joined with `+`, `p2:` for pad 2 |
 | `SIMMY_PAD_HOLD` | default hold frames (6) |
@@ -50,6 +50,7 @@ still. `SIMMY_SIM_START=x,y` puts the sims on a tile (e.g. 12,22 toilet, 18,11 s
 | Interaction suite ("B-cancel suite") | Headless, `SIMMY_STORY=0 SIMMY_FUNDS=1000`, one run each with the sim next to a toilet, sofa, fridge, shower, bed (`SIMMY_SIM_START` + `SIMMY_INTERACT_PICK=<name>`), plus one that presses B while an action runs; `SIMMY_SIM_TRACE=1` prints motives | The motive moves the right way (bladder/comfort/hunger/hygiene/energy, within ~±1 of earlier runs: wall-clock jitter), `cancels: 1` in the cancel run, no `[vm] TREEASSERT` / `keeps failing` |
 | Story start | default story, `SIMMY_CAS_ACCEPT=300`, ~7000 frames | lot 9 up, tutorial dialogs, no TREEASSERT |
 | Two players | `SIMMY_TWO_PLAYER=1 --split=wide` (and `windows`, `gc`, `4x3`) offscreen | both views/HUDs, no crash |
+| Four players (PC mod) | `SIMMY_TWO_PLAYER=1 SIMMY_PLAYERS=4 SIMMY_FAKE_PADS=4`, `split=windows`, lot 13, `p3:start`, `p4:start` ([multiplayer.md](multiplayer.md) has the full script) | `[mp4] player 3 joins`, four views and `_p1`..`_p4` shots, the extra players' menu choices queue, save + quit drops them, clean exit |
 | Save / Continue | save from the pause menu (O2T -> Save -> slot A), quit, Continue in a **new process** | `[save] house 9 saved: funds ...`, same funds/objects after Continue |
 | Quit + re-enter | quit to the main menu and start again in one process: New Game, load the same and another memory card, several cycles, 1P and co-op, from buy/build mode (pause on the options tab: `start,a,down,a,down,a` once the pause menu remembers that tab; the first time `right` x6 first), RSS sampled per cycle; under ASan too. Run cycles with `SIMMY_STORY=0`: story mode's tutorial dialogs take the quit presses, and `SIMMY_PAD_SEQ`'s `house` step then goes on without a quit (count the `player 1's sim: object` lines: one per game). Also lot changes (`SIMMY_LEAVE_LOT_TEST=600,5,2,19`) and development-menu re-entry soaks (`SIMMY_SOAK_LOT`) | each game reaches live mode with fresh object ids (player 1's sim is object 149 again), no crash; RSS flat after the first few games except for a few one-off steps (caches filling, the allocator: see "Memory growth" below) |
 | Free play | dev menu or FAM screens: enter lot 13, evict/move/bulldoze, Create-a-Family | logs `[hood] ...`, no crash |
@@ -125,6 +126,9 @@ Development only: the launcher removes all of them except `SIMMY_INI` from the g
 | `SIMMY_UNLOCK_LOTS=2,3` | Count those locations as unlocked |
 | `SIMMY_UNLOCK_CLOTHING=g1,g2` | Unlock those clothing groups (marked new) in family 1 when it is read |
 | `SIMMY_VIRTUAL_PADS=N` | Attach N virtual SDL gamepads |
+| `SIMMY_PLAYERS=N` | `players=N` (PC mod: 3-4 players, [multiplayer.md](multiplayer.md)) |
+| `SIMMY_FAKE_PADS=N` | Scripted pads 1..N plugged in from the start (`p3:`/`p4:` script steps press pads 3 and 4) |
+| `SIMMY_MP4_START`, `SIMMY_MP4_OBJECTS`, `SIMMY_MP4_PICK`, `SIMMY_MP4_TRACE` | Extra players' test aids: put the joining sim on a tile, put an object in their action menu, start the menu cursor on a row, trace pads and objects ([multiplayer.md](multiplayer.md)) |
 | `SIMMY_IO_STATS=1` | File opens/reads summary at exit |
 | `SIMMY_LOG_LOADS=1` | Every resource load |
 | `SIMMY_WATCHDOG=N` | (Windows) all thread stacks to `simmy_watchdog.txt` after N s |

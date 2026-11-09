@@ -10,6 +10,7 @@
 #include "simmy/classes/siminteractor.hpp"
 #include "simmy/classes/placement.hpp"
 #include "simmy/classes/buildtools.hpp"
+#include "simmy/mp4.hpp"  // PC mod: 4 players
 
 #include <algorithm>
 #include <cmath>
@@ -43,7 +44,7 @@ EMat4& IdentityMatrix() {
   return m;
 }
 EVec3 PlayerColor(int player) {
-  const float* c = g_plumbBobParms.m_colorScale + (player & 1) * 3;
+  const float* c = player >= kGcPlayers ? Mp4PlayerColor(player) : g_plumbBobParms.m_colorScale + (player & 1) * 3;  // (PC mod: 4 players)
   return EVec3{c[0], c[1], c[2]};
 }
 }  // namespace
@@ -279,7 +280,7 @@ int InteractorModule__InteractorVisualizer::CreateResources(InteractorModule__Di
 int InteractorModule__InteractorVisualizer::DestroyResources(InteractorModule__DirectInteractor&) { return 1; }
 // 80217140
 void InteractorModule__InteractorVisualizer::PreDraw(InteractorModule__DirectInteractor& in) {
-  EOrderTableData* otd = m_otd[in.m_player & 1];
+  EOrderTableData* otd = m_otd[Mp4Slot(in.m_player)];  // (PC mod: 4 players; GC: player & 1)
   if (!otd) return;
   otd->m_pos = &in.m_pos.x;
   if (EHouse* house = _globals.m_house) house->InsertHouseObject(otd);
@@ -288,7 +289,7 @@ void InteractorModule__InteractorVisualizer::PreDraw(InteractorModule__DirectInt
 // The player's plumb bob over the sim, unless the camera director plays the game camera (8).
 void InteractorModule__InteractorVisualizer::Draw(InteractorModule__DirectInteractor& in) {
   const int player = in.m_player;
-  PlumbBob* bob = static_cast<unsigned int>(player) < 2 ? PlumbBob::s_pPlumbBob[player] : nullptr;
+  PlumbBob* bob = static_cast<unsigned int>(player) < kMaxPlayers ? PlumbBob::s_pPlumbBob[player] : nullptr;  // (PC mod: 4 players)
   cXPerson* person = _globals.GetSelectedPerson(player);
   if (!bob) return;
   bob->SetPlayerColor(player);
@@ -305,7 +306,7 @@ void InteractorModule__InteractorVisualizer::InteractorOrderTableCallback(ELevel
   s_pERC = data.m_rc;
   InteractorModule__InteractorVisualizer* v = InteractorVisualizer();
   if (!v || !s_pERC) return;
-  for (int player = 0; player < 2; ++player) {
+  for (int player = 0; player < kMaxPlayers; ++player) {  // PC mod: 4 players (GC: 2)
     // GC: the player from the record (+0x18) and InteractorManager::GetPlayerInteractor(player, -1).
     InteractorModule__SimInteractor* sim = PlayerInteractorType(player) == 1 ? PlayerSimInteractor(player) : nullptr;
     InteractorModule__DirectInteractor* direct = PlayerInteractorType(player) == 0 ? PlayerDirectInteractor(player) : nullptr;

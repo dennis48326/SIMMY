@@ -85,7 +85,7 @@ bool InWorld(cXObjectImpl* o) { return (o->m_location[1] >> 4) > 0 && (o->m_loca
 
 // cXPersonImpl::IsSelected (8012953C: misc flag 2). PC: some player's selected person.
 bool SelectedByPlayer(cXPersonImpl* p) {
-  for (int i = 0; i < 2; ++i)
+  for (int i = 0; i < kMaxPlayers; ++i)  // PC mod: 4 players (GC: 2)
     if (cXPerson* s = _globals.GetSelectedPerson(i))
       if (s->AsObject() == p) return true;
   return false;
@@ -376,7 +376,7 @@ bool cXPersonImpl::IsSelectableByPlayer(int player) {
 // 8012C16C
 // From the animator, when an impatient idle ends: the player's interactor gives the sim to autonomy.
 void cXPersonImpl::SetIdlePlayerSimAutonomous() {
-  for (int player = 0; player < 2; ++player) {
+  for (int player = 0; player < kMaxPlayers; ++player) {  // PC mod: 4 players (GC: 2)
     cXPerson* s = _globals.GetSelectedPerson(player);
     if (!s || s->AsObject() != this) continue;
     if (InteractorModule__DirectInteractor* d = PlayerDirectInteractor(player)) {
@@ -410,7 +410,7 @@ int cXPersonImpl::TryFindBestAction(StackElem* frame) {
   cSimulatorImpl* sim = Globs_pSimulator;
   if (GetPersonData(0x24) == 0) return no("person data 0x24 is 0");
   if (!(sim && sim->GetGlobal(0x1e) != 0) && IsSelectableByPlayer(-1)) return no("global 0x1E is 0");
-  for (int player = 0; player < 2; ++player) {
+  for (int player = 0; player < kMaxPlayers; ++player) {  // PC mod: 4 players (GC: 2)
     cXPerson* s = _globals.GetSelectedPerson(player);
     if (s && s->AsObject() == this) {
       InteractorModule__DirectInteractor* d = PlayerDirectInteractor(player);

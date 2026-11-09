@@ -277,7 +277,7 @@ void Neighbor::RecalculateRelationshipData() {
   m_enemyCount = static_cast<short>(CountRelationshipsOfType(2));
   m_reputation = static_cast<short>(count ? (std::abs(sum) * 10) / static_cast<int>(count) : 0);
   if (m_reputation > 999) m_reputation = 999;
-  for (int player = 0; player < 2; ++player) {
+  for (int player = 0; player < kMaxPlayers; ++player) {  // PC mod: 4 players (GC: 2)
     cXPerson* p = _globals.GetSelectedPerson(player);
     cXObject* o = p ? p->AsObject() : nullptr;
     cXObjectImpl* impl = o ? o->GetObjectImplementation() : nullptr;

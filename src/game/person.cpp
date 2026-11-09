@@ -820,7 +820,7 @@ int cXPersonImpl::TryIdleAnimate(StackElem* frame, const unsigned char* params) 
   const int mode = static_cast<signed char>(params[6]);
   if (!m_instance || !m_animator) return 2;  // IsModelLoaded
   if (m_animator->m_flags & 1) {
-    for (int player = 0; player < 2; ++player) {
+    for (int player = 0; player < kMaxPlayers; ++player) {  // PC mod: 4 players (GC: 2)
       cXPerson* s = _globals.GetSelectedPerson(player);
       if (!s || s->AsObject() != this) continue;
       InteractorModule__DirectInteractor* d = PlayerDirectInteractor(player);
@@ -1975,7 +1975,7 @@ int cXPersonImpl::AskOthersToMove(XRoute* route) {
   const std::vector<cXPersonImpl*> people = LotPeople();
   for (cXPersonImpl* p : people) {
     bool steered = false;
-    for (int player = 0; player < 2; ++player) {
+    for (int player = 0; player < kMaxPlayers; ++player) {  // PC mod: 4 players (GC: 2)
       cXPerson* sel = _globals.GetSelectedPerson(player);  // DAT_80475E88
       if (!sel || sel->AsObject() != p) continue;
       if (PlayerDirectInteractor(player) && p->m_animator && !p->m_animator->IsSimulatorControlled()) {
@@ -2572,7 +2572,7 @@ void ForgetLotPerson(cXObjectImpl* object) {
 
 void RemoveFamilyFromLot() {
   s_familyOnLot = false;
-  for (int player = 0; player < 2; ++player)
+  for (int player = 0; player < kMaxPlayers; ++player)  // PC mod: 4 players (GC: 2)
     if (_globals.GetSelectedPerson(player)) _globals.SetSelectedPerson(player, nullptr);
   for (cXPersonImpl* p : g_lotPeople) {
     RemovePersonFromModule(p);

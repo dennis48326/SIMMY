@@ -10,6 +10,10 @@
 #     at their windows' resolution; aurora::gfx::set_present_crop (gfx.hpp): present a rectangle of the
 #     EFB, stretched, to a present target (the main window and the second window each get their half).
 #     Without a crop set, aurora behaves exactly as before.
+#   0002-larger-frame-buffers.patch  the per-frame vertex and index staging (lib/gfx/resources.hpp)
+#     raised from 5 / 2 MiB to 12 / 4 MiB: with the PC mod's extra players (src/game/mp4.cpp) a frame
+#     draws the lot four times, which overran the 5 MiB vertex buffer (aurora aborts on overflow).
+
 function(simmy_patch_aurora source_dir)
   file(GLOB _patches ${CMAKE_CURRENT_FUNCTION_LIST_DIR}/aurora_patches/*.patch)
   list(SORT _patches)

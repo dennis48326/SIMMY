@@ -130,6 +130,7 @@ void EGlobal::SetDefaults() {
   m_fieldA0 = 0;
   m_selectedPerson[0] = nullptr;
   m_selectedPerson[1] = nullptr;
+  for (int i = kGcPlayers; i < kMaxPlayers; ++i) m_selectedPerson[i] = nullptr;  // PC mod: 4 players
   m_floorSet = nullptr;
   m_wallSet = nullptr;
   m_fenceSet = nullptr;
@@ -152,8 +153,9 @@ void EGlobal::SetDefaults() {
   }
   SIMMY_STUB("EGlobal::SetDefaults: 0xc33db41/0xc8c09e94 quickdata, shader 0xea090184, "
              "font, ISimsObjectModel white shader, ESpriteRenderMan", 0x8003ED40);
-  for (CameraDirector*& director : m_cameraDirectors)
-    if (!director) director = new CameraDirector();
+  // (PC mod: 4 players: the GC's two; extra players' directors are made when they join, mp4.cpp.)
+  for (int i = 0; i < kGcPlayers; ++i)
+    if (!m_cameraDirectors[i]) m_cameraDirectors[i] = new CameraDirector();
   SIMMY_STUB("EGlobal::SetDefaults: WantFearManager", 0x8003EE9C);
   // The rumble switch, both ports turned on (PC: made once; GC made a new one on every call).
   if (!m_vibrate) m_vibrate = new EVibrate();
@@ -211,9 +213,12 @@ void EGlobal::SetSelectedPerson(int player, cXPerson* person) {
   // The simulator's global 3 (player 2: 0x20) holds the selected sim's object id (the tutorial waits
   // for it).
   const short global = player == 0 ? 3 : 0x20;
+  // PC mod: 4 players: an extra player's sim has no simulator global and no GC HUD (their HUD is
+  // mp4.cpp's).
+  const bool extra = player >= kGcPlayers;
   if (!person) {
     m_selectedPerson[player] = nullptr;
-    if (Globs_pSimulator) Globs_pSimulator->SetGlobal(global, 0);
+    if (Globs_pSimulator && !extra) Globs_pSimulator->SetGlobal(global, 0);
   }
   if (m_selectedPerson[player] == person) return;
   if (cXPerson* old = m_selectedPerson[player]) {
@@ -226,6 +231,7 @@ void EGlobal::SetSelectedPerson(int player, cXPerson* person) {
     if (SAnimator2* anim = person->GetSAnimator()) anim->SetPlayerControl(true);
     SIMMY_STUB("EGlobal::SetSelectedPerson: selected flag, PlumbBobOwner::GrabPlumbBob", 0x800407DC);
   }
+  if (extra) return;
   if (_gd.m_h2dTarget) _gd.m_h2dTarget->SelectedPersonChanged(player, person);  // DAT_80475BCC
   cXObject* o = person ? person->AsObject() : nullptr;
   if (Globs_pSimulator) Globs_pSimulator->SetGlobal(global, static_cast<short>(o ? o->GetID() : 0));

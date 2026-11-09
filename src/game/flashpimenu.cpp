@@ -380,7 +380,7 @@ void CollectInteractionsForObject(cXObjectImpl* object, MenuInteractionList& lis
   // ObjTestSim::AppendInteractionsForMenu: is the person a player's sim under direct control
   // (InteractorManager::GetPlayerInteractor(player, 0))?
   bool direct = false;
-  for (int p = 0; p < 2; ++p) {
+  for (int p = 0; p < kMaxPlayers; ++p) {  // PC mod: 4 players (GC: 2)
     cXPerson* sel = _globals.GetSelectedPerson(p);  // DAT_80475E88
     if (sel && sel->AsObject() == person && PlayerUsesDirectInteractor(p)) direct = true;
   }

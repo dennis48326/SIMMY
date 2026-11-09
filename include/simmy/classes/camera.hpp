@@ -249,7 +249,7 @@ struct ESimsCam {
   void SetInterpolatingToOrFromSocialModeCameraFlag(bool);  // 8001EAD4
   void SetInterpolatingFromLotIntroCameraFlag(bool);  // 8001EADC
 
-  static SimsCameraParameters s_params[2];  // 804735D8
+  static SimsCameraParameters s_params[kMaxPlayers];  // 804735D8 (PC mod: 4 players, GC [2])
   static int m_modeDef;  // 804FD974 the mode cameras start in
   static NewControlParms s_newControlParms;  // 80473514
 

@@ -1023,6 +1023,7 @@ cXObjectImpl* GrabObjectInHand(int player) {
 }
 
 bool PlaceManipulatorInfo(int player, InteractorModule__InteractorInfo& info) {
+  if (player >= kGcPlayers) return false;  // PC mod: 4 players: extra players have no build/buy
   if (BuildToolInfo(player, info)) return true;
   const ObjectManipulator* m = s_manipulators[player & 1].m_active ? static_cast<const ObjectManipulator*>(&s_manipulators[player & 1])
                                : s_grabbers[player & 1].m_active ? &s_grabbers[player & 1]
@@ -1035,6 +1036,7 @@ bool PlaceManipulatorInfo(int player, InteractorModule__InteractorInfo& info) {
 }
 
 bool UpdatePlaceManipulator(int player, float dt) {
+  if (player >= kGcPlayers) return false;  // PC mod: 4 players: extra players have no build/buy
   if (UpdateBuildTool(player, dt)) return true;
   if (s_manipulators[player & 1].m_active) {
     s_manipulators[player & 1].Update(dt);

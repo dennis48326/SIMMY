@@ -149,6 +149,14 @@ real windows on Windows). Keyboard, mouse and F1 belong to window 1 / player 1; 
 window or half. See [coop-and-players.md](coop-and-players.md) for private screens taking only their
 owner's pad.
 
+PC mod, 3-4 players ([multiplayer.md](multiplayer.md), `players=3|4`): players 3 and 4 are mapped to
+their own pads (controller manager player slots 2 and 3, which the GC manager already has) when they
+press Start to join. Their pads drive their direct interactor, camera and PC action menu only:
+`AptViewer::NewReadController` leaves them out of the Flash UI (and, while extra players can join, also
+the pads no player has, so their Start joins instead of pausing as player 1), and
+`GameData::SystemPreUpdate` never hands them to player 1 or 2. Keyboard and mouse stay player 1's.
+Scripts press pads 3 and 4 with `p3:` / `p4:`; `SIMMY_FAKE_PADS=4` plugs all four in.
+
 ## Gotchas
 
 - Add new input at `ENgcControllerManager::Update` only, before `det_pads`; anything read elsewhere

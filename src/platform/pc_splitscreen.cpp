@@ -92,7 +92,13 @@ int g_hudMode = 0;  // display_set_hud_anchor
 // pause menu) once into each window, at the 4:3 size it has in one-player widescreen.
 bool g_winSplit = false;  // this frame's halves go to two windows
 int g_drawPlayer = 0;     // the half InitPlayerXWindow selected last
-float g_winAspect[2] = {16.0f / 9.0f, 16.0f / 9.0f};
+// PC mod: 4 players. With extra free-play players the frame is cut into g_winCount strips (one per
+// window) instead of two halves: window k gets logical x [k * 640 / n, (k + 1) * 640 / n). The two GC
+// players' HUD stays laid out in the stage's halves and is mapped into windows 0 and 1 as before.
+constexpr int kWindowsMax = 4;  // kMaxPlayers (port.hpp)
+int g_winCount = 2;             // asked for by live mode (split_set_window_count)
+int g_frameWinCount = 2;        // this frame's
+float g_winAspect[kWindowsMax] = {16.0f / 9.0f, 16.0f / 9.0f, 16.0f / 9.0f, 16.0f / 9.0f};
 int g_hudWindow = -1;     // display_set_hud_window
 bool g_hudWhole = false;
 int g_hudAnchor = 0;
@@ -142,7 +148,8 @@ float StretchedAspect() {
 // One frame's display mode: the split views as before; otherwise widescreen if configured.
 void UpdateDisplay(bool split) {
   // Two windows: the halves fill the frame (stretch), each projected at its window's aspect.
-  g_winSplit = split && split_mode() == SplitMode::Windows && !platform_headless() && window2_open();
+  // (PC mod: 4 players: with extra players the strips stay even while player 2's window is hidden.)
+  g_winSplit = split && split_mode() == SplitMode::Windows && !platform_headless() && (window2_open() || g_winCount > 2);
   if (g_winSplit) {
     if (!g_stretched) {
       AuroraSetViewportPolicy(AURORA_VIEWPORT_STRETCH);
@@ -152,6 +159,10 @@ void UpdateDisplay(bool split) {
     Window1Size(w, h);
     g_winAspect[0] = static_cast<float>(w) / static_cast<float>(h);
     if (window2_pixel_size(w, h)) g_winAspect[1] = static_cast<float>(w) / static_cast<float>(h);
+    g_frameWinCount = g_winCount;  // PC mod: 4 players (2 unless extra players joined)
+    for (int k = 2; k < g_frameWinCount; ++k)
+      if (split_window_pixel_size(k, w, h)) g_winAspect[k] = static_cast<float>(w) / static_cast<float>(h);
+      else g_winAspect[k] = g_winAspect[0];
     g_aspect = 2.0f * g_winAspect[0];
     g_displayMap2D = true;
     return;
@@ -182,7 +193,12 @@ void split_screen_frame(bool split) {
   UpdateDisplay(split);
 }
 
-void split_screen_player(int player) { g_drawPlayer = player == 1 ? 1 : 0; }
+void split_screen_player(int player) { g_drawPlayer = player >= 1 && player < kWindowsMax ? player : 0; }
+
+// PC mod: 4 players.
+void split_set_window_count(int windows) { g_winCount = std::clamp(windows, 2, kWindowsMax); }
+int split_window_count() { return g_winSplit ? g_frameWinCount : 2; }
+int split_window_count_requested() { return g_winCount; }
 
 bool split_draws_divider() { return !g_winSplit; }
 
@@ -246,6 +262,8 @@ void display_set_hud_anchor(float shiftX, int mode) {
 namespace {
 // The aspect a half of the frame is shown at: its window's (split=windows), else half the frame's.
 float HalfAspect(int half) { return g_winSplit ? g_winAspect[half] : 0.5f * g_aspect; }
+// The logical width of one window's strip: 320 (two windows), less with extra players (PC mod: 4 players).
+float StripWidth() { return g_winSplit ? 640.0f / static_cast<float>(g_frameWinCount) : 320.0f; }
 
 // One window's share of the frame for a 2D draw (split=windows): its half [r0, r0 + 320] of the 640
 // logical units, holding content laid out over the half stage (320 wide, from x = r0) or the whole stage
@@ -255,23 +273,33 @@ bool MapWindows(float vp[6], int sc[4], const float (*proj)[4], float outProj[4]
   const bool perspective = proj[3][2] == -1.0f;
   const float cx = vp[0] + vp[2] * 0.5f;
   const int half = cx < 320.0f ? 0 : 1;
+  // PC mod: 4 players: the strip the draw lies in (the half with two windows).
+  const float rw = g_winSplit ? StripWidth() : 320.0f;
+  const int strip = std::clamp(static_cast<int>(cx / rw), 0, g_winSplit ? g_frameWinCount - 1 : 1);
   if (perspective && proj[0][0] != 0.0f && vp[2] > 0.0f && vp[3] > 0.0f) {
-    // A player's view, projected for its window (one logical unit across is 1.5 x aspect units).
+    // A player's view, projected for its window (one logical unit across is 480 / rw x aspect units:
+    // 1.5 with two windows).
     const float projAspect = proj[1][1] / proj[0][0];
-    const float viewAspect = HalfAspect(half) * 1.5f * vp[2] / vp[3];
+    const float viewAspect = HalfAspect(strip) * (480.0f / rw) * vp[2] / vp[3];
     if (std::fabs(projAspect / viewAspect - 1.0f) < 0.01f) return false;
   }
   int window = half;
   bool whole = false;
   if (g_hudWindow >= 0) {
     window = g_hudWindow, whole = g_hudWhole;
+  } else if (g_drawPlayer >= 2) {
+    // PC mod: 4 players: the game's own 2D while an extra player's view is drawn (a camera shot's
+    // letterbox) goes to that player's window, laid out over the whole stage.
+    window = g_drawPlayer, whole = true;
   } else if (vp[0] < 319.0f && vp[0] + vp[2] > 321.0f) {
     // Not Apt, over both halves: the game's own full-screen 2D, into the window of the player whose
     // view was drawn last.
     window = g_drawPlayer, whole = true;
   }
-  const float r0 = 320.0f * static_cast<float>(window), rw = 320.0f;
-  const float cw = whole ? 640.0f : 320.0f, c0 = whole ? 0.0f : r0;
+  if (g_winSplit && window >= g_frameWinCount) window = g_frameWinCount - 1;
+  const float r0 = rw * static_cast<float>(window);
+  // The content's origin: the whole stage, or the GC players' halves (player 2's from x = 320).
+  const float cw = whole ? 640.0f : 320.0f, c0 = whole ? 0.0f : 320.0f * static_cast<float>(window == 1 ? 1 : 0);
   const float aspect = HalfAspect(window);
   const float fit = std::min(1.0f, aspect * 480.0f / cw);  // content scale (1 = the window's height)
   const float k = fit * rw / (aspect * 480.0f);             // logical units per content unit, across
@@ -317,9 +345,10 @@ bool MapWindows(float vp[6], int sc[4], const float (*proj)[4], float outProj[4]
 
 float display_window_extend(float stageWidth) {
   if (!g_winSplit || g_hudWindow < 0) return 0.0f;
-  const float cw = g_hudWhole ? 640.0f : 320.0f, aspect = g_winAspect[g_hudWindow];
-  const float fit = std::min(1.0f, aspect * 480.0f / cw), k = fit * 320.0f / (aspect * 480.0f);
-  const float bar = 0.5f * (320.0f - cw * k);
+  const float rw = StripWidth();  // PC mod: 4 players (320 with two windows)
+  const float cw = g_hudWhole ? 640.0f : 320.0f, aspect = g_winAspect[std::min(g_hudWindow, g_frameWinCount - 1)];
+  const float fit = std::min(1.0f, aspect * 480.0f / cw), k = fit * rw / (aspect * 480.0f);
+  const float bar = 0.5f * (rw - cw * k);
   return bar > 0.0f ? bar / k * stageWidth / 640.0f : 0.0f;
 }
 
@@ -369,19 +398,26 @@ void split_screen_end_frame() {
   // split=windows: the next frame's EFB holds both windows' halves at their resolution: twice the
   // larger window's width (the halves split at 320 logical units), its height; the internal
   // resolution setting scales that. Otherwise aurora sizes the EFB as before.
+  // PC mod: 4 players: n strips (n windows) wide instead of two.
   unsigned ow = 0, oh = 0;
   if (g_winSplit && !platform_headless()) {
     unsigned w1 = 0, h1 = 0, w2 = 0, h2 = 0;
     Window1Size(w1, h1);
     if (!window2_pixel_size(w2, h2)) w2 = w1, h2 = h1;
     double rw = std::max(w1, w2), rh = std::max(h1, h2);
+    const int n = g_frameWinCount;
+    for (int k = 2; k < n; ++k) {
+      unsigned wk = 0, hk = 0;
+      if (split_window_pixel_size(k, wk, hk)) rw = std::max<double>(rw, wk), rh = std::max<double>(rh, hk);
+    }
     const GraphicsSettings& g = graphics_settings();
     const double scale = g.renderScale > 0.0f ? g.renderScale : g.renderHeight ? g.renderHeight / 480.0 : 0.0;
     if (scale > 0.0) rw *= 480.0 * scale / rh, rh = 480.0 * scale;
     const double limit = 8192.0;  // keep the EFB within every backend's texture size
-    if (2.0 * rw > limit) rh *= limit / (2.0 * rw), rw = limit / 2.0;
+    if (n * rw > limit) rh *= limit / (n * rw), rw = limit / n;
     if (rh > limit) rw *= limit / rh, rh = limit;
-    ow = 2 * static_cast<unsigned>(std::max(1.0, std::round(rw))), oh = static_cast<unsigned>(std::max(1.0, std::round(rh)));
+    ow = static_cast<unsigned>(n) * static_cast<unsigned>(std::max(1.0, std::round(rw))),
+    oh = static_cast<unsigned>(std::max(1.0, std::round(rh)));
   }
   if (ow != g_overrideW || oh != g_overrideH) {
     g_overrideW = ow, g_overrideH = oh;

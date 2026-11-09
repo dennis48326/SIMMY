@@ -87,6 +87,10 @@ at once (the second waits). Food creation costs game time in co-op.
 
 ## Hard-coded to two (inventory for 3-4 players)
 
+The PC mod for 3 and 4 players in Free Play ([multiplayer.md](multiplayer.md)) works around this list
+rather than removing it: players 1 and 2 stay the GameCube's, and the extra players get their own slots
+(`kMaxPlayers` arrays), a PC HUD and action menu, direct control only, and their own windows.
+
 - **Data and movies**: the Flash movies have exactly two players' variable names and layouts
   (`0`/`1` prefixes, screen id pairs 0x32-0x3F, the two-player HUD laid out in stage halves). The memory
   card save has two player slots and the family flags `kP1DoneCAS`/`kP2DoneCAS`; neighbourhood var 0x13 is

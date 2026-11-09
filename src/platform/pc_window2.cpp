@@ -21,6 +21,12 @@
 //
 // Offscreen runs (tests) have no windows: a "virtual" second window of the window2= size (default
 // the first window's) takes part in the layout, and screenshots also write what each window would show.
+//
+// PC mod: 4 players. With extra free-play players (src/game/mp4.cpp) the frame is cut into one strip
+// per window (split_window_count) and this file also keeps windows 3 and 4 ("SIMMY - Player N",
+// window 1's size, placed under windows 1 and 2): opened when their player joins, closed when the
+// player drops out. Closing one asks the game to drop that player (split_window_take_close_request).
+// They are not remembered in simmy.ini, are never vsynced, and mirror window 1 outside split frames.
 #include "simmy/version.hpp"
 #include "pc_window2.hpp"
 
@@ -43,6 +49,17 @@
 
 namespace simmy {
 namespace {
+// PC mod: 4 players: windows 3 and 4 (index 2, 3). Window 2 keeps the globals below.
+struct ExtraWindow {
+  SDL_Window* window = nullptr;
+  aurora::gfx::PresentTargetId target = aurora::gfx::InvalidPresentTarget;
+  bool failed = false;
+  bool cropped = false;
+  bool closeRequested = false;
+  float crop = -1.0f;  // the strip shown (u0), -1 none
+};
+constexpr int kWindowsMax = 4;  // kMaxPlayers (port.hpp)
+ExtraWindow g_extra[kWindowsMax];  // [2] and [3] used
 SDL_Window* g_window = nullptr;
 aurora::gfx::PresentTargetId g_target = aurora::gfx::InvalidPresentTarget;
 bool g_failed = false;        // the window or its surface could not be made: not tried again
@@ -173,6 +190,25 @@ void ResizeTarget() {
                                        SDL_GetWindowDisplayScale(g_window));
 }
 
+void CloseExtra(int k) {
+  ExtraWindow& x = g_extra[k];
+  if (x.target) aurora::gfx::destroy_present_target(x.target);
+  x.target = aurora::gfx::InvalidPresentTarget;
+  if (x.window) {
+    SDL_DestroyWindow(x.window);
+    std::fprintf(stderr, "[window%d] closed\n", k + 1);
+  }
+  x.window = nullptr;
+  x.cropped = false;
+  x.crop = -1.0f;
+}
+
+bool AnyExtraWindow() {
+  for (int k = 2; k < kWindowsMax; ++k)
+    if (g_extra[k].window) return true;
+  return false;
+}
+
 void Close() {
   if (g_window) SaveGeometry();
   if (g_target) aurora::gfx::destroy_present_target(g_target);  // waits for its last GPU work
@@ -182,7 +218,7 @@ void Close() {
     std::fprintf(stderr, "[window2] closed\n");
   }
   g_window = nullptr;
-  if (g_backgroundInput) aurora_set_background_input(false), g_backgroundInput = false;
+  if (g_backgroundInput && !AnyExtraWindow()) aurora_set_background_input(false), g_backgroundInput = false;
 }
 
 void Open() {
@@ -247,6 +283,82 @@ void Open() {
                g.fullscreen2 ? ", fullscreen" : "");
 }
 
+// PC mod: 4 players: window k + 1 for player k + 1 (k = 2, 3), window 1's size, in a 2 x 2 grid with
+// windows 1 and 2 (player 3 under player 1, player 4 under player 2).
+void OpenExtra(int k) {
+  ExtraWindow& x = g_extra[k];
+  unsigned w = 0, h = 0;
+  settings_window_size(graphics_settings(), w, h);
+  int mx = 0, my = 0, mw = static_cast<int>(w), mh = static_cast<int>(h);
+  SDL_Window* main = aurora_get_window();
+  if (main) {
+    SDL_GetWindowPosition(main, &mx, &my);
+    SDL_GetWindowSize(main, &mw, &mh);
+    w = static_cast<unsigned>(mw), h = static_cast<unsigned>(mh);
+  }
+  int x0 = mx + (k & 1) * (mw + 16), y0 = my + (k / 2) * (mh + 40);
+  SDL_Rect r;
+  const SDL_DisplayID display = main ? SDL_GetDisplayForWindow(main) : SDL_GetPrimaryDisplay();
+  if (SDL_GetDisplayUsableBounds(display, &r)) {
+    if (x0 + mw > r.x + r.w) x0 = std::max(r.x, r.x + r.w - mw);
+    if (y0 + mh > r.y + r.h) y0 = std::max(r.y, r.y + r.h - mh);
+  }
+  char title[96];
+  std::snprintf(title, sizeof title, "SIMMY - Player %d", k + 1);
+  SDL_PropertiesID props = SDL_CreateProperties();
+  SDL_SetStringProperty(props, SDL_PROP_WINDOW_CREATE_TITLE_STRING, title);
+  SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_X_NUMBER, x0);
+  SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_Y_NUMBER, y0);
+  SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_WIDTH_NUMBER, static_cast<int>(w));
+  SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_HEIGHT_NUMBER, static_cast<int>(h));
+  SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_RESIZABLE_BOOLEAN, true);
+  SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_HIGH_PIXEL_DENSITY_BOOLEAN, true);
+  SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_HIDDEN_BOOLEAN, true);
+  SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_EXTERNAL_GRAPHICS_CONTEXT_BOOLEAN, true);
+  x.window = SDL_CreateWindowWithProperties(props);
+  SDL_DestroyProperties(props);
+  if (!x.window) {
+    std::fprintf(stderr, "[window%d] cannot create the window: %s\n", k + 1, SDL_GetError());
+    x.failed = true;
+    return;
+  }
+  SDL_SetWindowMinimumSize(x.window, 320, 180);
+  const wgpu::Device device = aurora::gfx::device();
+  wgpu::Instance instance = device ? device.GetAdapter().GetInstance() : wgpu::Instance{};
+  wgpu::Surface surface = aurora::webgpu::create_window_surface(instance, x.window, title);
+  int pw = 0, ph = 0;
+  SDL_GetWindowSizeInPixels(x.window, &pw, &ph);
+  aurora::gfx::PresentTargetDesc desc;
+  desc.label = title;
+  desc.surface = std::move(surface);
+  desc.width = static_cast<uint32_t>(std::max(1, pw));
+  desc.height = static_cast<uint32_t>(std::max(1, ph));
+  desc.scale = SDL_GetWindowDisplayScale(x.window);
+  desc.preferredFormat = aurora::gfx::color_format();
+  desc.vsync = false;  // window 1 paces the game
+  x.target = desc.surface ? aurora::gfx::create_present_target(std::move(desc)) : aurora::gfx::InvalidPresentTarget;
+  if (!x.target) {
+    std::fprintf(stderr, "[window%d] cannot present to another window on this graphics API\n", k + 1);
+    SDL_DestroyWindow(x.window);
+    x.window = nullptr;
+    x.failed = true;
+    return;
+  }
+  SDL_ShowWindow(x.window);
+  if (main) SDL_RaiseWindow(main);  // keyboard and F1 stay with window 1
+  if (!g_backgroundInput) aurora_set_background_input(true), g_backgroundInput = true;
+  std::fprintf(stderr, "[window%d] opened %ux%u (%dx%d pixels) at %d,%d\n", k + 1, w, h, pw, ph, x0, y0);
+}
+
+bool ExtraPresentable(int k) {
+  const ExtraWindow& x = g_extra[k];
+  if (!x.window || !x.target) return false;
+  if (SDL_GetWindowFlags(x.window) & (SDL_WINDOW_HIDDEN | SDL_WINDOW_MINIMIZED)) return false;
+  int pw = 0, ph = 0;
+  SDL_GetWindowSizeInPixels(x.window, &pw, &ph);
+  return pw > 0 && ph > 0;
+}
+
 bool Presentable() {
   if (!g_window || !g_target || g_hidden) return false;
   const SDL_WindowFlags flags = SDL_GetWindowFlags(g_window);
@@ -259,6 +371,18 @@ bool Presentable() {
 
 void window2_frame() {
   if (Offscreen()) return;  // the virtual window needs nothing
+  // PC mod: 4 players: windows 3 and 4 while their players are in (and split=windows).
+  for (int k = 2; k < kWindowsMax; ++k) {
+    const bool want = Wanted() && split_window_count_requested() > k && aurora_get_window();
+    if (!want) {
+      if (g_extra[k].window) CloseExtra(k);
+      g_extra[k].failed = false;
+      g_extra[k].closeRequested = false;
+    } else if (!g_extra[k].window && !g_extra[k].failed && !g_extra[k].closeRequested) {
+      OpenExtra(k);
+    }
+  }
+  if (g_backgroundInput && !g_window && !AnyExtraWindow()) aurora_set_background_input(false), g_backgroundInput = false;
   if (!Wanted()) {
     if (g_window) Close();
     if (g_primaryCropped) {
@@ -272,6 +396,25 @@ void window2_frame() {
 }
 
 bool window2_handle_event(const SDL_Event& e) {
+  // PC mod: 4 players: windows 3 and 4. Closing one drops its player out (the game polls
+  // split_window_take_close_request); resizing resizes the target.
+  for (int k = 2; k < kWindowsMax; ++k) {
+    ExtraWindow& x = g_extra[k];
+    if (!x.window || SDL_GetWindowFromEvent(&e) != x.window) continue;
+    if (e.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED) {
+      std::fprintf(stderr, "[window%d] closed by the player: player %d drops out\n", k + 1, k + 1);
+      x.closeRequested = true;
+      CloseExtra(k);
+    } else if (e.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED || e.type == SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED ||
+               e.type == SDL_EVENT_WINDOW_SHOWN || e.type == SDL_EVENT_WINDOW_RESTORED) {
+      int pw = 0, ph = 0;
+      SDL_GetWindowSizeInPixels(x.window, &pw, &ph);
+      if (pw > 0 && ph > 0 && x.target)
+        aurora::gfx::resize_present_target(x.target, static_cast<uint32_t>(pw), static_cast<uint32_t>(ph),
+                                           SDL_GetWindowDisplayScale(x.window));
+    }
+    return true;
+  }
   if (!g_window || SDL_GetWindowFromEvent(&e) != g_window) return false;
   switch (e.type) {
   case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
@@ -330,7 +473,39 @@ void window2_set_fullscreen(bool on) {
 bool window2_fullscreen() { return g_window ? g_fullscreen : graphics_settings().fullscreen2; }
 
 void window2_shutdown() {
+  for (int k = 2; k < kWindowsMax; ++k) CloseExtra(k);  // PC mod: 4 players
   Close();
+}
+
+// PC mod: 4 players.
+bool split_window_open(int index) {
+  if (index == 0) return true;
+  if (index == 1) return window2_open();
+  if (index < 2 || index >= kWindowsMax || !Wanted() || split_window_count_requested() <= index) return false;
+  if (Offscreen()) return true;
+  return g_extra[index].window && g_extra[index].target;
+}
+
+bool split_window_pixel_size(int index, unsigned& width, unsigned& height) {
+  if (index == 1) return window2_pixel_size(width, height);
+  if (index < 2 || index >= kWindowsMax || !Wanted()) return false;
+  if (Offscreen()) {
+    settings_window_size(graphics_settings(), width, height);  // the first window's
+    return width && height;
+  }
+  SDL_Window* w = g_extra[index].window;
+  if (!w) return false;
+  int pw = 0, ph = 0;
+  SDL_GetWindowSizeInPixels(w, &pw, &ph);
+  if (pw <= 0 || ph <= 0) return false;
+  width = static_cast<unsigned>(pw), height = static_cast<unsigned>(ph);
+  return true;
+}
+
+bool split_window_take_close_request(int index) {
+  if (index < 2 || index >= kWindowsMax || !g_extra[index].closeRequested) return false;
+  g_extra[index].closeRequested = false;
+  return true;
 }
 
 bool window2_open() {
@@ -358,37 +533,58 @@ bool window2_pixel_size(unsigned& width, unsigned& height) {
 void window2_present(bool windows) {
   if (Offscreen()) return;
   const aurora::gfx::PresentTargetId primary = aurora::gfx::xfb_target();
+  // PC mod: 4 players: n strips (2: the halves as before).
+  const int n = windows ? split_window_count() : 2;
+  static int s_cropN = 2;
+  const float strip = 1.0f / static_cast<float>(n);
   // Window 1: the left half in a two-window frame, the whole frame otherwise.
-  if (windows != g_primaryCropped && primary) {
-    if (windows) aurora::gfx::set_present_crop(primary, 0.0f, 0.0f, 0.5f, 1.0f);
+  if ((windows != g_primaryCropped || (windows && n != s_cropN)) && primary) {
+    if (windows) aurora::gfx::set_present_crop(primary, 0.0f, 0.0f, strip, 1.0f);
     else aurora::gfx::set_present_crop(primary, 0.0f, 0.0f, 0.0f, 0.0f);
     g_primaryCropped = windows;
   }
+  // Windows 3 and 4 (PC mod: 4 players): their strip, else a mirror of window 1.
+  for (int k = 2; k < kWindowsMax; ++k) {
+    ExtraWindow& x = g_extra[k];
+    if (!ExtraPresentable(k)) continue;
+    const float u0 = windows && k < n ? static_cast<float>(k) * strip : -1.0f;
+    if (u0 != x.crop) {
+      if (u0 >= 0.0f) aurora::gfx::set_present_crop(x.target, u0, 0.0f, u0 + strip, 1.0f);
+      else aurora::gfx::set_present_crop(x.target, 0.0f, 0.0f, 0.0f, 0.0f);
+      x.crop = u0;
+    }
+    aurora::gfx::present_to(x.target);
+  }
+  const bool nChanged = windows && n != s_cropN;
+  if (windows) s_cropN = n;
   if (!Presentable()) return;
-  if (windows != g_cropped) {
-    if (windows) aurora::gfx::set_present_crop(g_target, 0.5f, 0.0f, 1.0f, 1.0f);
+  if (windows != g_cropped || nChanged) {
+    if (windows) aurora::gfx::set_present_crop(g_target, strip, 0.0f, 2.0f * strip, 1.0f);
     else aurora::gfx::set_present_crop(g_target, 0.0f, 0.0f, 0.0f, 0.0f);
     g_cropped = windows;
   }
   aurora::gfx::present_to(g_target);
 }
 
-void window2_write_shots(const std::string& path, const unsigned char* rgba, unsigned width, unsigned height, bool windows,
+void window2_write_shots(const std::string& path, const unsigned char* rgba, unsigned width, unsigned height, int windows,
                          void (*writeBmp)(const std::string&, const unsigned char*, unsigned, unsigned)) {
   if (!Wanted() || !width || !height) return;
   const size_t dot = path.rfind('.');
   const std::string stem = dot == std::string::npos ? path : path.substr(0, dot);
   const std::string ext = dot == std::string::npos ? std::string(".bmp") : path.substr(dot);
-  for (int win = 0; win < 2; ++win) {
+  // PC mod: 4 players: one image per window (`windows` strips; 0: not a split frame, every window
+  // mirrors, two images as before).
+  const int count = windows >= 2 ? windows : std::max(2, split_window_count_requested());
+  for (int win = 0; win < count; ++win) {
     unsigned ow = width, oh = height;
     float u0 = 0.0f, u1 = 1.0f;
-    if (windows) {
-      u0 = win ? 0.5f : 0.0f, u1 = win ? 1.0f : 0.5f;
+    if (windows >= 2) {
+      u0 = static_cast<float>(win) / static_cast<float>(windows), u1 = static_cast<float>(win + 1) / static_cast<float>(windows);
       if (win == 0) {
         const AuroraWindowSize s = aurora_get_window_size();
         if (s.native_fb_width && s.native_fb_height) ow = s.native_fb_width, oh = s.native_fb_height;
-      } else if (!window2_pixel_size(ow, oh)) {
-        ow = width / 2, oh = height;
+      } else if (!split_window_pixel_size(win, ow, oh)) {
+        ow = width / static_cast<unsigned>(windows), oh = height;
       }
     }
     // Bilinear from the frame's rectangle to the window's pixels (as aurora's present resamples).
@@ -411,7 +607,7 @@ void window2_write_shots(const std::string& path, const unsigned char* rgba, uns
         }
       }
     }
-    writeBmp(stem + (win ? "_p2" : "_p1") + ext, out.data(), ow, oh);
+    writeBmp(stem + "_p" + std::to_string(win + 1) + ext, out.data(), ow, oh);
   }
 }
 

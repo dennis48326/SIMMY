@@ -142,7 +142,7 @@ unsigned g_frameNumber = 0;  // frames presented so far
 AuroraReadbackStream g_shotStream = 0;
 u32 g_shotWidth = 0, g_shotHeight = 0;
 bool g_shotPending = false;
-bool g_shotWindows = false;  // the shot's frame had the two-window layout (split=windows)
+int g_shotWindows = 0;  // the shot's frame had the n-window layout (split=windows; PC mod: 4 players), 0 if not
 
 void write_bmp(const std::string& path, const unsigned char* rgba, u32 w, u32 h) {
   FILE* f = std::fopen(path.c_str(), "wb");
@@ -372,7 +372,7 @@ void platform_end_frame() {
     }
     g_shotPending = graphics_settings().msaa > 1 ? CaptureMsaaShot(g_shotPath)
                                                  : AuroraReadbackCaptureColor(g_shotStream, 1, &g_shotWidth, &g_shotHeight);
-    g_shotWindows = split_windows_frame();
+    g_shotWindows = split_windows_frame() ? split_window_count() : 0;
     if (!g_shotPending) std::fprintf(stderr, "[simmy] screenshot capture was refused\n");
     else overlay_shot_requested();  // SIMMY_OVERLAY_TEST: paint the overlay into this shot
     if (g_shotPending) kbm_shot_requested();  // SIMMY_KBM_TEST: the mouse cross where the mouse is now

@@ -680,7 +680,7 @@ void ObjectModuleImpl::KillObject(short id) {
   // (AdvanceSelectedPerson, vtable 0x124); still the same: the player has none (SetSelectedPerson 0).
   // Before CleanupPeople. (PC: without it the HUD/interactors kept a freed person.)
   if (impl->GetType() == 2)
-    for (int player = 0; player < 2; ++player) {
+    for (int player = 0; player < kMaxPlayers; ++player) {  // PC mod: 4 players (GC: 2)
       cXPerson* selected = _globals.GetSelectedPerson(player);
       if (!selected || selected->AsObject() != object) continue;
       _globals.AdvanceSelectedPerson(player);

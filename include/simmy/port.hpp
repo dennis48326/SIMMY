@@ -83,6 +83,12 @@ template <class F, class T> void read_be(F& f, T& v) {
 }
 }  // namespace simmy
 
+// PC mod: 4 players (docs/multiplayer.md). The GameCube game has two players (kGcPlayers); the PC
+// port's free play can take up to kMaxPlayers (players= in simmy.ini). Per-player arrays that the
+// extra players use are sized kMaxPlayers; slots 0 and 1 keep the GC layout and code paths.
+constexpr int kGcPlayers = 2;
+constexpr int kMaxPlayers = 4;
+
 // SDK types that game signatures refer to.
 #include <dolphin/dolphin.h>
 #include <dolphin/thp.h>

@@ -152,7 +152,7 @@ int DeleteUnusedCharacter(NeighborhoodImpl* hood, Neighbor* n) {
   const int guid = static_cast<int>(selector->GetGUID());
   for (FamilyImpl* f : hood->m_families)
     if (f && f->TestMember(guid)) return -1;
-  for (int p = 0; p < 2; ++p)
+  for (int p = 0; p < kMaxPlayers; ++p)  // PC mod: 4 players (GC: 2)
     if (cXPerson* sel = _globals.GetSelectedPerson(p))
       if (cXObjectImpl* impl = sel->AsObject() ? sel->AsObject()->GetObjectImplementation() : nullptr)
         if (impl->m_def && static_cast<int>(objdef::GUID(impl->m_def)) == guid) return -1;

@@ -6,6 +6,7 @@
 #include "simmy/unported_globals.hpp"
 #include "simmy/classes/siminteractor.hpp"
 #include "simmy/classes/psystem.hpp"
+#include "simmy/mp4.hpp"  // PC mod: 4 players
 
 #include <cmath>
 
@@ -19,7 +20,8 @@ void Normalize(EVec3& v) {
 const PlumbBobParms& Parms() { return g_plumbBobParms; }
 // PlumbBob::s_plumbBobParms + player * 0xC: the player's colour (player 1 green, player 2 blue).
 EVec3 PlayerColor(int player) {
-  const float* c = g_plumbBobParms.m_colorScale + (player & 1) * 3;
+  // (PC mod: 4 players: players 3 and 4 have PC colours.)
+  const float* c = player >= kGcPlayers ? Mp4PlayerColor(player) : g_plumbBobParms.m_colorScale + (player & 1) * 3;
   return EVec3{c[0], c[1], c[2]};
 }
 // The light the bob and the interactor models are lit with: across the view, in the ground plane.
@@ -116,7 +118,7 @@ void PlumbBobStack::Reset() { m_count = 0; }
 // ---------------------------------------------------------------------------------------------------
 // PlumbBob
 
-PlumbBob* PlumbBob::s_pPlumbBob[2] = {};
+PlumbBob* PlumbBob::s_pPlumbBob[kMaxPlayers] = {};  // (PC mod: 4 players; GC [2])
 
 // 800597EC
 // The shadow, then the draw state forgotten.
@@ -414,7 +416,7 @@ void PlumbBob::Update(int player) {
     }
     m_pos.z = z;
   }
-  ESimsCam* cam = _gd.m_players[player & 1].m_cam;  // DAT_80475C84 + player * 0x10
+  ESimsCam* cam = _gd.m_players[Mp4Slot(player)].m_cam;  // DAT_80475C84 + player * 0x10 (PC mod: 4 players: Mp4Slot)
   SetScaleFromTween(player, cam ? cam->GetCurZoomRatio() : 0.0f);
   if (m_pulse == 0) {
     m_pulseDir = 0;
@@ -504,7 +506,11 @@ void PlumbBob::DrawShadow(ERC* rc) {
 // without a model. The light falls across the view; the shadow is left out while the camera director runs
 // a shot.
 void PlumbBob::Draw(ERC* rc) {
-  if (cXPerson* person = _globals.GetSelectedPerson(s_pPlumbBob[0] != this ? 1 : 0)) {
+  // (PC mod: 4 players: the owner among all players' bobs; GC: player 1's or else player 2's.)
+  int owner = s_pPlumbBob[0] != this ? 1 : 0;
+  for (int i = kGcPlayers; i < kMaxPlayers; ++i)
+    if (s_pPlumbBob[i] == this) owner = i;
+  if (cXPerson* person = _globals.GetSelectedPerson(owner)) {
     cXObjectImpl* impl = person->AsObject() ? person->AsObject()->GetObjectImplementation() : nullptr;
     if (ESim* sim = impl ? dynamic_cast<ESim*>(impl->m_instance) : nullptr) {
       const unsigned int s = static_cast<unsigned int>(sim->m_plumbBobState);
@@ -569,7 +575,7 @@ void InteractorModule::GetPersonPosition(EVec3* out, cXPerson* person, bool grou
 }
 // 802119C0
 RET_UNKNOWN InteractorModule::GetPlumbBob(int player) {
-  return reinterpret_cast<RET_UNKNOWN>(static_cast<unsigned int>(player) < 2 ? PlumbBob::s_pPlumbBob[player] : nullptr);
+  return reinterpret_cast<RET_UNKNOWN>(static_cast<unsigned int>(player) < kMaxPlayers ? PlumbBob::s_pPlumbBob[player] : nullptr);  // (PC mod: 4 players; GC: < 2)
 }
 
 // 80204438

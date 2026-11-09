@@ -3,6 +3,7 @@
 #include "simmy/types_gen.hpp"
 #include "simmy/platform.hpp"
 #include "simmy/unported_globals.hpp"
+#include "simmy/mp4.hpp"  // PC mod: 4 players
 
 #include <cstdio>
 #include <cstdlib>
@@ -366,6 +367,7 @@ void ESimsApp::UpdateDraw() {
   DrawGame(rc);
   StateMachineManager::DrawTopmostMachines(rc);
   _gd.CopyrightDraw(rc);
+  Mp4DrawHud(rc);  // PC mod: 4 players: the extra players' HUD in their windows (mp4.cpp)
   simmy::dev_draw_overlay(rc);  // PC: optional renderer test pattern (--render-test)
   _pGfx->Close(rc);
   m_drawRC = nullptr;

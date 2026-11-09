@@ -87,7 +87,7 @@ struct PlumbBob : public Physics {
   void Draw(ERC* rc);  // 8005AD8C
   void ResetMomentum(bool keepZ);  // 8005AF94
 
-  static PlumbBob* s_pPlumbBob[2];  // 80500574: player 1's and player 2's (two players only)
+  static PlumbBob* s_pPlumbBob[kMaxPlayers];  // 80500574: player 1's and player 2's (two players only; PC mod: 4 players: [2..3])
 
   // Physics                        +0x00
   ELights m_lights;                 // +0x30 the player colour (ambient = colour * 0.3) and one light
@@ -221,7 +221,7 @@ struct InteractorModule__InteractorVisualizer {
   void DrawLitModel(ERModel* model, EVec3& color, EMat4* m);  // PC: DrawResource for a model held elsewhere
 
   // Draw state the PreDraw functions leave for the callback: the player and the interactor drawn.
-  EOrderTableData* m_otd[2] = {};   // +0x00 one draw record per player
+  EOrderTableData* m_otd[kMaxPlayers] = {};   // +0x00 one draw record per player (PC mod: 4 players; GC [2])
   // +0x08 vector<pair<Interactor*, InteractorResourceSet>> sorted by interactor.
   std::vector<std::pair<InteractorModule__Interactor*, InteractorModule__InteractorResourceSet*>> m_sets;
   ELights m_lights;                 // +0x1C what DrawResource lights the model with

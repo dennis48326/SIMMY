@@ -57,8 +57,23 @@ cXPerson* SelectableMember(EGlobal* g, FamilyImpl* family, int index, int player
 }
 }  // namespace
 
+// PC mod: 4 players: the first member of the player family that `player` can take (an extra player
+// joining, mp4.cpp), by SelectableMember's checks (no other player's, on the lot, not away or frozen).
+cXPerson* PcFirstFreeFamilyMember(int player) {
+  FamilyImpl* f = Globs_pNeighborhood ? Globs_pNeighborhood->GetFamily(_gd.m_fieldD8) : nullptr;
+  if (!f || !Globs_pObjectModule) return nullptr;
+  const int count = f->CountMembers();
+  for (int i = 0; i < count; ++i)
+    if (cXPerson* p = SelectableMember(&_globals, f, i, player)) return p;
+  return nullptr;
+}
+
 // 800407AC
 bool EGlobal::SimInUseByOtherPlayer(int player, cXPerson* person) {
+  // PC mod: 4 players: any other player's (the extra players' slots are empty in a GC game).
+  for (int other = kGcPlayers; other < kMaxPlayers; ++other)
+    if (other != player && person && person == m_selectedPerson[other]) return true;
+  if (player >= kGcPlayers) return person == m_selectedPerson[0] || person == m_selectedPerson[1];
   return player != 0 ? person == m_selectedPerson[0] : person == m_selectedPerson[1];
 }
 

@@ -49,7 +49,7 @@ The game draws both halves into one logical frame (`ELiveMode::DrawMain` -> `Ini
 | `gc` | 4:3 (640x480 logical, fitted) | 2:3 (the original) |
 | `4x3` | 8:3 (1280x480 default) | 4:3 (as the GC "coop4x3" build) |
 | `wide` | the window's aspect (1280x720 default) | 8:9 at 16:9 |
-| `windows` | EFB fixed at 2 x max(window widths) x max(heights) | each half shown in its own window at its window's aspect |
+| `windows` | EFB fixed at 2 x max(window widths) x max(heights) (n x with the PC mod's extra players) | each half shown in its own window at its window's aspect (one strip per window with 3-4 players: [multiplayer.md](multiplayer.md)) |
 
 **Two windows** ([`pc_window2.cpp`](../src/platform/pc_window2.cpp)): window 2 is an SDL window with a
 WebGPU surface on aurora's device, registered as an extra present target. In split frames aurora's

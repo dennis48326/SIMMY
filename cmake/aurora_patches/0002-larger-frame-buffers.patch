@@ -1,0 +1,15 @@
+diff --git a/lib/gfx/resources.hpp b/lib/gfx/resources.hpp
+index 3fdc0ee..fda3871 100644
+--- a/lib/gfx/resources.hpp
++++ b/lib/gfx/resources.hpp
+@@ -5,8 +5,8 @@
+ namespace aurora::gfx {
+ inline constexpr bool UseTextureBuffer = true;
+ inline constexpr uint64_t UniformBufferSize = 25165824; // 24 MiB
+-inline constexpr uint64_t VertexBufferSize = 5242880;   // 5 MiB
+-inline constexpr uint64_t IndexBufferSize = 2097152;    // 2 MiB
++inline constexpr uint64_t VertexBufferSize = 12582912;  // 12 MiB (SIMMY: 5 MiB upstream; four co-op views)
++inline constexpr uint64_t IndexBufferSize = 4194304;    // 4 MiB (SIMMY: 2 MiB upstream)
+ inline constexpr uint64_t StorageBufferSize = 8388608;  // 8 MiB
+ inline constexpr uint64_t TextureUploadSize = 25165824; // 24 MiB
+ 

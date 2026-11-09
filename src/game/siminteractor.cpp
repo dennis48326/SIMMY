@@ -667,14 +667,20 @@ unsigned int InteractorModule__SimInteractor::GetPlumbBobShadowSave() {
 // ---------------------------------------------------------------------------------------------------
 // PC interactor manager
 
-int PlayerInteractorType(int player) { return s_players[player & 1].active; }
+int PlayerInteractorType(int player) {
+  if (player >= kGcPlayers) return 0;  // PC mod: 4 players: extra players only have the direct control
+  return s_players[player & 1].active;
+}
 
 void ChangeActiveInteractor(int player, int type) {
   if (player < 0 || player > 1) return;
   s_players[player].pending = type;  // GC: refused while a change is pending (the request bit)
 }
 
-InteractorModule__SimInteractor* PlayerSimInteractor(int player) { return s_players[player & 1].sim; }
+InteractorModule__SimInteractor* PlayerSimInteractor(int player) {
+  if (player >= kGcPlayers) return nullptr;  // PC mod: 4 players
+  return s_players[player & 1].sim;
+}
 InteractorModule__InteractorVisualizer* InteractorVisualizer() { return s_visualizer; }
 
 bool UpdateSimInteractor(int player, float dt) {
@@ -756,6 +762,7 @@ bool UpdateSimInteractor(int player, float dt) {
 }
 
 bool SimInteractorInfo(int player, InteractorModule__InteractorInfo& info) {
+  if (player >= kGcPlayers) return false;  // PC mod: 4 players
   PlayerInteractors& s = s_players[player & 1];
   if (s.active != 1 || !s.sim) return false;
   s.sim->GetInteractorInfo(info);
@@ -774,11 +781,13 @@ int KbmPlayer() {
   return !_pCtrlMan->GetPlayerMapped(0) && _pCtrlMan->GetPlayerControllerIndex(0) == 0 ? 0 : -1;
 }
 
-bool PcMouseClassic(int player) { return s_mouseClassic[player & 1] && PlayerInteractorType(player) == 1; }
-void PcSetMouseClassic(int player, bool on) { s_mouseClassic[player & 1] = on; }
+bool PcMouseClassic(int player) { return player < kGcPlayers && s_mouseClassic[player & 1] && PlayerInteractorType(player) == 1; }
+void PcSetMouseClassic(int player, bool on) {
+  if (player < kGcPlayers) s_mouseClassic[player & 1] = on;  // (PC mod: 4 players: not the extra players)
+}
 
 bool PcTakeMouseCursor(int player, EVec3& pos) {
-  if (!s_mouseTargetSet[player & 1]) return false;
+  if (player >= kGcPlayers || !s_mouseTargetSet[player & 1]) return false;  // (PC mod: 4 players)
   s_mouseTargetSet[player & 1] = false;
   pos = s_mouseTarget[player & 1];
   return true;

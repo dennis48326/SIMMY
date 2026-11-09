@@ -1,6 +1,7 @@
 // Port of game/gamedata.cpp (partial).
 #include "simmy/types_gen.hpp"
 #include "simmy/unported_globals.hpp"
+#include "simmy/mp4.hpp"  // PC mod: 4 players
 
 GameData _gd;  // 80475B84
 
@@ -88,6 +89,7 @@ void CheckPlayerPad(unsigned int player, unsigned int other, int& disconnected, 
                        : -1;
   for (int i = 0; i < 4; ++i) {
     if (i == skip || !_pCtrlMan->GetController(static_cast<unsigned int>(i))->IsInUse()) continue;
+    if (Mp4PadOfExtraPlayer(i)) continue;  // PC mod: 4 players: an extra player's pad stays theirs
     disconnected = 0;
     _pCtrlMan->SwapPlayerControls(static_cast<unsigned int>(_pCtrlMan->GetPlayerControllerIndex(player)),
                                   static_cast<unsigned int>(i));

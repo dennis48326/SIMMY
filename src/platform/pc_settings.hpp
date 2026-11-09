@@ -60,6 +60,10 @@ struct GraphicsSettings {
   // Not graphics: fire_code_limit (pcttarget.cpp GetFireCodeValue): on (default) the buy/build fire-code
   // meter fills and limits the lot's objects as on the GameCube; off: the meter stays empty, no limit.
   bool fireCodeLimit = true;
+  // Not graphics: players= (PC mod: 4 players). The most players a game can have: 2 (default) is the
+  // GameCube's co-op; 3 or 4 let extra players join a free-play game (split=windows, one window
+  // each); 1 turns co-op off (the front end offers one player only).
+  int maxPlayers = 2;
   // The [keys] section: "action = key, key" lines as read (pc_kbm.cpp parses and warns).
   struct KeyLine {
     std::string action, keys, where;  // where: "file:line"

@@ -7,6 +7,7 @@
 #include "simmy/classes/placement.hpp"
 #include "simmy/inventory_pc.hpp"
 #include "simmy/sn_qsort.hpp"
+#include "simmy/mp4.hpp"  // PC mod: 4 players
 
 #include <algorithm>
 #include <cmath>
@@ -1749,7 +1750,7 @@ int cXObjectImpl::TryCheckObject(StackElem* frame, const unsigned char* params) 
       cXObject* o = GetObjectFromID(id);
       cXObjectImpl* impl = o ? o->GetObjectImplementation() : nullptr;
       if (!impl) return 0;
-      for (int player = 0; player < 2; ++player) {
+      for (int player = 0; player < kMaxPlayers; ++player) {  // PC mod: 4 players (GC: 2)
         cXPerson* s = _globals.GetSelectedPerson(player);
         if (!s || s->AsObject() != impl) continue;
         InteractorModule__DirectInteractor* d = PlayerDirectInteractor(player);
@@ -1998,10 +1999,11 @@ int cXObjectImpl::TryFindGoodLocation(StackElem* frame, const unsigned char* par
       // HUDTarget::CloseMenu). GC: first a dynamic multi-tile object leaves its group (PC: not kept).
       ObjPickup(object);
       if (object->GetType() == 2 && _gd.m_hudTarget)
-        for (int player = 0; player < 2; ++player) {
+        for (int player = 0; player < kMaxPlayers; ++player) {  // PC mod: 4 players (GC: 2)
           cXPerson* selected = _globals.GetSelectedPerson(player);
           if (selected && selected->AsObject() == static_cast<cXObject*>(object)) {
-            _gd.m_hudTarget->CloseMenu(player);
+            if (player >= kGcPlayers) Mp4CloseMenu(player);  // (their PC menu)
+            else _gd.m_hudTarget->CloseMenu(player);
             break;
           }
         }

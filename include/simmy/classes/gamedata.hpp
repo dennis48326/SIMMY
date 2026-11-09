@@ -103,7 +103,7 @@ struct GameData {
   int m_fieldE8 = 0;  // +0xE8
   int m_fieldEC = 0;  // +0xEC
   int m_fieldF0 = 0;  // +0xF0
-  Player m_players[2];  // +0xF4 (DAT_80475C78, DAT_80475C88)
+  Player m_players[kMaxPlayers];  // PC mod: 4 players (GC [2]; [2..3]: camera only, mp4.cpp). +0xF4 (DAT_80475C78, DAT_80475C88)
   unsigned int m_copyrightFlags = 0;  // +0x114 1 fading in, 2 fading out, 4 shown, 8 done
   float m_copyrightAlpha = 0;  // +0x118
   float m_copyrightShownAt = 0;  // +0x11C

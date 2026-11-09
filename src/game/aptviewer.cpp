@@ -4,6 +4,7 @@
 // ported yet (they wait on the Apt input queue).
 #include "simmy/types_gen.hpp"
 #include "simmy/unported_globals.hpp"
+#include "simmy/mp4.hpp"  // PC mod: 4 players
 
 #include <cstdarg>
 #include <cmath>
@@ -228,6 +229,8 @@ int AptViewer::NewReadController(int, bool, int, bool) {
       OnePlayerReadController(0, c);
     else if (_pCtrlMan->GetPlayerMapped(1) && _pCtrlMan->GetPlayerControllerIndex(1) == c)
       OnePlayerReadController(1, c);
+    else if (Mp4PadKeptFromUi(c))
+      continue;  // PC mod: 4 players: an extra player's pad, or one that may join (its Start joins)
     else if (m_field3AC != -1)
       OnePlayerReadController(m_field3AC, c);
   }

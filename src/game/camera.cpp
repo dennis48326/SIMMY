@@ -24,7 +24,7 @@ int s_camParamNum = 0;  // _camParamNum
 }  // namespace
 
 // 804735D8 (constructed by camera.cpp's static initializer, 8001E87C)
-SimsCameraParameters ESimsCam::s_params[2];
+SimsCameraParameters ESimsCam::s_params[kMaxPlayers];  // PC mod: 4 players (GC [2])
 
 // 80015BE8
 SimsCameraParameters::SimsCameraParameters() {

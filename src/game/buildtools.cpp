@@ -423,6 +423,7 @@ bool StartBuildTool(BuildToolParams& params) {
 void StopBuildTool(int player) { StopActive(s_tools[player & 1]); }
 
 bool UpdateBuildTool(int player, float dt) {
+  if (player >= kGcPlayers) return false;  // PC mod: 4 players
   PlayerTools& t = s_tools[player & 1];
   if (!t.active) return false;
   InteractorModule__Interactor* tool = t.active;
@@ -481,6 +482,7 @@ bool UpdateBuildTool(int player, float dt) {
 
 // InteractorVisualizer::SetupDrawCallback for a player's build tool: its PreDraw (vtable 0xB4).
 bool BuildToolPreDraw(int player, InteractorModule__InteractorVisualizer& v) {
+  if (player >= kGcPlayers) return false;  // PC mod: 4 players
   PlayerTools& t = s_tools[player & 1];
   if (!t.active) return false;
   if (t.active == &t.wall) t.wall.PreDraw(v);
@@ -511,6 +513,7 @@ bool BuildToolDraw(int player, EOrderTableData* otd, InteractorModule__Interacto
 }
 
 bool BuildToolInfo(int player, InteractorModule__InteractorInfo& info) {
+  if (player >= kGcPlayers) return false;  // PC mod: 4 players
   PlayerTools& t = s_tools[player & 1];
   if (!t.active) return false;
   info.m_x = t.active->m_pos.x;
