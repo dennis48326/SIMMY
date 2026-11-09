@@ -6,7 +6,6 @@ void SAnimator2::triggerCameraBloom(char *) { SIMMY_STUB("SAnimator2::triggerCam
 void SAnimator2::triggerCameraBloom(CameraBloomDataElement *) { SIMMY_STUB("SAnimator2::triggerCameraBloom(CameraBloomDataElement *)", 0x800663A0); }
 void SAnimator2::triggerCameraBlur(char *) { SIMMY_STUB("SAnimator2::triggerCameraBlur(char *)", 0x800663E8); }
 void SAnimator2::triggerCameraBlur(CameraBlurDataElement *) { SIMMY_STUB("SAnimator2::triggerCameraBlur(CameraBlurDataElement *)", 0x8006643C); }
-RET_UNKNOWN SAnimator2::removeCostume() { SIMMY_STUB("SAnimator2::removeCostume(void)", 0x800676E4); return {}; }
 RET_UNKNOWN SAnimator2::GetHeadOrient() { SIMMY_STUB("SAnimator2::GetHeadOrient(void)", 0x8006915C); return {}; }
 RET_UNKNOWN SAnimator2::GetNormalSimDescription() const { SIMMY_STUB("SAnimator2::GetNormalSimDescription(void) const", 0x80069164); return {}; }
 void SAnimator2::SetNormalSimDescription(CasSimDescriptionS2C *) { SIMMY_STUB("SAnimator2::SetNormalSimDescription(CasSimDescriptionS2C *)", 0x8006916C); }

@@ -1099,6 +1099,7 @@ int PCTTarget::CreateGrabObjectMenu(const std::vector<cXObjectImpl*>& objects) {
     ERShader* thumbnail = nullptr;
     const unsigned int shader = GetShaderForObject(o, &thumbnail);
     m_actionMenu->AddMenuItem(o, nullptr, GetObjectMenuName(o), shader, thumbnail, false);
+    if (thumbnail) thumbnail->DelRef();  // GetShaderForObject's reference (the menu row holds its own)
   }
   m_actionMenu->ShowMenu();
   return 1;

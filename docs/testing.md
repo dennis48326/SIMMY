@@ -51,7 +51,7 @@ still. `SIMMY_SIM_START=x,y` puts the sims on a tile (e.g. 12,22 toilet, 18,11 s
 | Story start | default story, `SIMMY_CAS_ACCEPT=300`, ~7000 frames | lot 9 up, tutorial dialogs, no TREEASSERT |
 | Two players | `SIMMY_TWO_PLAYER=1 --split=wide` (and `windows`, `gc`, `4x3`) offscreen | both views/HUDs, no crash |
 | Save / Continue | save from the pause menu (O2T -> Save -> slot A), quit, Continue in a **new process** | `[save] house 9 saved: funds ...`, same funds/objects after Continue |
-| Quit + re-enter | quit to the main menu and start again in one process: New Game, load the same and another memory card, several cycles, 1P and co-op, from buy/build mode (pause on the options tab: `start,a,down,a,down,a` once the pause menu remembers that tab; the first time `right` x6 first), RSS sampled per cycle; under ASan too | each game reaches live mode with fresh object ids (player 1's sim is object 149 again), no crash, RSS flat after the first two games |
+| Quit + re-enter | quit to the main menu and start again in one process: New Game, load the same and another memory card, several cycles, 1P and co-op, from buy/build mode (pause on the options tab: `start,a,down,a,down,a` once the pause menu remembers that tab; the first time `right` x6 first), RSS sampled per cycle; under ASan too. Run cycles with `SIMMY_STORY=0`: story mode's tutorial dialogs take the quit presses, and `SIMMY_PAD_SEQ`'s `house` step then goes on without a quit (count the `player 1's sim: object` lines: one per game). Also lot changes (`SIMMY_LEAVE_LOT_TEST=600,5,2,19`) and development-menu re-entry soaks (`SIMMY_SOAK_LOT`) | each game reaches live mode with fresh object ids (player 1's sim is object 149 again), no crash; RSS flat after the first few games except for a few one-off steps (caches filling, the allocator: see "Memory growth" below) |
 | Free play | dev menu or FAM screens: enter lot 13, evict/move/bulldoze, Create-a-Family | logs `[hood] ...`, no crash |
 | Exit path | the cases in [shutdown-and-crashes.md](shutdown-and-crashes.md) | exit 0, `[simmy] clean exit (code 0)` last |
 | Determinism | record + replay with perturbations | hashes match ([determinism-and-netplay.md](determinism-and-netplay.md)) |
@@ -64,9 +64,29 @@ memory-sensitive changes. With gcc 13, `-fsanitize=undefined` (its `null` check)
 constant expressions in the precompiled header: use
 `-fsanitize=address,bounds,return,shift,signed-integer-overflow,vla-bound,bool,enum`; configure with
 gcc and the `SDL_*`/`AURORA_*`/`FETCHCONTENT_SOURCE_DIR_*` cache values of a working build (headless:
-`SDL_UNIX_CONSOLE_BUILD=ON`). Known UBSan reports that are GC behaviour: `psystem.cpp` random seed
+`SDL_UNIX_CONSOLE_BUILD=ON`), but **not** its `FETCHCONTENT_BASE_DIR` (set it to the ASan build's own
+`_deps`: otherwise the ASan build compiles SDL, fmt, zstd... into the working build's `_deps` and that
+build links them next time). Known UBSan reports that are GC behaviour: `psystem.cpp` random seed
 overflow, `SAnimator2::Update`'s event frame doubling for a looping animation with no duration (GC
 also stores the overshoot as the fraction).
+
+## Memory growth ([`tools/mtrack`](../tools/mtrack))
+
+RSS sampled once per game (e.g. at each `house` step of a quit / re-entry sequence, 15-20 games) shows
+whether memory grows; `tools/mtrack` shows what. `mtrack.so` is an `LD_PRELOAD` allocation tracker: every
+allocation is recorded with its caller's backtrace and an epoch; `SIGUSR2` starts the next epoch and
+`SIGUSR1` writes a dump. Send both at each house load (USR1, then USR2 a second later), then
+`python3 tools/mtrack/mta.py <MTRACK_OUT> 3 17` lists the backtraces whose allocations made in games 3..17
+are still live at the last dump, with their bytes per game: a leak shows the same amount in every game, a
+cache a few uneven amounts that stop, a one-off allocation one game. The dumps' first table (live heap
+per game) against RSS tells heap growth from allocator effects. With the tracker the process has about
+200 MB more RSS (its tables). Headless runs never draw, so GPU-side caches (aurora's texture caches,
+bounded LRUs) need an offscreen run.
+
+LeakSanitizer: the game ends with `_Exit`, which skips LeakSanitizer's own check; in an ASan build
+`SIMMY_LSAN=1` (with `ASAN_OPTIONS=detect_leaks=1`) runs it at the end (`[simmy] leak check: ...`). It only
+reports memory nothing points to any more (e.g. an object replaced without being freed), not memory kept
+reachable by a cache or a list that grows: that is what mtrack is for.
 
 ## Scripts worth adding to `tools/` (not in the repo yet)
 
@@ -108,6 +128,7 @@ Development only: the launcher removes all of them except `SIMMY_INI` from the g
 | `SIMMY_IO_STATS=1` | File opens/reads summary at exit |
 | `SIMMY_LOG_LOADS=1` | Every resource load |
 | `SIMMY_WATCHDOG=N` | (Windows) all thread stacks to `simmy_watchdog.txt` after N s |
+| `SIMMY_LSAN=1` | (ASan builds) run LeakSanitizer's check at the exit (`_Exit` skips its own) |
 | `SIMMY_LAUNCHER_KEEP_ENV=1` | (launcher) pass `SIMMY_*` through to the game |
 
 ### Graphics and shots
@@ -206,7 +227,7 @@ Development only: the launcher removes all of them except `SIMMY_INI` from the g
 | `SIMMY_CTL_TRACE=1`, `SIMMY_COOP_TRACE=1`, `SIMMY_SWITCH_TRACE=1`, `SIMMY_CAM_TRACE=1` | Classic cursor (and its Go Here tile); both players; sim switching; the lot intro camera's steps |
 | `SIMMY_HL_TRACE=1` | Direct control's highlights every 60 frames: the objects the influence map lists at the sim's tile, the lit ones, the sim's location and facing |
 | `SIMMY_KBM_TRACE=1`, `SIMMY_KBM_NOPICK=1` | Keyboard/mouse input made; floor-only mouse picking |
-| `SIMMY_LEAVE_LOT_TEST=<frames>[,<mode>[,<house>]]` | Leave the lot (mode 5 to a house, 4 the story end) |
+| `SIMMY_LEAVE_LOT_TEST=<frames>[,<mode>[,<house>[,<n>]]]` | Leave the lot (mode 5 to a house, 4 the story end); `<n>` more times back and forth between the two lots (`[leave-lot]` lines) |
 | `SIMMY_PRISTINE_SAVE=1` | Save as author mode (pristine reset first) |
 | `SIMMY_TEST_QUIT_BG=N` | Quit when the N-th background routine is queued |
 

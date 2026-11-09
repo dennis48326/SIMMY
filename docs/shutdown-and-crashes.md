@@ -66,9 +66,11 @@ menu, HUD and memory card targets go; quit request DAT_80475C20) -> once the loa
 5. the simulator `SetMode(0)` and `Pause`.
 
 Back on the front end, `TheSimsEnterMainMenuState::Reset` (80097EF0) clears the two-player mode and the
-new-game / free-play / author-mode flags; `EGlobal::SetDefaults` runs again (build-set tables are looked up
-again on PC; `ERLevel::ClearWallIndexSaves` resets the wall range); `TheSimsMainMenuState::Update`
-(80098838) clears a leftover quit request and, when the game returns to it, calls
+new-game / free-play / author-mode flags; `TheSimsEnterMainMenuState::Update` (8009817C) skips its background
+stages once the fixed world exists, so `EGlobal::SetDefaults` (and `Globs::Startup`'s object folder, careers,
+neighbourhood and sound player) runs once per boot, as on GC (running it again leaked the previous set every
+cycle, the old sound system with every sample it had cached: see "Memory across games" below);
+`TheSimsMainMenuState::Update` (80098838) clears a leftover quit request and, when the game returns to it, calls
 `GameData::GamePlayShutdown` (8003B1E4): no current house, `NeighborhoodImpl::Unload` (neighbours, user
 selectors, families). The next New Game or load reads the neighbourhood afresh. PC additions: the players'
 model cache is emptied again on the way to the menu; a freed object stops being a passive-influence
@@ -79,6 +81,44 @@ compares pointers only, as GC (it read the freed object: a crash when the next g
 closed after a co-op quit). Start is refused while the player's camera director letterboxes a shot (GC),
 so a game cannot be quit during the lot's intro camera (that left the next game's loading screen "in
 progress" and every pad ignored).
+
+### Memory across games
+
+Quit -> New Game / Continue, development-menu re-entry and lot changes keep RSS flat once the caches have
+filled (measured over 20 games, 1P and co-op: [testing.md](testing.md) "Memory growth"). What used to
+grow, and why:
+
+- `EGlobal::SetDefaults` ran again at every return to the main menu (PC: `TheSimsEnterMainMenuState` did
+  not skip its background stages as GC does once the fixed world exists). Each run's `Globs::Startup` made
+  a new object folder (1,069 selectors, ~0.2 MB), careers, neighbourhood and sound player (with a new
+  `cGZSndSys` and `cBoxX`) and dropped the old ones without freeing them; the old sound system kept every
+  sample it had cached referenced, so a session that played many sounds lost several MB per game.
+- `ObjectFolderImpl::DeleteUserSelectors` deleted the CAS sims' selectors without `DestroyThumbnail`
+  (GC: `DestroySelector` 800ED6C0): each game's thumbnails (texture, shader) stayed.
+- `SAnimator2::~SAnimator2` (8005C23C) only removed props and particles: every killed person (each quit,
+  visitors leaving) kept its pending, impatient-idle, long-idle and low-motive animations referenced, and a
+  sim quit in a costume leaked its own description.
+- The action menu rows, the action queue's pending icons and their callers did not take / give back the
+  references GC does (`ActionMenu::MenuItem::Setup` 80182FF4 / `ClearMenu` 801831B8,
+  `FlashPiMenu::AddObjectInteractionsToMenu` 80039FF4 / `CreateInteractionMenu` 8003A2E0,
+  `PCTTarget::CreateGrabObjectMenu` 801D63B8, `ActionQueue::AddActionToHUD` 80119F60, `ACTTarget` iqRecord):
+  a CAS sim's portrait shown in a menu could never be freed.
+- Apt's `createTextField` kept each field's character for the program's life (~50 fields, 8 KB, per main
+  menu visit); it is now freed with the field (and its duplicates).
+
+What stays and is fine: the resource managers' caches of unreferenced resources (at most 800 each, oldest
+evicted first: animations, models, textures, sound events...), the samples within the GC ARAM budget
+([audio.md](audio.md)), aurora's GPU texture caches (LRU, byte budgets), the loading music, the sims' skin
+shader clones (`EIStaticModel::ReplaceBaseTexture`: "cloneN" names, at most 99 per shader before the
+shader cache is flushed, as GC), static scratch buffers (censor, GX FIFO). They fill during the first
+games and plateau. Linux RSS also carries glibc's own retention: after a large block (e.g. a music stream's
+buffer, several MB) is freed, glibc raises its mmap threshold and serves later large blocks from its heap,
+which it keeps; that is ~20 MB of the RSS after the second game and the occasional one-off step of 2-6 MB
+at a later game. With the threshold fixed (`GLIBC_TUNABLES=glibc.malloc.mmap_threshold=131072`) the same
+20 games stay at 76-78 MiB with no steps (96 MiB otherwise); the live heap (tools/mtrack) does not jump at
+those steps. Not changed in the game (Windows' allocator behaves differently; nothing is lost).
+`ObjectFolderImpl::FreeUnusedData` / `ClearAllCaches` and `Path::DeallocateAllPathData` stay stubs: the PC
+keeps no per-selector anim tables or path space partition for them to free.
 
 ## Crash capture (Windows, [`pc_crash_win.cpp`](../src/platform/pc_crash_win.cpp))
 

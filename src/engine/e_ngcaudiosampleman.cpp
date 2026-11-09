@@ -1,11 +1,22 @@
 // Port of engine/e_ngcaudiosampleman.cpp: the "samples" resource manager (_ngcAudioSampleMan,
 // _pAudiosampleman). Each sample's header goes to main memory and its frames to the ARAM heap on GC;
-// on PC both stay in host memory, so the ARAM heap (heapInit/heapAlloc/heapFree...) is not used and
-// a sample never falls back to the empty "zero page" sample the original used when ARAM was full.
+// on PC both stay in host memory. The ARAM heap itself (heapInit/heapAlloc/heapFree...) is not used, but
+// its size is: the frames' blocks are counted against the GC heap's 3.5 MB, and a load that would not fit
+// first frees cached samples nobody holds, as GC's heapAlloc loop does (without it the cache kept up to
+// 800 unused samples, ~40 MB, where GC keeps 3.5 MB). A sample never falls back to the empty "zero page"
+// sample the original used when nothing could be freed: it is loaded anyway (PC).
 #include "simmy/types_gen.hpp"
 #include "simmy/unported_globals.hpp"
 
+#include <atomic>
 #include <cstring>
+
+namespace {
+// GC: heapInit takes 0x380000 bytes of ARAM (AramHeapBegin..AramHeapEnd) for the samples' frames.
+constexpr unsigned int kAramSampleHeapSize = 0x380000;
+// The bytes of that heap the loaded samples' blocks take (loads on the loader thread, frees anywhere).
+std::atomic<unsigned int> s_aramUsed{0};
+}  // namespace
 
 EAudioSampleManager* _pAudiosampleman = nullptr;  // 805000F4
 ENgcAudioSampleManager _ngcAudioSampleMan;
@@ -49,6 +60,11 @@ int ENgcAudioSampleManager::CanCache(EResource* res) {
 // room for a second channel). The archive is left just past the resource.
 EResource* ENgcAudioSampleManager::AllocateAndLoadResource(EFile* file, unsigned int size, unsigned int id) {
   const int start = file->Tell();
+  // GC: heapAlloc of the frames' block ((size + 0x1F9F) & ~0x1FFF); while it fails and cached samples
+  // are left, MakeSpace frees some (the oldest unused) and it is tried again.
+  const unsigned int block = (size + 0x1F9F) & ~0x1FFFu;
+  while (s_aramUsed.load() + block > kAramSampleHeapSize && GetUnreferencedResourceCount() != 0 && MakeSpace() != 0) {
+  }
   auto* sample = new ERSampledata;
   sample->Load(file);
   sample->m_looping = simmy::be16(sample->m_header + 0x4A) != 0;
@@ -68,12 +84,16 @@ EResource* ENgcAudioSampleManager::AllocateAndLoadResource(EFile* file, unsigned
   }
   file->Seek(start + static_cast<int>(size), EFile__SeekType::Set);
   sample->m_id = id;
+  sample->m_aramSize = block;
+  s_aramUsed += block;
   return sample;
 }
 
 // 8032CFDC
 // Frees the sample's frames (the ARAM block on GC).
 void ENgcAudioSampleManager::OnDelRef(ERSampledata* sample) {
+  s_aramUsed -= sample->m_aramSize;
+  sample->m_aramSize = 0;
   delete[] sample->m_data;
   sample->m_data = nullptr;
   delete[] sample->m_data2;

@@ -1613,7 +1613,7 @@
 80067288	game/sanimator2.cpp	ported	RET_UNKNOWN SAnimator2::setNewModel(char *, bool, bool)	SAnimator2	RET_UNKNOWN setNewModel(char *, bool, bool)
 800673FC	game/sanimator2.cpp	ported	RET_UNKNOWN SAnimator2::RestoreNonCostumeRelatedSimDescriptionItems(CasSimDescriptionS2C *, CasSimDescriptionS2C *, bool)	SAnimator2	RET_UNKNOWN RestoreNonCostumeRelatedSimDescriptionItems(CasSimDescriptionS2C *, CasSimDescriptionS2C *, bool)
 800675A0	game/sanimator2.cpp	ported	RET_UNKNOWN SAnimator2::GetCostumeName(SAnimator__OutfitS2C)	SAnimator2	RET_UNKNOWN GetCostumeName(SAnimator__OutfitS2C)
-800676E4	game/sanimator2.cpp	stub	RET_UNKNOWN SAnimator2::removeCostume()	SAnimator2	static RET_UNKNOWN removeCostume()
+800676E4	game/sanimator2.cpp	ported	RET_UNKNOWN SAnimator2::removeCostume()	SAnimator2	static RET_UNKNOWN removeCostume()
 800676EC	game/sanimator2.cpp	ported	void SAnimator2::GetCarryHandPosAndDir(EVec3 &, EVec3 &, EMat4 &)	SAnimator2	virtual void GetCarryHandPosAndDir(EVec3 &, EVec3 &, EMat4 &)
 80067758	game/sanimator2.cpp	ported	RET_UNKNOWN SAnimator2::GetBonePos(SAnimator__BoneIdx, EVec3 &)	SAnimator2	virtual RET_UNKNOWN GetBonePos(SAnimator__BoneIdx, EVec3 &)
 800677B0	game/sanimator2.cpp	ported	bool SAnimator2::PropsHaveAlpha()	SAnimator2	bool PropsHaveAlpha()

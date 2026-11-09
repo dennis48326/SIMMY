@@ -46,13 +46,34 @@ SAnimator2::SAnimator2() {
 }
 
 // 8005C23C
-// The props (removeAllProps) and particles go. GC: also drops a pending load, costumes and the optional
-// animations.
+// A pending animation load is given back, the props and particles go, then the animations it still
+// holds (an impatient idle, a long idle, the optional low-motive walks) and, while in a costume, the
+// person's own description is put back. (Before these were all ported only the props and particles went:
+// every person killed kept its held animations referenced, and a sim quit in a costume leaked its own
+// description.)
 SAnimator2::~SAnimator2() {
+  if (m_pendingAnim != 0) {
+    _animman.DelRefAsync(static_cast<unsigned int>(m_pendingAnim));
+    m_pendingAnim = 0;  // GC: m_pendingCount - 1 (PC: loads are synchronous)
+  }
+  removeCostume();
   removeAllProps();
   cleanupParticlesImmediate(&m_particles);
   cleanupParticlesImmediate(&m_overlayParticles);
+  clearImpatientIdleAnimation();
+  UnloadPendingLongIdleAnim();
+  UnloadDCOptionalMotionAnims();
+  UnloadSMOptionalMotionAnims();
+  if (m_ownClothes) {
+    if (CasSimDescriptionS2C* desc = m_person ? m_person->GetSimDescription() : nullptr) *desc = *m_ownClothes;
+    delete m_ownClothes;
+    m_ownClothes = nullptr;
+  }
 }
+
+// 800676E4
+// Empty in the release build.
+RET_UNKNOWN SAnimator2::removeCostume() { return 1; }
 
 // 8005C43C
 // For `person`: its instance and destination list (its path), the bones the camera, props and the

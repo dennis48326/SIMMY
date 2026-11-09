@@ -30,6 +30,7 @@ struct ERSampledata : public EResource {
   unsigned char* m_data = nullptr;     // +0x1C the frames (an ARAM address on GC)
   unsigned char* m_data2 = nullptr;    // +0x20 the right channel's frames
   int m_looping = 0;                   // +0x24 header +0x4A != 0
+  unsigned int m_aramSize = 0;         // PC: the ARAM block it counts against the sample heap (GC heapAlloc)
 };
 
 struct EAudioSampleManager : public EResourceManager {

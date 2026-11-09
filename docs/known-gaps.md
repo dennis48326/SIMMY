@@ -76,9 +76,13 @@ summary and the deliberate GC behaviour.
   (the PC route walker keeps no space partition), `GameData::StageInitTiming` (loading meter timing).
   The interactor manager is a PC stand-in, so `InteractorModule::ShutdownInteractorModule` (80210464)
   shuts down the PC's interactors, manipulators, build tools and social-mode state instead.
-  Memory: quit -> New Game cycles keep RSS flat after the second game (~0.2 MB a cycle); soaks that
-  re-enter a lot from the development menu grew more (co-op 107 -> 144 MB over five re-entries), not
-  chased.
+  Memory: quit -> New Game / load, development-menu re-entry and lot changes keep RSS flat once the
+  resource caches have filled (20-game runs, 1P and co-op; a few one-off steps of a few MB remain on Linux:
+  glibc keeping freed large blocks in its heap). What grew before (SetDefaults / `Globs::Startup` run at
+  every return to the menu, CAS thumbnails, animator and menu-icon references, Apt text fields) and what
+  is kept on purpose (bounded caches, the GC sample budget): [shutdown-and-crashes.md](shutdown-and-crashes.md)
+  "Memory across games". `ObjectFolderImpl::RemoveSelector` is a stub: a neighbour deleted in free play
+  keeps its user selector until the next return to the main menu.
 
 ## UI
 

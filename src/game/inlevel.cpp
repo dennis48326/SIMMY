@@ -150,11 +150,23 @@ void InLevelBaseState::Update(float) {
   // PC development aid: SIMMY_LEAVE_LOT_TEST=<frames>[,<mode>[,<house>]] leaves the lot as a taxi's / car's
   // "Leave Lot" does (generic sim call 0x16: cXObjectImpl::TransitionToNewHouse, changehouse.cpp) that many
   // frames after the HUD is up; mode 5 (default) to lot <house> (default 2), 4 the story's end (flow 10).
+  // A fourth number <n> repeats it n more times, back and forth between the two lots (memory checks).
   static int s_leaveTest = std::getenv("SIMMY_LEAVE_LOT_TEST") ? std::atoi(std::getenv("SIMMY_LEAVE_LOT_TEST")) : 0;
+  static int s_leaveFrom = -1, s_leaveTo = -1, s_leaveAgain = -1;
   if (s_leaveTest > 0 && _gd.m_hudTarget && --s_leaveTest == 0) {
-    int frames = 0, mode = 5, house = 2;
-    std::sscanf(std::getenv("SIMMY_LEAVE_LOT_TEST"), "%d,%d,%d", &frames, &mode, &house);
-    cXObjectImpl::TransitionToNewHouse(0, static_cast<short>(house), static_cast<short>(mode));
+    int frames = 0, mode = 5, house = 2, again = 0;
+    std::sscanf(std::getenv("SIMMY_LEAVE_LOT_TEST"), "%d,%d,%d,%d", &frames, &mode, &house, &again);
+    if (s_leaveAgain < 0) s_leaveAgain = again;
+    if (s_leaveTo < 0) s_leaveTo = house;
+    s_leaveFrom = _globals.m_house ? _globals.m_house->m_house : -1;
+    std::printf("[leave-lot] test: lot %d -> %d (mode %d, %d more)\n", s_leaveFrom, s_leaveTo, mode, s_leaveAgain);
+    cXObjectImpl::TransitionToNewHouse(0, static_cast<short>(s_leaveTo), static_cast<short>(mode));
+  } else if (s_leaveFrom >= 0 && s_leaveAgain > 0 && _gd.m_hudTarget && _globals.m_house &&
+             _globals.m_house->m_house == s_leaveTo) {
+    --s_leaveAgain;
+    s_leaveTo = s_leaveFrom;
+    s_leaveFrom = -1;
+    s_leaveTest = std::atoi(std::getenv("SIMMY_LEAVE_LOT_TEST"));
   }
   if (_gd.m_field94) {  // DAT_80475C18
     _gd.m_field94 = 0;

@@ -124,6 +124,7 @@ void FlashPiMenu::AddObjectInteractionsToMenu(cXObjectImpl* object, bool single)
   const unsigned int shader = GetShaderForObject(object, &thumbnail);
   HUDTarget* hud = _gd.m_hudTarget;
   if (!single && hud) hud->AddMenu(m_player, object, GetObjectMenuName(object), shader, thumbnail);
+  if (thumbnail) thumbnail->DelRef();  // GetShaderForObject's reference (the menu row holds its own)
   CreateInteractionMenu(object, list);
   if (!single && hud) hud->CompleteMenu(m_player);
 }
@@ -203,10 +204,12 @@ int FlashPiMenu::CreateInteractionMenu(cXObjectImpl* object, MenuInteractionList
       std::u16string row = noGroup ? i.name : i.name.substr(slash + 1);
       ColorStringForFlash(row, i.GetTextColor());
       if (hud) hud->AddMenuItem(m_player, object, &i, row, iconShader, iconThumb, 0, (i.flags >> 0xb & 1) != 0);
+      if (iconThumb) iconThumb->DelRef();
       list.erase(list.begin() + static_cast<long>(k));
     }
     if (!noGroup && hud) hud->CompleteMenu(m_player);
   }
+  if (thumbnail) thumbnail->DelRef();
   return 1;
 }
 

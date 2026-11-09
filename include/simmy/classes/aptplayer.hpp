@@ -13,6 +13,7 @@
 #pragma once
 
 #include <functional>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -96,6 +97,9 @@ struct AptCIH : AptObject {
   void ReleaseText();
 
   AptCharacter* m_character;
+  // PC: a character made by script for this instance (createTextField's field), shared with its
+  // duplicates (duplicateMovieClip) and freed with the last of them.
+  std::shared_ptr<AptCharacter> m_ownedCharacter;
   AptCIH* m_parent;
   AptFileImage* m_file;          // file of the character (bytecode, character table)
   int m_depth = 0;

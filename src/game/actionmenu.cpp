@@ -74,7 +74,9 @@ void ActionMenu__MenuItem::Setup(cXObjectImpl* object, const MenuInteraction* in
   if (interaction) m_interaction = *interaction;
   m_name = name;
   m_utf8 = ToUtf8(m_name);
-  // GC: AddRef on the new shader, DelRef on the old one.
+  // The row holds its icon: a reference on the new shader, the old one's given back.
+  if (shader) shader->AddRef();
+  if (m_shader) m_shader->DelRef();
   m_disabled = disabled ? 1 : 0;
   m_shaderId = shaderId;
   m_shader = shader;
@@ -121,7 +123,10 @@ void ActionMenu__MenuItem::ClearMenu() {
   m_next = nullptr;
   delete m_sub;
   m_sub = nullptr;
-  m_shader = nullptr;  // GC: DelRef
+  if (m_shader) {
+    m_shader->DelRef();
+    m_shader = nullptr;
+  }
 }
 
 // 80183248 GetNext, 80183250 GetNextConst, 80183258 GetSubMenu: inline in actionmenu.hpp.

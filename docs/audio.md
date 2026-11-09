@@ -79,6 +79,12 @@ RNG in simulation code ([determinism-and-netplay.md](determinism-and-netplay.md)
 - `cSoundCacheItem` gives up when `samples.arc` is missing or an id is not in the index; queued events
   with unknown ids are dropped.
 - Sample loading uses the GC mono test (one channel unless the resource is <= 0x61 bytes).
+- Samples' frames live in host memory, not ARAM, but are counted against the GC sample heap's 3.5 MB
+  (`ENgcAudioSampleManager::heapInit`, 0x380000; each sample a `(size + 0x1F9F) & ~0x1FFF` block): a load
+  that would not fit first frees cached samples nobody holds (`MakeSpace`, oldest first), as GC's
+  `AllocateAndLoadResource` (8032CDE4) loop does. When nothing can be freed the sample is loaded anyway
+  (GC: the silent "zero page" sample). Without the budget the cache kept up to 800 unused samples (tens of
+  MB) for the whole session.
 
 ## Dev aids
 

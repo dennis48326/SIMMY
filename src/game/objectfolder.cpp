@@ -637,6 +637,7 @@ void ObjectFolderImpl::DeleteUserSelectors() {
         delete *it;
         m_typeAttrBlocks.erase(it);
       }
+      s->DestroyThumbnail();  // GC: DestroySelector (800ED6C0) lets the thumbnail go before deleting it
       delete s;
     }
   }

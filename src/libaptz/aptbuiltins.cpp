@@ -815,7 +815,10 @@ AptVar MC_createEmptyMovieClip(AptActionInterpreter& in, const AptVar& t, const 
 AptVar MC_createTextField(AptActionInterpreter& in, const AptVar& t, const Args& a) {
   AptCIH* c = ThisClip(in, t);
   if (!c) return AptVar::Undefined();
-  auto* ch = new AptCharacterEditText;  // owned for the program's life, like Apt's shared field template
+  // The field's own character, freed with the instance (and its duplicates). It was kept for the program's
+  // life: about 50 fields (8 KB) more each time the main menu came back.
+  auto owned = std::make_shared<AptCharacterEditText>();
+  AptCharacterEditText* ch = owned.get();
   ch->type = AptCharacter::kEditText;
   ch->movie = c->m_character ? c->m_character->movie : nullptr;
   ch->bounds = {0, 0, Arg(a, 4).ToFloat(), Arg(a, 5).ToFloat()};
@@ -823,6 +826,7 @@ AptVar MC_createTextField(AptActionInterpreter& in, const AptVar& t, const Args&
   ch->colour = 0xff000000;
   AptCIH* inst = AptCreateInstance(c, ch, Arg(a, 1).ToInteger() + kAptScriptDepthBase, Arg(a, 0).ToString(), [&](AptCIH* i) {
     i->m_placedByScript = true;
+    i->m_ownedCharacter = owned;
     i->m_matrix.tx = Arg(a, 2).ToFloat();
     i->m_matrix.ty = Arg(a, 3).ToFloat();
   });
@@ -837,6 +841,7 @@ AptVar MC_duplicateMovieClip(AptActionInterpreter& in, const AptVar& t, const Ar
     i->m_matrix = c->m_matrix;
     i->m_cxform = c->m_cxform;
     i->m_clipActions = c->m_clipActions;
+    i->m_ownedCharacter = c->m_ownedCharacter;
   });
   return AptVar::Obj(inst);
 }

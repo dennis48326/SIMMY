@@ -13,6 +13,9 @@
 //
 // --headless skips the window and GPU so the boot path can run without a display.
 // Graphics settings (simmy.ini, --window, --resolution, --aspect, ...) are read by pc_settings.cpp.
+#if defined(__SANITIZE_ADDRESS__) && !defined(_MSC_VER)
+#include <sanitizer/lsan_interface.h>
+#endif
 #include "simmy/version.hpp"
 #include "simmy/types_gen.hpp"
 #include "simmy/platform.hpp"
@@ -466,6 +469,15 @@ void crash_reinstall_handlers();                // pc_crash_win.cpp
   }
   std::fprintf(stderr, "[simmy] clean exit (code %d)\n", rc);
   std::fflush(nullptr);
+#if defined(__SANITIZE_ADDRESS__) && !defined(_MSC_VER)
+  // Test builds with -fsanitize=address: _Exit skips LeakSanitizer's own exit check, so SIMMY_LSAN=1 runs
+  // it here (memory still reachable from the game's globals is not reported).
+  if (const char* lsan = std::getenv("SIMMY_LSAN"); lsan && *lsan == '1') {
+    const int leaked = __lsan_do_recoverable_leak_check();
+    std::fprintf(stderr, "[simmy] leak check: %s\n", leaked ? "leaks reported" : "no leaks");
+    std::fflush(nullptr);
+  }
+#endif
 #ifdef _WIN32
   process_exit_now(rc);
 #else

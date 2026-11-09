@@ -436,7 +436,8 @@ void TheSimsEnterMainMenuState::Startup() {
 // 8009817C
 // Stages: 0/1 front-end sample banks and dataset 0x5012E600 (2 waits for it), 3 the background
 // loader's defaults, 4 the background loader done, 5 the "mainmenu" dataset; then the main menu.
-// The background loader runs EGlobal::SetDefaults (stage 3).
+// The background loader runs EGlobal::SetDefaults (stage 3); only the first time (stages 2-3 skipped
+// once the fixed world exists).
 void TheSimsEnterMainMenuState::Update(float) {
   const int stage = m_stage;
   bool done = false;
@@ -450,9 +451,14 @@ void TheSimsEnterMainMenuState::Update(float) {
       if (!_datasetman.GetRef(0x5012e600u)) {
         _datasetman.AddRefAsync(0x5012e600u);
         ++m_stage;
-      } else {
-        // GC: with the fixed world (Globs::pFixedWorld) already built the background steps are skipped
+      } else if (!Globs_pFixedWorld) {
         ++m_stage;
+      } else {
+        // Back from a game (the dataset is held until EGlobal::Reset, the fixed world exists): the
+        // background steps are skipped, so EGlobal::SetDefaults (and Globs::Startup's object folder,
+        // careers, neighbourhood and sound player) runs once per boot, as on GC. (Running it again made a
+        // second set of each and leaked the first: the old sound system kept every cached sample.)
+        m_stage += 3;
       }
       break;
     }

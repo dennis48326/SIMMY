@@ -125,9 +125,17 @@ ACTTarget::ACTTarget(int player) : m_player(player) {
   if (UIScreenManager* usm = ScreenManager()) usm->LoadUIScreen(m_player == 0 ? 0x3c : 0x3d, 0);
 }
 
+namespace {
+// A pending addition goes with its icon's reference (GC: iqRecord's destructor, EResource::DelRef).
+void DropPending(ACTTarget::iqRecord* q) {
+  if (q->resource) q->resource->DelRef();
+  delete q;
+}
+}  // namespace
+
 // 801A19B0
 ACTTarget::~ACTTarget() {
-  for (iqRecord* r : m_pending) delete r;  // GC: the resource's reference with it
+  for (iqRecord* r : m_pending) DropPending(r);
   m_pending.clear();
   if (UIScreenManager* usm = ScreenManager()) usm->UnloadUIScreen(m_player == 0 ? 0x3c : 0x3d);
   if (m_installed) {
@@ -225,7 +233,7 @@ void ACTTarget::Update() {
     m_pending.pop_front();
     if (_globals.GetSelectedPerson(m_player) == q->person)
       PlaceItem(record, m_player, q->interaction, q->id, q->person, q->name, q->shader, q->resource, q->insertBefore);
-    delete q;
+    DropPending(q);
   }
 }
 
@@ -296,7 +304,8 @@ void ACTTarget::AddAction(int player, Interaction* interaction, const std::u16st
   q->id = interaction->m_id;
   q->name = name;
   q->shader = shader;
-  q->resource = resource;  // GC: EResource::AddRef
+  q->resource = resource;  // held until the record is placed or dropped
+  if (resource) resource->AddRef();
   q->insertBefore = insertBefore;
   m_pending.push_back(q);
 }
@@ -374,7 +383,7 @@ void ACTTarget::RemoveAction(int, Interaction* interaction) {
     iqRecord* q = *it;
     if (q->id == interaction->m_id && q->person == interaction->GetPerson()) {
       m_pending.erase(it);
-      delete q;
+      DropPending(q);
       return;
     }
   }
@@ -760,6 +769,7 @@ void ActionQueue::AddActionToHUD(int index) {
   if (H2DTarget* h2d = _gd.m_h2dTarget) {
     h2d->AddAction(m_hudPlayer, &action, action.GetName(), shader, resource, before);
   }
+  if (resource) resource->DelRef();  // GetShaderForObject's reference
 }
 
 // 8011A06C
