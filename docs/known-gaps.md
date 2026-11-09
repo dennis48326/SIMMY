@@ -133,7 +133,8 @@ pad motor through `EVibrate` and aurora's `PADControlMotor` (one on/off motor, a
 - The classic/direct control mode is not saved with the game; the pause menu remembers its last tab.
 - Carried trash in direct control: the trash can itself offers nothing ("Toss Trash" and the pile's
   "Clean Up" are hidden by the game's check trees for a player-steered sim); A anywhere opens the held
-  trash's menu, whose "Throw Away" walks to the nearest can (kitchen or curb). Switching to classic
+  trash's menu (its location follows the sim, GC SetLocation 800DF784): "Drop" anywhere, and "Throw Away"
+  (walks to the nearest can) once a trash can is within 3 tiles of the sim (the trash's check tree 0x100A). Switching to classic
   control while holding something makes the sim set it down (its idle tree).
 - The story family starts with §0 on lot 9; the plumb bob's particles never show (release build stops
   them); bloom has no notes in the shipped data; lightning is empty (`EHouse::TriggerLightningEffect`,

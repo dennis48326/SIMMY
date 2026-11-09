@@ -33,6 +33,7 @@ through the object placement code ([`objectplace.cpp`](../src/game/objectplace.c
 | `ObjectModuleImpl::UpdateRooms` | 800F5B10 | Every object's room again ([`roomresolve.cpp`](../src/game/roomresolve.cpp)) |
 | `ResolveRoomID` | 800DF228 | A point's room (split tiles by side) |
 | `UpdateObjectRoomID` | part of 800DF784 | Object data 0x1D on a move; called from objectplace.cpp and the animator |
+| `ObjSetContainedLocations` | part of 800DF784 | What an object's slots hold (data 2 = its id) set to its location and level, down the slot hierarchy (a sim's carried trash, newspaper or plate moves with the sim); called by `SetLocation` (objectplace.cpp), `cXObjectImpl::Place` and `PlaceObject` (objectsim.cpp) |
 
 Object data 0x1D (room) drives the indoor shadow blob, the room light set, the room scope (`InterpValue`
 0x17) and sounds. Rooms are computed **before** objects' `PostLoad` at house load (load trees ask the room

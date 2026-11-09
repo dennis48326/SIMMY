@@ -360,6 +360,7 @@ void SetLocation(cXObjectImpl* o, const int pos[2], int level) {
   o->m_level = level;
   UpdateObjectRoomID(o);  // 800DF784: ResolveRoomID, data 0x1D
   InfluenceMapObjectArrived(o);
+  ObjSetContainedLocations(o);  // 800DF784: SetLocation on what its slots hold
   // 800DF784: an object that moved out of the world (both coordinates negative: picked up, being
   // killed) closes a player's pie menu that lists it (HUDTarget::NotifyMenuRemoveObj, DAT_80475BC8).
   if ((was[0] != pos[0] || was[1] != pos[1]) && pos[1] < 0 && pos[0] < 0 && _gd.m_hudTarget)
@@ -367,6 +368,26 @@ void SetLocation(cXObjectImpl* o, const int pos[2], int level) {
   PassiveInfluenceLocationChanged(o, was[0], was[1]);
 }
 
+}  // namespace
+
+// 800DF784 (cXObjectImpl::SetLocation, after the room): each object in `o`'s object slots (vtable 0x2B4
+// CountObjectSlots, 0x2C4 GetContainedObject) is set to `o`'s location and level too (vtable 0x334), and
+// so on down the slot hierarchy: what a sim carries (its slot 0: trash, a newspaper, a plate) moves with
+// the sim, so its interactions' activation areas (InfluenceMap::CalculateAffectedArea) are around the
+// sim. PC: the objects whose container is `o` (data 2), by id (GetContainedObject's PC form).
+void ObjSetContainedLocations(cXObjectImpl* o) {
+  ObjectModuleImpl* module = Globs_pObjectModule;
+  if (!module || !o || o->m_id == 0) return;
+  const int count = module->GetNumObjects();
+  for (int id = 1; id <= count; ++id) {
+    cXObject* x = module->GetObjectFromID(static_cast<short>(id));
+    cXObjectImpl* held = x ? x->GetObjectImplementation() : nullptr;
+    if (!held || held == o || held->m_data[2] != o->m_id) continue;
+    SetLocation(held, o->m_location, o->m_level);
+  }
+}
+
+namespace {
 // 800EA6B0 cXObjectImpl::SimObjectPlaced: the model takes its place and is no longer carried (cursor
 // flags 0x40 / 0x80).
 void SimObjectPlaced(cXObjectImpl* o) {

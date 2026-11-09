@@ -259,8 +259,14 @@ same menu from the highlighted objects (the held object goes first only when it 
 
 Carrying (trash, newspaper, plates): "Pick Up" (trash pile) or "Read" (newspaper) put the object in the
 sim's hand slot (drawn at the hand: `ISimsObjectModel::Update`, cursor flags 0x40/0x80). The held
-object's own entries then do the rest ("Throw Away" walks to the nearest trash can, kitchen or curb;
-"Drop", "Set Down", "Recycle"). The game's trees decide what is offered in which mode (primitive 0x35
+object's location follows the sim (`cXObjectImpl::SetLocation` 800DF784 sets what an object's slots hold
+to its location too: `ObjSetContainedLocations`, called by every port location setter), so the held
+object's activation areas are around the sim and its menu opens wherever the sim stands. The held
+object's own entries then do the rest ("Throw Away" walks to the nearest trash can, kitchen or curb, and is
+offered only while a can is within 3 tiles of the sim: check tree 0x100A walks the cans with "get distance
+to"; "Drop", "Set Down", "Recycle"). Menu items a check tree names (primitive 0x32 `TryMakeActionString`:
+the newspaper's "Pick Up" / "Read" / "Find A Job") take line `index` of the string set 1-based
+(`QuickStringSet::GetLocString` 800A76FC). The game's trees decide what is offered in which mode (primitive 0x35
 `TryCheckObject` kind 0, "a sim a player steers in direct control"): in direct control the trash can's
 own "Toss Trash" and the pile's "Clean Up" are hidden (person data 0x32 = 1), so the player throws away
 through the held trash's menu; in classic control "Clean Up" (pick up and bin in one go) and "Toss

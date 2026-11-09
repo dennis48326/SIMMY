@@ -7,10 +7,10 @@
 #ifndef SIMMY_VERSION_HPP
 #define SIMMY_VERSION_HPP
 
-#define SIMMY_PORT_BUILD "build dg"   // the delivery's name
-#define SIMMY_PORT_DATE "2026-11-08"  // its date (YYYY-MM-DD)
+#define SIMMY_PORT_BUILD "build dh"   // the delivery's name
+#define SIMMY_PORT_DATE "2026-11-09"  // its date (YYYY-MM-DD)
 
-// "SIMMY port - build dg (2026-11-08)"
+// "SIMMY port - build dh (2026-11-09)"
 #define SIMMY_PORT_VERSION "SIMMY port - " SIMMY_PORT_BUILD " (" SIMMY_PORT_DATE ")"
 
 #endif

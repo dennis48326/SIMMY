@@ -441,8 +441,8 @@ int EdithDialogPrimitive::SetDialog(StackElem* frame, const unsigned char* param
   return 1;
 }
 
-// PC: the text of primitive 0x32 TryMakeActionString (objectsim.cpp): line `index` (0-based, GC
-// StringSet::GetString) of the frame's private file's STR# set `set`, through ParseUIString.
+// PC: the text of primitive 0x32 TryMakeActionString (objectsim.cpp): line `index` (1-based, GC
+// QuickStringSet::GetLocString) of the frame's private file's STR# set `set`, through ParseUIString.
 std::u16string ActionStringText(StackElem* frame, int set, int index, cXObjectImpl* me) {
   Behavior* b = frame ? frame->m_behavior : nullptr;
   // The running tree's file (a semi-global tree's strings are its semi-global file's), else the private one.
@@ -451,7 +451,10 @@ std::u16string ActionStringText(StackElem* frame, int set, int index, cXObjectIm
   if (!strings && b) strings = FileStringSet(b->GetResFileID(cls == 0x2000 ? 0x1000 : 0x2000), static_cast<short>(set));
   const unsigned int count = strings ? ERQuickdata::U32(strings - 4, 0) : 0;
   std::u16string s;
-  if (index >= 0 && static_cast<unsigned int>(index) < count) s = Str(ERQuickdata::LocString(strings, static_cast<unsigned int>(index) * 4));
+  // QuickStringSet::GetLocString (800A76FC): the index is 1-based (0 or past the end: the set's empty
+  // default string).
+  if (index > 0 && static_cast<unsigned int>(index) <= count)
+    s = Str(ERQuickdata::LocString(strings, static_cast<unsigned int>(index - 1) * 4));
   if (!s.empty() && me) ParseDialogString(s, frame, me);
   return s;
 }

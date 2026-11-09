@@ -1717,6 +1717,7 @@ int cXObjectImpl::TrySnap(StackElem* frame, const unsigned char* params) {
   m_data.WriteVar(0x34, 0);
   UpdateObjectRoomID(this);  // Place -> SetLocation: ResolveRoomID, data 0x1D
   InfluenceMapObjectArrived(this);
+  ObjSetContainedLocations(this);  // SetLocation: what its slots hold (a sim's carried object) moves with it
   PassiveInfluenceLocationChanged(this, was[0], was[1]);
   if (GetType() == 2)
     if (auto* person = dynamic_cast<cXPersonImpl*>(this)) person->UpdateCurrentRoom();  // cXPersonImpl::Place
@@ -1853,6 +1854,7 @@ void PlaceObject(cXObjectImpl* object, const int pos[2], int level, cXObjectImpl
   }
   UpdateObjectRoomID(object);  // GC Place -> SetLocation: ResolveRoomID, data 0x1D
   InfluenceMapObjectArrived(object);
+  ObjSetContainedLocations(object);  // SetLocation: what its slots hold moves with it
   PassiveInfluenceLocationChanged(object, was[0], was[1]);
   if (object->GetType() == 2) {
     if (object->m_instance) object->m_instance->SetObjOrient();

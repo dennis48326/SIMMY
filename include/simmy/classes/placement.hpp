@@ -100,6 +100,7 @@ int ObjCanPlace(cXObjectImpl* o, const int pos[2], int level, cXObjectImpl* cont
 bool ObjFindGoodLocation(cXObjectImpl* object, const int start[2], int level, bool sameRoom, bool emptyTile, int out[2]);
 void ObjPlace(cXObjectImpl* o, const int pos[2], int level, cXObjectImpl* container, int slot);    // 800DE3C4 / 800C61E4
 void ObjPickup(cXObjectImpl* o);                                               // 800DE144 / 800C63E4
+void ObjSetContainedLocations(cXObjectImpl* o);  // 800DF784 (SetLocation's contained-objects loop)
 void ObjPortalPartKilled(cXObjectImpl* o);  // a door or window part killed: its wall plain again (KillObject's Pickup)
 int ObjUserCanPlace(cXObjectImpl* o, const int pos[2], int level, cXObjectImpl* container, int slot);  // 800E1E30 / 800C64B8
 void ObjUserPlace(cXObjectImpl* o, const int pos[2], int level, cXObjectImpl* container, int slot);    // 800E1FF4 / 800C66AC
