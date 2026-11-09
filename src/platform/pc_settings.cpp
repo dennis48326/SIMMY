@@ -1,5 +1,6 @@
 // PC: graphics settings (see pc_settings.hpp and simmy.ini.example).
 #include "pc_settings.hpp"
+#include "pc_net.hpp"
 
 #include "simmy/platform.hpp"
 
@@ -297,7 +298,7 @@ void LoadIni(GraphicsSettings& g, const std::string& path, bool required) {
   }
   g.sourceFile = path;
   int lineNo = 0;
-  bool launcherSection = false, keysSection = false;
+  bool launcherSection = false, keysSection = false, netSection = false;
   for (std::string line : lines) {
     ++lineNo;
     // iso= holds a path, which may contain ';' or '#': there the rest of the line is the value.
@@ -315,9 +316,15 @@ void LoadIni(GraphicsSettings& g, const std::string& path, bool required) {
     if (!line.empty() && line[0] == '[') {
       launcherSection = Lower(line) == "[launcher]";
       keysSection = Lower(line) == "[keys]";
+      netSection = Lower(line) == "[net]";  // PC mod: network play (pc_net.cpp)
     }
     if (line.empty() || line[0] == '[' || launcherSection) continue;
     const size_t eq = line.find('=');
+    if (netSection) {
+      if (eq == std::string::npos) std::fprintf(stderr, "[net] %s:%d: \"%s\" is not \"key = value\"\n", path.c_str(), lineNo, line.c_str());
+      else net_ini_value(line.substr(0, eq), line.substr(eq + 1), path + ":" + std::to_string(lineNo));
+      continue;
+    }
     if (keysSection) {
       GraphicsSettings::KeyLine k;
       k.action = Trim(eq == std::string::npos ? line : line.substr(0, eq));
@@ -835,11 +842,12 @@ bool SaveNames(const char* const* names, size_t count, std::string& message) {
         const std::string t = Trim(lines[i]);
         if (!t.empty() && t[0] == '[') {
           section = Lower(t);
-          if ((section == "[keys]" || section == "[launcher]") && firstOther < 0) firstOther = static_cast<int>(i);
-          if (section != "[keys]" && section != "[launcher]") last = static_cast<int>(i);
+          const bool other = section == "[keys]" || section == "[launcher]" || section == "[net]";
+          if (other && firstOther < 0) firstOther = static_cast<int>(i);
+          if (!other) last = static_cast<int>(i);
           continue;
         }
-        if (!t.empty() && section != "[keys]" && section != "[launcher]") last = static_cast<int>(i);
+        if (!t.empty() && section != "[keys]" && section != "[launcher]" && section != "[net]") last = static_cast<int>(i);
       }
       const std::string add = std::string(name) + " = " + value;
       if (firstOther < 0) lines.push_back(add);

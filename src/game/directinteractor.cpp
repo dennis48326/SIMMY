@@ -841,7 +841,7 @@ void UpdateDirectInteractorsOf(int count, float dt) {
       } else if (pad->GetCmdResult(0x31, pad->GetBtnPressedMask(filter), pad->GetBtnDownMask(filter), false)) {
         PcSetMouseClassic(player, false);
         d->OnCommandPressed(InteractorModule__InteractorInputManager__InteractorCommand{0x11}, 1.0f);
-      } else if (player == KbmPlayer() && (simmy::kbm_tick().flags & simmy::kKbmCursor) && d->m_cam &&
+      } else if ((simmy::kbm_tick_for_player(player).flags & simmy::kKbmCursor) && d->m_cam &&  // (PC mod: network play)
                  !pad->IsStickFiltered(0, 0, filter) && !IsCameraDirectorInControl(player)) {
         // PC keyboard and mouse (pc_kbm.cpp): the mouse moved over the 3D view takes the player to the
         // classic control, as Z does; the cursor then follows the mouse.

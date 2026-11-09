@@ -717,10 +717,10 @@ bool UpdateSimInteractor(int player, float dt) {
   FeedSimInteractor(in, player);
   ESimsCam* cam = _gd.m_players[player & 1].m_cam;  // CameraManager::GetCamera
   s_mouseTargetSet[player] = false;
-  if (player == KbmPlayer()) {
+  // PC mod: network play: each player's own keyboard-and-mouse record (that of the pad port they are on).
+  if (const simmy::KbmTick& t = simmy::kbm_tick_for_player(player); t.flags != 0) {
     // PC keyboard and mouse (pc_kbm.cpp): where the stick reaches the cursor, the mouse puts it on the
     // floor point under it; the stick (keys) hands a mouse-led classic control back to direct control.
-    const simmy::KbmTick& t = simmy::kbm_tick();
     EController* pad = _pCtrlMan->GetController(static_cast<unsigned int>(_pCtrlMan->GetPlayerControllerIndex(player)));
     const bool free = pad && cam && !pad->IsStickFiltered(0, 0, cam->m_filterId);
     if (free && s_mouseClassic[player] && (t.flags & simmy::kKbmKeysMoved) && !(t.flags & simmy::kKbmCursor) && !_gd.m_field70) {
@@ -771,14 +771,29 @@ bool SimInteractorInfo(int player, InteractorModule__InteractorInfo& info) {
 
 // ---- PC keyboard and mouse (pc_kbm.cpp) ----
 
-int KbmPlayer() {
+// The player whose controller is pad port `port` (-1: none). PC mod: network play: port 2 too (the
+// joining PC's keyboard and mouse).
+static int KbmPlayerOfPort(int port) {
   if (!_pCtrlMan) return -1;
   const int players = _gd.m_fieldEC ? 2 : 1;  // DAT_80475C70
   for (int p = 0; p < players; ++p)
-    if (_pCtrlMan->GetPlayerMapped(static_cast<unsigned int>(p)) && _pCtrlMan->GetPlayerControllerIndex(static_cast<unsigned int>(p)) == 0)
+    if (_pCtrlMan->GetPlayerMapped(static_cast<unsigned int>(p)) &&
+        _pCtrlMan->GetPlayerControllerIndex(static_cast<unsigned int>(p)) == static_cast<unsigned int>(port))
       return p;
   // Before the front end maps a pad (or a player 1 left unmapped): player 1's default, pad 1.
+  if (port != 0) return -1;
   return !_pCtrlMan->GetPlayerMapped(0) && _pCtrlMan->GetPlayerControllerIndex(0) == 0 ? 0 : -1;
+}
+
+// The player this PC's keyboard and mouse drive (port 1's; in a network session this PC's slot).
+int KbmPlayer() { return KbmPlayerOfPort(simmy::kbm_local_port()); }
+
+const simmy::KbmTick& simmy::kbm_tick_for_player(int player) {
+  static const simmy::KbmTick none{};
+  if (player < 0) return none;
+  for (int port = 0; port < 2; ++port)
+    if (KbmPlayerOfPort(port) == player) return simmy::kbm_tick_port(port);
+  return none;
 }
 
 bool PcMouseClassic(int player) { return player < kGcPlayers && s_mouseClassic[player & 1] && PlayerInteractorType(player) == 1; }

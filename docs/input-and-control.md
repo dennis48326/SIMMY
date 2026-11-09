@@ -17,7 +17,8 @@ aurora PADRead (SDL gamepads, port 1 = first controller; ports 2-4 auto, set in 
  -> kbm_pads          keyboard as a pad on port 1 + this frame's KbmTick (pc_kbm.cpp)
  -> dev_pad_script / dev_pad_gate / dev_pad_soak   test input (pc_devtools, padgate, pc_soak)
  -> overlay_filter_pads   F1 overlay open: neutral pads (err kept, so no "disconnected")
- -> det_pads           SIMMY_DET_RECORD writes / SIMMY_DET_REPLAY replaces (pc_det.cpp)
+ -> det_pads           network play: net_pads puts both PCs' agreed input in (pc_net.cpp);
+                       else SIMMY_DET_REPLAY replaces; SIMMY_DET_RECORD writes (pc_det.cpp)
  -> PADClampCircle, per-port ENgcController state (buttons in EA's bit layout), EControllerManager::Update
 ```
 
@@ -131,7 +132,9 @@ Internals:
    does not take the C stick (menus), else zoom.
 3. **`KbmTick`** ([`platform.hpp`](../include/simmy/platform.hpp)): what a pad cannot give, once a frame:
    cursor point (tiles), camera turn/zoom/pan, flags (`kKbmCursor` the mouse leads the classic cursor,
-   `kKbmKeysMoved`). It belongs to the player on port 1 (`KbmPlayer`). Read by `UpdateDirectInteractors`
+   `kKbmKeysMoved`). It belongs to the player on port 1 (`KbmPlayer`); there is one per pad port
+   (`kbm_tick_port`; port 2's is filled only by network play, where the joining PC's keyboard and mouse
+   drive player 2: `kbm_tick_for_player`, `kbm_local_port`). Read by `UpdateDirectInteractors`
    (mouse over the room -> the Z path, "mouse classic"), `UpdateSimInteractor` (cursor to the mouse point;
    keys moved -> back to direct control without cancelling), `ESimsCam::Update`/`PcKeyboardMouseCamera`.
 4. **Mouse -> floor point**: `ELiveMode::DrawMain`/`InitPlayerXWindow` call `kbm_note_view` with the view

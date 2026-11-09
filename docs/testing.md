@@ -122,6 +122,7 @@ Development only: the launcher removes all of them except `SIMMY_INI` from the g
 | `SIMMY_TWO_PLAYER=1` | Start new games as two-player |
 | `SIMMY_CAS_ACCEPT=<frames>` / `SIMMY_CAS_ACCEPT_WARDROBE=<frames>` | Auto-accept CAS / the wardrobe's CAS (the sim is saved into the neighbourhood as Done does; the memory card screens are skipped) |
 | `SIMMY_DEV_MENU=1` | The main menu's development menu (lot lists) |
+| `SIMMY_NET_LAG`, `_JITTER`, `_STALL`, `_DESYNC`, `_FAKE_BUILD/MATH/ISO`, `_ON_END`, `_DIR`, `_DELAY`, `_HASH_EVERY`, `_TIMEOUT`, `_TRACE` | Network play tests (two processes on 127.0.0.1): [netplay.md](netplay.md) |
 | `SIMMY_STORY=0` | Keep the story scenario and tutorial objects still |
 | `SIMMY_TUTORIAL_FROM=<tree hex>` | Start the tutorial's level tree at the node calling that tree |
 | `SIMMY_UNLOCK_LOTS=2,3` | Count those locations as unlocked |

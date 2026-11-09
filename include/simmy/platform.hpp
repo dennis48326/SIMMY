@@ -97,6 +97,27 @@ void det_pads(PADStatus* pads);     // ENgcControllerManager::Update, after the 
 bool det_replaying();               // a SIMMY_DET_REPLAY file drives the pads now
 bool det_frame_end();               // platform_frame_tick; true: no pacing (SIMMY_DET_NOPACE)
 
+// ---- Network play (pc_net.cpp; PC mod: network play) ----
+// Two PCs, lockstep from boot: each runs the whole game (SIMMY_DET timing) and only pad input is
+// exchanged; the host is player 1 (pad slot 0), the client player 2 (slot 1). docs/netplay.md.
+bool net_session();                // a session was set up (also after it ended)
+bool net_active();                 // ... and still runs in lockstep
+int net_local_slot();              // this PC's pad slot (0 host, 1 client); 0 without a session
+int net_view_player();             // the player whose view this PC shows full window; -1: no session
+// det_pads (pc_det.cpp): takes this PC's input for a later tick and puts the tick's agreed input of
+// both PCs into the pads (and the keyboard-and-mouse records). False: not in a session.
+bool net_pads(int tick, PADStatus* pads);
+// det_frame_end: tick `tick` has run. True: hash this tick (net_frame_end gets it).
+bool net_wants_hash(int tick);
+struct NetHash {
+  unsigned long long total = 0, part[6] = {};
+  std::string dump;  // every hashed field of the tick (SIMMY_DET_DUMP's lines)
+};
+// Sends this PC's input, compares hashes, and waits (pumping the window) until the next tick's input of
+// both PCs is known. `hash`: this tick's, when net_wants_hash said so.
+void net_frame_end(int tick, const NetHash* hash);
+void net_local_quit();             // platform_request_quit: tell the partner and leave the session
+
 // ---- Keyboard and mouse for player 1 (pc_kbm.cpp) ----
 // The keyboard is a GameCube pad on port 1 (merged with the first controller when p1_input=auto, alone
 // with p1_input=keyboard_mouse); the mouse adds what a pad cannot give, once per game frame, in this
@@ -116,8 +137,13 @@ enum : unsigned {
   kKbmCursor = 1,     // the mouse points at the floor in the player's 3D view: the classic cursor goes there
   kKbmKeysMoved = 2,  // the keyboard's stick keys are held: a mouse-driven classic control goes back to direct
 };
-const KbmTick& kbm_tick();      // this frame's
+const KbmTick& kbm_tick();      // this frame's (pad port 1's)
 KbmTick& kbm_tick_for_det();    // pc_det.cpp records / replaces it with the pads
+// PC mod: network play: each PC's keyboard and mouse belongs to its own pad slot, so the frame has one
+// record per port (0, 1; port 2's is only ever filled by a network session). kbm_tick() is port 0's.
+const KbmTick& kbm_tick_port(int port);
+KbmTick& kbm_tick_port_for_det(int port);
+int kbm_local_port();           // the port this PC's keyboard and mouse drive (net_local_slot)
 void kbm_pads(PADStatus* pads);  // ENgcControllerManager::Update, right after PADRead
 // ELiveMode's draw, after a player's 3D view is selected: what the mouse is mapped through.
 void kbm_note_view(int player, const float lookAtProj[4][4], const float eye[3], const float dir[3],
@@ -133,6 +159,9 @@ struct KbmGame {
   float cursorZ = 0.0f;     // the classic cursor's plane
 };
 void kbm_game_state(KbmGame& out);
+// PC mod: network play: the frame's keyboard-and-mouse record for `player` (the record of the pad port
+// the player is mapped to; empty for a player no keyboard drives).
+const KbmTick& kbm_tick_for_player(int player);
 // The nearest object the ray (eye, direction) meets before the floor (z = floorZ), by its bounding box
 // (not `player`'s own sim); its point under the ray goes to (x, y). False: the floor is first. Reads only.
 bool kbm_pick(int player, const float eye[3], const float dir[3], float floorZ, float& x, float& y);

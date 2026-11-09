@@ -3,7 +3,7 @@
 A **PC mod**, not GameCube behaviour: Free Play with up to four players on one PC, each in their own
 window. It is off by default. With `players=1` or `2` (default) the game is the GameCube's (one or two
 players, [coop-and-players.md](coop-and-players.md)); nothing below runs and the determinism hash is
-unchanged. Network play is not part of it.
+unchanged. Network play ([netplay.md](netplay.md)) is not part of it: a network session forces `players = 2`.
 
 Code: [`src/game/mp4.cpp`](../src/game/mp4.cpp) (joining, dropping out, the extra players' HUD and
 action menu), [`include/simmy/mp4.hpp`](../include/simmy/mp4.hpp), the windows in

@@ -12,6 +12,7 @@
 // presses are also used here (B: back, Start: close, L/R: page), so the game's own button layout
 // works whatever the controller.
 #include "pc_overlay.hpp"
+#include "pc_net.hpp"
 #include "pc_kbm.hpp"
 #include "pc_window2.hpp"
 #include "pc_settings.hpp"
@@ -1055,7 +1056,9 @@ void overlay_poll_keys() {
 }
 
 bool overlay_is_open() { return O().open; }
-bool overlay_pauses_game() { return O().open; }
+// (PC mod: network play: never in a session: the partner's game goes on, so this PC's must too; its
+// pads are idle while the options are open.)
+bool overlay_pauses_game() { return O().open && !net_active(); }
 
 void overlay_filter_pads(PADStatus* pads) {
   Overlay& o = O();
@@ -1086,6 +1089,25 @@ void overlay_filter_pads(PADStatus* pads) {
     if (o.open || (o.latch[i] && held)) Neutral(p);
     else o.latch[i] = false;
   }
+}
+
+// PC mod: network play: a one-line note at the top of the window (waiting for the partner, the
+// session's end; pc_net.cpp), no input.
+static void DrawNetNotice() {
+  const std::string& text = net_notice();
+  if (text.empty()) return;
+  const ImGuiViewport* vp = ImGui::GetMainViewport();
+  ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x * 0.5f, vp->WorkPos.y + 12.0f), ImGuiCond_Always, ImVec2(0.5f, 0.0f));
+  ImGui::SetNextWindowSizeConstraints(ImVec2(0.0f, 0.0f), ImVec2(vp->WorkSize.x * 0.9f, vp->WorkSize.y * 0.5f));
+  ImGui::SetNextWindowBgAlpha(0.8f);
+  const ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_AlwaysAutoResize |
+                                 ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav;
+  if (ImGui::Begin("##simmy_net_notice", nullptr, flags)) {
+    ImGui::PushTextWrapPos(vp->WorkSize.x * 0.85f);
+    ImGui::TextUnformatted(text.c_str());
+    ImGui::PopTextWrapPos();
+  }
+  ImGui::End();
 }
 
 void overlay_frame(unsigned devFrame) {
@@ -1124,6 +1146,7 @@ void overlay_frame(unsigned devFrame) {
       o.gamepadModeSet = true;
     }
     if (o.open) Draw();
+    DrawNetNotice();
   }
   o.padBack = o.padClose = o.padPrevTab = o.padNextTab = o.keyBack = false;
 }

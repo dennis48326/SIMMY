@@ -47,5 +47,7 @@ template <class T, class U> float pow(T, U) = delete;
 // on every build mean the math is identical. Also prints the C library's results' hash for comparison
 // (that one is expected to differ between Windows and Linux).
 int mathcheck(const char* outPath);
+// PC mod: network play: the same total as a number (the handshake compares it).
+unsigned long long mathcheck_hash();
 
 }  // namespace simmy::dm

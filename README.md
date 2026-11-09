@@ -182,6 +182,16 @@ Development options:
 --version                print the port's version ("SIMMY port - build df (2026-11-08)") and exit
 ```
 
+### Network play (PC mod)
+
+Two PCs play the two-player game together over a LAN (or the internet with a forwarded port). Player 1
+hosts: `simmy.exe --iso "<disc image>" --host`; player 2 joins with the host's address:
+`simmy.exe --iso "<disc image>" --join 192.168.1.20` (or `tools\windows\run_net_host.bat` /
+`run_net_join.bat` next to `build_simmy.bat`). Both need the same SIMMY build and disc image; allow
+simmy.exe through the Windows firewall on the host (private networks). Each PC shows its own player's
+view; the host's memory card is used (the joining PC plays on a copy). TCP port 27450; `[net]` in
+simmy.ini. Details, and what to send if the PCs ever go out of step: [docs/netplay.md](docs/netplay.md).
+
 ## Graphics settings
 
 Put a `simmy.ini` next to `simmy.exe` (the build copies the commented `simmy.ini.example` there once;

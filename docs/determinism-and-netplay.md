@@ -50,7 +50,7 @@ versa, and never read wall time, SDL state or thread progress in simulation code
 |---|---|
 | `SIMMY_DET=1` | Deterministic timing (above) |
 | `SIMMY_DET_SEED=<n>` | The simulation RNG seed (also outside det mode) |
-| `SIMMY_DET_RECORD=<file>` | Per tick: the four `PADStatus` as the game reads them (after scripts/soak/overlay), text `tick err,button,sx,sy,cx,cy,l,r,a,b,ext` x4, plus ` m flags,cx,cy,rot,zoom,panx,pany` (floats as `%a`) when the `KbmTick` is non-zero |
+| `SIMMY_DET_RECORD=<file>` | Per tick: the four `PADStatus` as the game reads them (after scripts/soak/overlay), text `tick err,button,sx,sy,cx,cy,l,r,a,b,ext` x4, plus ` m flags,cx,cy,rot,zoom,panx,pany` (floats as `%a`) when pad port 1's `KbmTick` is non-zero, and ` n ...` for port 2's (network play: the joining PC's keyboard and mouse) |
 | `SIMMY_DET_REPLAY=<file>` | From tick 1 the pads (and KbmTick) are the file's; live pads and scripts are ignored; neutral after the end |
 | `SIMMY_DET_BOOT=1` | Ticks count from the first game frame (record/replay/hash cover front end and loading); otherwise tick 1 = live mode's first house frame |
 | `SIMMY_DET_HASH=<file>` | Per tick: `tick total rng= sim= obj= per= ngh= inst=` (64-bit FNV-1a) |
@@ -113,7 +113,29 @@ A small compare script (first differing tick and which parts differ) is worth ad
 - Sorts with ties: use `simmy::SnQsort` ([`sn_qsort.hpp`](../include/simmy/sn_qsort.hpp), the game's BSD
   qsort) where GC used `qsort`, not `std::sort` (its tie order is implementation-defined).
 
-## Remaining work for lockstep netplay
+## Lockstep netplay
+
+Step 1 is done: two PCs, lockstep from boot over TCP ([netplay.md](netplay.md), [`pc_net.cpp`](../src/platform/pc_net.cpp)).
+How the points above were met:
+
+1. Every PC runs in det mode from boot (`det_net_enable`: virtual timing, boot ticks); the lockstep tick
+   is one game frame; the input is one pad and one `KbmTick` per PC, applied where `det_pads` is
+   (`net_pads`: the host's in slot 1, the client's in slot 2, slots 3-4 empty). A slow PC slows both.
+2. Start state: both boot together; the handshake checks the build, `--mathcheck` and the game data's
+   identity; the host sends the simulation seed, `fire_code_limit`, intro skipping and its memory card (the
+   client plays on a copy). Joining a running game (a state transfer including Apt's UI timing) is not done.
+3. Per-PC features: the F1 overlay no longer pauses `ESimsApp::Update` in a session; movies end on the
+   virtual clock with `SIMMY_DET` (`ENgcMovie::IsFinished`); the memory card is the same image on both;
+   `SIMMY_*` dev switches are compared in the handshake (warning). The keyboard and mouse record is per pad
+   port (`kbm_tick_for_player`), so each PC's mouse drives its own player.
+4. Desync detection: every 30 ticks the total and the six part hashes are exchanged; on a difference both
+   PCs write the tick's dump (and the last matching check's) and stop.
+5. Cross-compiler floats: detmath (build dj); the Windows/AMD PC matched Linux for 24000 ticks.
+
+Still open: joining or rejoining a running session, UDP/relay transport, rollback/prediction, 3-4 players
+over the network (mp4.cpp is local-only; a session forces `players = 2`).
+
+## Earlier notes
 
 1. Run every client in det mode; the lockstep tick = one game frame; inputs = 4 x PADStatus (+ KbmTick)
    per frame, applied where `det_pads` is. A slow client slows everyone (no catch-up).

@@ -72,7 +72,8 @@ bool g_backgroundInput = false;
 GraphicsSettings g_saved;
 
 bool Offscreen() { return dev_options().offscreen; }
-bool Wanted() { return split_mode() == SplitMode::Windows && !platform_headless(); }
+// (PC mod: network play: no second window; window 1 shows this PC's player.)
+bool Wanted() { return split_mode() == SplitMode::Windows && !platform_headless() && net_view_player() < 0; }
 
 // The SDL display list index of a display (-1 if not found).
 int DisplayIndex(SDL_DisplayID id) {
@@ -385,7 +386,7 @@ void window2_frame() {
   if (g_backgroundInput && !g_window && !AnyExtraWindow()) aurora_set_background_input(false), g_backgroundInput = false;
   if (!Wanted()) {
     if (g_window) Close();
-    if (g_primaryCropped) {
+    if (g_primaryCropped && net_view_player() < 0) {  // (PC mod: network play: window2_present crops window 1)
       aurora::gfx::set_present_crop(aurora::gfx::xfb_target(), 0.0f, 0.0f, 0.0f, 0.0f);
       g_primaryCropped = false;
     }
@@ -537,11 +538,16 @@ void window2_present(bool windows) {
   const int n = windows ? split_window_count() : 2;
   static int s_cropN = 2;
   const float strip = 1.0f / static_cast<float>(n);
-  // Window 1: the left half in a two-window frame, the whole frame otherwise.
-  if ((windows != g_primaryCropped || (windows && n != s_cropN)) && primary) {
-    if (windows) aurora::gfx::set_present_crop(primary, 0.0f, 0.0f, strip, 1.0f);
+  // Window 1: the left half in a two-window frame, the whole frame otherwise. (PC mod: network play:
+  // this PC's player's half.)
+  const int view = windows && net_view_player() > 0 ? 1 : 0;
+  static int s_primaryView = 0;
+  if ((windows != g_primaryCropped || (windows && (n != s_cropN || view != s_primaryView))) && primary) {
+    const float u0 = static_cast<float>(view) * strip;
+    if (windows) aurora::gfx::set_present_crop(primary, u0, 0.0f, u0 + strip, 1.0f);
     else aurora::gfx::set_present_crop(primary, 0.0f, 0.0f, 0.0f, 0.0f);
     g_primaryCropped = windows;
+    s_primaryView = view;
   }
   // Windows 3 and 4 (PC mod: 4 players): their strip, else a mirror of window 1.
   for (int k = 2; k < kWindowsMax; ++k) {
@@ -568,7 +574,7 @@ void window2_present(bool windows) {
 
 void window2_write_shots(const std::string& path, const unsigned char* rgba, unsigned width, unsigned height, int windows,
                          void (*writeBmp)(const std::string&, const unsigned char*, unsigned, unsigned)) {
-  if (!Wanted() || !width || !height) return;
+  if ((!Wanted() && !(net_view_player() >= 0 && windows >= 2)) || !width || !height) return;  // (PC mod: network play)
   const size_t dot = path.rfind('.');
   const std::string stem = dot == std::string::npos ? path : path.substr(0, dot);
   const std::string ext = dot == std::string::npos ? std::string(".bmp") : path.substr(dot);

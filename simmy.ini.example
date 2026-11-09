@@ -112,6 +112,19 @@
 ; objects once it is full. off: the meter stays empty and the lot has no object limit.
 ;fire_code_limit = on
 
+; PC mod: network play: two PCs play the two-player game together (docs/netplay.md). Usually started
+; from the command line (simmy --host / simmy --join <address>) or run_net_host.bat / run_net_join.bat;
+; settings here apply to every start, so leave host / join commented out unless this PC always hosts.
+[net]
+;host = yes                   ; this PC hosts (player 1); or a port number
+;join = 192.168.1.20          ; this PC joins that PC (player 2); address[:port]
+;port = 27450                 ; TCP port (both PCs; the host's firewall must allow it)
+;delay = 2                    ; input delay in 1/60 s ticks (the host's counts; 3-4 over the internet)
+;hash_every = 30              ; ticks between the out-of-step checks (the host's counts)
+;timeout = 30                 ; seconds without data from the other PC before the session ends
+;on_end = continue            ; when the session ends: continue (play on alone) or quit
+;skip_intro = yes             ; the host's choice for both
+
 ; Player 1's keys: "action = key, key, ..." ("none" for no key). Key names: a-z, 0-9, f1-f12, space,
 ; return (enter), kp_enter, escape (esc), backspace, tab, lshift, rshift, shift, lctrl, rctrl, ctrl,
 ; lalt, ralt, alt, up, down, left, right, pageup, pagedown, home, end, insert, delete, capslock,

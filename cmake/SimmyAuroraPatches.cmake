@@ -13,6 +13,9 @@
 #   0002-larger-frame-buffers.patch  the per-frame vertex and index staging (lib/gfx/resources.hpp)
 #     raised from 5 / 2 MiB to 12 / 4 MiB: with the PC mod's extra players (src/game/mp4.cpp) a frame
 #     draws the lot four times, which overran the 5 MiB vertex buffer (aurora aborts on overflow).
+#   0003-card-base-dir.patch  aurora_card_set_base_dir (card.h): before CARDInit, the folder the memory
+#     cards go under instead of the user folder (PC mod: network play, src/platform/pc_net.cpp: the joining
+#     PC plays on a copy of the host's card in its session folder, never on its own card).
 
 function(simmy_patch_aurora source_dir)
   file(GLOB _patches ${CMAKE_CURRENT_FUNCTION_LIST_DIR}/aurora_patches/*.patch)

@@ -28,6 +28,7 @@
 #include <dolphin/gx.h>
 #include <dolphin/thp.h>
 
+#include <algorithm>
 #include <chrono>
 #include <condition_variable>
 #include <cstdio>
@@ -86,6 +87,9 @@ struct THPPlayerState {
   bool readyValid = false;
   Clock::time_point playStart;    // when frame 0 was due
   Clock::time_point pauseTime;
+  // PC (SIMMY_DET, network play): the same in the game's virtual time (simmy::game_clock_ns), which
+  // decides when the movie has ended: the worker's wall clock must not reach the game.
+  unsigned long long detStart = 0, detPause = 0;
   // App side: copies of the frames drawn recently (aurora may still be reading the previous one).
   TextureSet shown[3];
   int shownIndex = -1;
@@ -336,6 +340,16 @@ void ENgcMovie::Reset() {}
 // (The original also kept a movie "playing" while it was paused for a disc error.)
 int ENgcMovie::IsFinished() {
   const int state = static_cast<int>(PlayerGetState());
+  if (simmy::det_timing()) {
+    // PC (SIMMY_DET, network play): played once its frames' time (and the last frame's period, as the
+    // worker keeps it up) has passed in game time, whatever the worker's wall clock says (kPlayed).
+    if (state == kStop || state == kPrepare || state == kPause) return state == kStop;
+    const THPPlayerState& p = ActivePlayer;
+    if (!p.open || p.frameRate <= 0.0f) return 1;
+    const int frames = std::max(1, static_cast<int>(p.numFrames) - std::max(0, p.initReadFrame)) + 1;
+    const auto length = static_cast<unsigned long long>(static_cast<double>(frames) * 1e9 / static_cast<double>(p.frameRate));
+    return simmy::game_clock_ns() - p.detStart >= length;
+  }
   return state != kPrepare && state != kPlay;
 }
 
@@ -499,8 +513,8 @@ RET_UNKNOWN ENgcMovie::PlayerPlay() {
   THPPlayerState& p = ActivePlayer;
   std::lock_guard lock(p.mutex);
   if (!p.open || (p.state != kPrepare && p.state != kPause)) return 0;
-  if (p.state == kPrepare) p.playStart = Clock::now();
-  else p.playStart += Clock::now() - p.pauseTime;
+  if (p.state == kPrepare) p.playStart = Clock::now(), p.detStart = simmy::game_clock_ns();
+  else p.playStart += Clock::now() - p.pauseTime, p.detStart += simmy::game_clock_ns() - p.detPause;
   p.state = kPlay;
   simmy::audio::SetRunning(p.audioVoice, true);
   p.cv.notify_all();
@@ -525,6 +539,7 @@ RET_UNKNOWN ENgcMovie::PlayerPause() {
   p.state = kPause;
   p.internalState = kPause;
   p.pauseTime = Clock::now();
+  p.detPause = simmy::game_clock_ns();
   simmy::audio::SetRunning(p.audioVoice, false);
   return 1;
 }
@@ -536,6 +551,7 @@ RET_UNKNOWN ENgcMovie::PlayerSkip() {
   std::lock_guard lock(p.mutex);
   if (!p.open || p.state != kPause || p.frameRate <= 0.0f) return 0;
   p.pauseTime += std::chrono::duration_cast<Clock::duration>(std::chrono::duration<double>(1.0 / p.frameRate));
+  p.detPause += static_cast<unsigned long long>(1e9 / static_cast<double>(p.frameRate));
   return 1;
 }
 

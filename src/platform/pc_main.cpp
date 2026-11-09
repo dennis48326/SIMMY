@@ -25,6 +25,7 @@
 #include "pc_settings.hpp"
 #include "pc_kbm.hpp"
 #include "pc_overlay.hpp"
+#include "pc_net.hpp"
 #include "pc_window2.hpp"
 
 #include <SDL3/SDL_events.h>
@@ -80,6 +81,7 @@ void platform_set_quit_handler(void (*onQuitRequested)()) { g_onQuit = onQuitReq
 
 // The options overlay's Quit: the same path as closing the window (the game winds down on its own).
 void platform_request_quit() {
+  net_local_quit();  // PC mod: network play: the partner is told (pc_net.cpp)
   if (g_quitRequested) return;
   g_quitRequested = true;
   std::fprintf(stderr, "[simmy] quit requested\n");
@@ -112,6 +114,7 @@ bool platform_pump_events() {
       if (e->type == AURORA_EXIT && !g_quitRequested) {
         g_quitRequested = true;
         std::fprintf(stderr, "[simmy] quit requested by the window (closed, Alt+F4 or a quit event)\n");
+        net_local_quit();  // PC mod: network play
         if (g_onQuit) g_onQuit();
       }
       // The second player's window (split=windows) handles its own events (pc_window2.cpp).
@@ -400,6 +403,15 @@ void platform_end_frame() {
   poll_screenshot();
 }
 
+// PC mod: network play (pc_net.cpp): while waiting for the other PC (connecting, or the partner is
+// late), a frame with only the overlay (its notice line, the F1 options) so the window stays alive.
+void platform_present_wait_frame() {
+  if (g_headless || !aurora_begin_frame()) return;
+  GXSetCopyClear(GXColor{0, 40, 48, 255}, GX_MAX_Z24);
+  overlay_frame(0);
+  aurora_end_frame();
+}
+
 void platform_frame_tick() {
   static unsigned int s_frames = 0;
   if (g_headless && ++s_frames % 300 == 0)
@@ -437,7 +449,8 @@ void platform_frame_tick() {
   // of 60 Hz retraces per frame, so the game's retrace-counted timing (EEngine::RetraceUpdate) keeps
   // its speed; it never runs faster than 60 Hz, whatever the display's refresh rate.
   if (det_frame_end()) return;  // SIMMY_DET_*: hashes, jitter; SIMMY_DET_NOPACE: no pacing (pc_det.cpp)
-  const auto next = g_lastTick + std::chrono::microseconds(settings_frame_interval_us());
+  // (PC mod: network play: always 60 frames a second, the game's speed on both PCs; fps_cap does not apply.)
+  const auto next = g_lastTick + std::chrono::microseconds(net_session() ? 50000 / 3 : settings_frame_interval_us());
   std::this_thread::sleep_until(next);
   g_lastTick = std::max(next, std::chrono::steady_clock::now() - std::chrono::milliseconds(100));
 }
@@ -564,6 +577,8 @@ int main(int argc, char* argv[]) {  // aurora/main.h renames this to aurora_main
       simmy::dev_options().quitAfterFrames = static_cast<unsigned>(std::atoi(argv[++i]));
     } else if (std::strcmp(argv[i], "--data") == 0 && i + 1 < argc) {
       dataDir = argv[++i];
+    } else if (simmy::net_parse_arg(argc, argv, i)) {
+      // network play: --host, --join, --net-port, --net-delay (pc_net.cpp)
     } else if (simmy::settings_parse_arg(argc, argv, i)) {
       // a graphics setting (pc_settings.cpp)
     } else {
@@ -701,9 +716,14 @@ int main(int argc, char* argv[]) {  // aurora/main.h renames this to aurora_main
     return 0;
   }
 
+  // PC mod: network play (pc_net.cpp): connect, check, take the host's settings and memory card, before
+  // the game's first frame (the session runs in lockstep from boot).
+  if (const int rc = simmy::net_start_session(); rc != 0) simmy::platform_shutdown_and_exit(rc < 0 ? 0 : rc);
+
   // Dev switch: SIMMY_SKIP_INTRO=1 sets the config block's SkipEAMovie (+0x43C) and SkipIntroMovie
-  // (+0x3A8) flags, so boot goes from the Maxis screen straight to the start screen.
-  if (const char* skip = std::getenv("SIMMY_SKIP_INTRO"); skip && *skip && *skip != '0') {
+  // (+0x3A8) flags, so boot goes from the Maxis screen straight to the start screen. (A network session
+  // skips them too unless its host says skip_intro = no.)
+  if (const char* skip = std::getenv("SIMMY_SKIP_INTRO"); (skip && *skip && *skip != '0') || simmy::net_skip_intro()) {
     const int one = 1;
     std::memcpy(_globals.m_config + (0x43C - 0x168), &one, 4);
     std::memcpy(_globals.m_config + (0x3A8 - 0x168), &one, 4);

@@ -164,6 +164,11 @@ pad motor through `EVibrate` and aurora's `PADControlMotor` (one on/off motor, a
   cannot pause, use a wardrobe or leave the lot.
 - F1 overlay: movies keep playing under it; in 16:9 "extended" Apt art updates only when the game resumes.
 - Saves are made by the port's stand-ins; GC compatibility of saves written by the port is not a goal.
-- Netplay: see [determinism-and-netplay.md](determinism-and-netplay.md) (cross-compiler floats: the game's math is now the GC libm port `simmy::dm`, identical on every build; the Windows replay against the new Linux hashes is still to be run).
+- Network play (PC mod, [netplay.md](netplay.md)): two players, lockstep from boot over TCP; tested
+  between two processes on one Linux PC (no real second PC, no Windows build of pc_net.cpp here); no
+  joining a running game, no reconnecting, no UDP/relay, no rollback (the input delay is felt); the
+  client's view is the two-window layout's right half (the other half is still drawn, unseen).
+  Determinism: [determinism-and-netplay.md](determinism-and-netplay.md) (the Windows/AMD PC matched Linux
+  for 24000 ticks with build dj; an Intel PC is not checked yet).
 - Windows-only code (crash handler, launcher process/env handling, two-window present on D3D12) was
   written on Linux and only syntax- or review-checked there; MSVC builds are the user's.

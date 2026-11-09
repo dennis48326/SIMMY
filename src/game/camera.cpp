@@ -1689,8 +1689,8 @@ int ESimsCam::HandleZoom() {
 // of the zoom range) go through ApplyPan / ApplyZoom as the C stick's do; while the mouse leads the classic
 // cursor, the pan keys and screen edges move the camera's target over the lot at the cursor's speed.
 int ESimsCam::PcKeyboardMouseCamera() {
-  if (m_player != KbmPlayer() || !m_params) return 0;
-  const simmy::KbmTick& t = simmy::kbm_tick();
+  if (!m_params) return 0;
+  const simmy::KbmTick& t = simmy::kbm_tick_for_player(m_player);  // (PC mod: network play: per player)
   if (t.rot == 0.0f && t.zoom == 0.0f && t.panX == 0.0f && t.panY == 0.0f) return 0;
   EController* pad = _pCtrlMan->GetController(static_cast<unsigned int>(_pCtrlMan->GetPlayerControllerIndex(m_player)));
   if (!pad || pad->IsStickFiltered(1, 0, m_filterId)) return 0;

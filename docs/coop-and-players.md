@@ -54,7 +54,10 @@ data, its Flash movies and much of its code.
   either player is in social mode (`EGlobal::IsSaveGameEnabled` / `IsPlayerInSocialMode`, [ui.md](ui.md)).
 - **Audio**: one listener per player camera, summed into one stereo mix ([audio.md](audio.md)).
 - **Input**: keyboard/mouse is player 1's (port 1); the mouse only counts inside player 1's window/half
-  ([input-and-control.md](input-and-control.md)).
+  ([input-and-control.md](input-and-control.md)). In network play ([netplay.md](netplay.md)) each PC's
+  keyboard and mouse drive that PC's player (the `KbmTick` is per pad port).
+- **Network play** (PC mod): the same two-player game on two PCs, each showing its own player's half
+  full window ([netplay.md](netplay.md)).
 
 ## Shared vs per-player UI
 

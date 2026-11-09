@@ -149,7 +149,11 @@ float StretchedAspect() {
 void UpdateDisplay(bool split) {
   // Two windows: the halves fill the frame (stretch), each projected at its window's aspect.
   // (PC mod: 4 players: with extra players the strips stay even while player 2's window is hidden.)
-  g_winSplit = split && split_mode() == SplitMode::Windows && !platform_headless() && (window2_open() || g_winCount > 2);
+  // PC mod: network play: each PC shows only its own player's half, full window: the two-window layout
+  // with window 1 showing that half (pc_window2.cpp), whatever split= says.
+  const bool net = net_view_player() >= 0;
+  g_winSplit = split && !platform_headless() &&
+               (net || (split_mode() == SplitMode::Windows && (window2_open() || g_winCount > 2)));
   if (g_winSplit) {
     if (!g_stretched) {
       AuroraSetViewportPolicy(AURORA_VIEWPORT_STRETCH);
@@ -159,7 +163,8 @@ void UpdateDisplay(bool split) {
     Window1Size(w, h);
     g_winAspect[0] = static_cast<float>(w) / static_cast<float>(h);
     if (window2_pixel_size(w, h)) g_winAspect[1] = static_cast<float>(w) / static_cast<float>(h);
-    g_frameWinCount = g_winCount;  // PC mod: 4 players (2 unless extra players joined)
+    if (net) g_winAspect[1] = g_winAspect[0];  // PC mod: network play: both halves are shown in window 1
+    g_frameWinCount = net ? 2 : g_winCount;    // PC mod: 4 players (2 unless extra players joined)
     for (int k = 2; k < g_frameWinCount; ++k)
       if (split_window_pixel_size(k, w, h)) g_winAspect[k] = static_cast<float>(w) / static_cast<float>(h);
       else g_winAspect[k] = g_winAspect[0];

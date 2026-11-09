@@ -244,6 +244,7 @@ constexpr float kDragThreshold = 6.0f;   // pixels before a right-button press i
 constexpr float kActivateMotion = 4.0f;  // pixels of motion that hand the cursor to the mouse
 
 KbmTick g_tick;
+KbmTick g_tick1;  // PC mod: network play: pad port 2's record
 
 // The per-frame state the pad presses are made from.
 int g_aHold = 0, g_aWait = 0, g_bHold = 0;
@@ -264,6 +265,7 @@ struct View {
   float vp[4] = {};  // x0, y0, x1, y1 in the 640x480 logical frame
   float m[4][4] = {};
   bool windows = false;  // split=windows: window 1 shows the left half of the frame
+  int strip = 0;         // ... (PC mod: network play: the half of this PC's player)
 };
 View g_views[2];
 // Tests: the mouse, the floor point and the view when a screenshot was taken (the picture arrives a
@@ -316,7 +318,7 @@ bool WindowToLogical(const View& v, float mx, float my, float& lx, float& ly) {
   if (!WindowSize(w, h)) return false;
   float u, t;
   if (v.windows) {
-    u = mx / w * 0.5f, t = my / h;  // window 1 = the frame's left half, stretched over it
+    u = mx / w * 0.5f + 0.5f * static_cast<float>(v.strip), t = my / h;  // window 1 = the frame's left half, stretched over it
   } else {
     const AuroraWindowSize s = aurora_get_window_size();
     float aspect = s.fb_width && s.fb_height ? static_cast<float>(s.fb_width) / static_cast<float>(s.fb_height) : w / h;
@@ -336,7 +338,7 @@ bool LogicalToWindow(const View& v, float lx, float ly, float& mx, float& my) {
   if (!WindowSize(w, h)) return false;
   const float u = lx / 640.0f, t = ly / 480.0f;
   if (v.windows) {
-    mx = u * 2.0f * w, my = t * h;
+    mx = (u * 2.0f - static_cast<float>(v.strip)) * w, my = t * h;
   } else {
     const AuroraWindowSize s = aurora_get_window_size();
     float aspect = s.fb_width && s.fb_height ? static_cast<float>(s.fb_width) / static_cast<float>(s.fb_height) : w / h;
@@ -696,6 +698,11 @@ int kbm_p1_input() { return graphics_settings().p1Input; }
 
 const KbmTick& kbm_tick() { return g_tick; }
 KbmTick& kbm_tick_for_det() { return g_tick; }
+// PC mod: network play: port 2's record (the joining PC's keyboard and mouse, set by pc_net.cpp or a
+// replay; empty otherwise).
+const KbmTick& kbm_tick_port(int port) { return port == 1 ? g_tick1 : g_tick; }
+KbmTick& kbm_tick_port_for_det(int port) { return port == 1 ? g_tick1 : g_tick; }
+int kbm_local_port() { return net_local_slot(); }
 
 void kbm_note_view(int player, const float m[4][4], const float eye[3], const float dir[3], const float viewport[4]) {
   if (player < 0 || player > 1) return;
@@ -706,6 +713,7 @@ void kbm_note_view(int player, const float m[4][4], const float eye[3], const fl
   for (int i = 0; i < 3; ++i) v.eye[i] = eye[i], v.dir[i] = dir[i];
   for (int i = 0; i < 4; ++i) v.vp[i] = viewport[i];
   v.windows = split_windows_frame();
+  v.strip = net_view_player() == 1 ? 1 : 0;  // PC mod: network play: the joining PC shows the right half
   static int s_logged = 0;
   if (Trace() && s_logged < 3 && player == 0) {
     ++s_logged;
@@ -717,6 +725,7 @@ void kbm_note_view(int player, const float m[4][4], const float eye[3], const fl
 void kbm_pads(PADStatus* pads) {
   ++g_tickCount;
   g_tick = KbmTick{};
+  g_tick1 = KbmTick{};
   if (platform_headless()) return;
   LoadBindings();
   static bool s_testParsed = false;
@@ -932,7 +941,7 @@ void kbm_composite_shot(unsigned char* rgba, unsigned width, unsigned height) {
   auto toShot = [&](float mx, float my, int& x, int& y) {
     float u = mx / w, t = my / h;
     if (v.valid && v.windows) {
-      u *= 0.5f;
+      u = u * 0.5f + 0.5f * static_cast<float>(v.strip);
     } else {
       const AuroraWindowSize s = aurora_get_window_size();
       const float aspect = s.fb_width && s.fb_height ? static_cast<float>(s.fb_width) / static_cast<float>(s.fb_height) : w / h;

@@ -1,0 +1,55 @@
+diff --git a/include/aurora/card.h b/include/aurora/card.h
+index 205b8df..3ef1321 100644
+--- a/include/aurora/card.h
++++ b/include/aurora/card.h
+@@ -34,6 +34,12 @@ AuroraCardType aurora_card_get_type(s32 channel);
+  */
+ size_t aurora_card_get_path(const char* gameName, AuroraCardType type, s32 channel, char* buffer, size_t capacity);
+ 
++/**
++ * Before CARDInit(): the folder the cards go under (<path>/<region>/Card A, ...) instead of the
++ * user directory. A null or empty path restores the default.
++ */
++void aurora_card_set_base_dir(const char* path);
++
+ /** Closes and reopens a mounted channel so external filesystem changes are discovered. */
+ bool aurora_card_remount(s32 channel);
+ 
+diff --git a/lib/dolphin/card.cpp b/lib/dolphin/card.cpp
+index 24b537e..401f585 100644
+--- a/lib/dolphin/card.cpp
++++ b/lib/dolphin/card.cpp
+@@ -41,6 +41,7 @@ const char* get_card_region(const char* gameName) {
+ #define CARD_STUB Log.debug("{} is stubbed.", __FUNCTION__);
+ 
+ bool Initialized = false;
++std::filesystem::path BaseDirOverride; // aurora_card_set_base_dir
+ CARDFileType SelectedFileType = CARD_GCIFOLDER;
+ bool UseFastMode = false;
+ 
+@@ -121,6 +122,14 @@ size_t aurora_card_get_path(const char* gameName, const AuroraCardType type, con
+                    capacity);
+ }
+ 
++void aurora_card_set_base_dir(const char* path) {
++  if (Initialized) {
++    Log.warn("aurora_card_set_base_dir() called after CARDInit(): ignored");
++    return;
++  }
++  BaseDirOverride = path != nullptr ? aurora::io::fs_path_from_string(path) : std::filesystem::path{};
++}
++
+ bool aurora_card_remount(const s32 channel) {
+   if (!Initialized || channel < 0 || channel >= static_cast<s32>(CardChannels.size()) ||
+       CardChannels[channel] == nullptr || cardPaths[channel].empty()) {
+@@ -311,7 +320,9 @@ void CARDInit(const char* game, const char* maker) {
+   }
+ 
+   std::filesystem::path cardWorkingDir;
+-  if (aurora::g_config.userPath != nullptr)
++  if (!BaseDirOverride.empty())
++    cardWorkingDir = BaseDirOverride;
++  else if (aurora::g_config.userPath != nullptr)
+     cardWorkingDir = aurora::io::fs_path_from_string(aurora::g_config.userPath);
+   else
+     cardWorkingDir = std::filesystem::current_path();

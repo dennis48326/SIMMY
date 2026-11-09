@@ -915,11 +915,10 @@ struct Inputs {
 };
 }  // namespace
 
-int mathcheck(const char* outPath) {
+namespace {
+struct Row { const char* name; Fnv dm, crt; };
+void MathcheckRows(Row (&rows)[11]) {
   const int N = 100000;
-  struct Row { const char* name; Fnv dm, crt; };
-  Row rows[11] = {{"sin"}, {"cos"}, {"tan"}, {"atan"}, {"atan2"}, {"asin"}, {"acos"},
-                  {"exp"}, {"log"}, {"log10"}, {"pow"}};
   {
     Inputs in;
     for (int k = 0; k < N; ++k) {
@@ -943,6 +942,25 @@ int mathcheck(const char* outPath) {
       rows[10].dm.add(pow(b, std::floor(py))); rows[10].crt.add(std::pow(b, std::floor(py)));
     }
   }
+}
+}  // namespace
+
+// PC mod: network play (pc_net.cpp): the total --mathcheck prints, compared in the handshake.
+unsigned long long mathcheck_hash() {
+  Row rows[11] = {{"sin"}, {"cos"}, {"tan"}, {"atan"}, {"atan2"}, {"asin"}, {"acos"},
+                  {"exp"}, {"log"}, {"log10"}, {"pow"}};
+  MathcheckRows(rows);
+  Fnv total;
+  for (const Row& r : rows) {
+    total.add(F(static_cast<u32>(r.dm.h))); total.add(F(static_cast<u32>(r.dm.h >> 32)));
+  }
+  return static_cast<unsigned long long>(total.h);
+}
+
+int mathcheck(const char* outPath) {
+  Row rows[11] = {{"sin"}, {"cos"}, {"tan"}, {"atan"}, {"atan2"}, {"asin"}, {"acos"},
+                  {"exp"}, {"log"}, {"log10"}, {"pow"}};
+  MathcheckRows(rows);
   Fnv total, crt;
   for (const Row& r : rows) {
     total.add(F(static_cast<u32>(r.dm.h))); total.add(F(static_cast<u32>(r.dm.h >> 32)));

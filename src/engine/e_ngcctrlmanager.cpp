@@ -190,5 +190,11 @@ void ENgcController::UpdateMotors() {
   // wrong disc, retry). The PC build reads files directly and has no drive, so bWasInError_1812
   // stays 0.
   const bool on = !bWasInError_1812 && m_motor[0] > 0.0f && m_motor[1] > 0.0f;
+  // PC mod: network play: only this PC's player rumbles, on this PC's first controller (the other
+  // slot's pad is on the other PC).
+  if (simmy::net_session()) {
+    if (static_cast<int>(m_port) == simmy::net_local_slot()) PADControlMotor(0, on ? PAD_MOTOR_RUMBLE : PAD_MOTOR_STOP);
+    return;
+  }
   PADControlMotor(m_port, on ? PAD_MOTOR_RUMBLE : PAD_MOTOR_STOP);
 }

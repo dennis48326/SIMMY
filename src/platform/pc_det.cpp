@@ -24,6 +24,10 @@
 // SIMMY_DET_JITTER=<ms>   sleeps a random 0..ms milliseconds every frame (wall-clock random): render-pacing noise.
 // SIMMY_DET_NOPACE=1      no 60 Hz pacing (run as fast as possible).
 // SIMMY_DET_QUIT=<tick>   quits after that tick.
+//
+// PC mod: network play (pc_net.cpp) runs a session the same way: det_net_enable turns on the virtual
+// timing and boot ticks, det_pads takes both PCs' agreed input from net_pads, det_frame_end hands every
+// hash_every-th tick's hash and dump to net_frame_end, and the record holds the session's input.
 #include "simmy/types_gen.hpp"
 #include "simmy/platform.hpp"
 #include "simmy/unported_globals.hpp"
@@ -348,9 +352,11 @@ void HashNeighbor(Hash& h, Neighbor* n) {
 }
 
 // Writes the tick's hash line (and dump lines).
-void HashTick(DetState& s) {
+// PC mod: network play: `net` (not null) also gets the parts and the tick's dump.
+void HashTick(DetState& s, NetHash* net = nullptr) {
   const bool window = s.dump && s.tick >= s.dumpFrom && s.tick <= s.dumpTo;
-  const bool dumping = window || (s.dump && !s.ref.empty() && (!s.divergedAt || s.tick <= s.divergedAt + s.refAfter));
+  const bool fileDump = window || (s.dump && !s.ref.empty() && (!s.divergedAt || s.tick <= s.divergedAt + s.refAfter));
+  const bool dumping = fileDump || net;
   std::string line;
   std::string& out = s.curDump;
   out.clear();
@@ -455,11 +461,17 @@ void HashTick(DetState& s) {
       s.ref[static_cast<size_t>(s.tick - 1)] != all.h) {
     s.divergedAt = s.tick;
     std::fprintf(stderr, "[det] DIVERGED from the reference at tick %d\n", s.tick);
-    if (dumping && !window) std::fputs(s.prevDump.c_str(), s.dump);
+    if (fileDump && !window) std::fputs(s.prevDump.c_str(), s.dump);
     // SIMMY_DET_REF_QUIT=1: stop SIMMY_DET_REF_AFTER ticks later.
     if (Env("SIMMY_DET_REF_QUIT")) s.quitTick = s.tick + s.refAfter;
   }
-  if (dumping) {
+  if (net) {
+    net->total = all.h;
+    const unsigned long long parts[6] = {rng.h, sim.h, obj.h, per.h, ngh.h, inst.h};
+    for (int k = 0; k < 6; ++k) net->part[k] = parts[k];
+    net->dump = out;
+  }
+  if (fileDump) {
     if (window || s.divergedAt) std::fputs(out.c_str(), s.dump);
     s.prevDump.swap(s.curDump);
   }
@@ -482,6 +494,11 @@ void WritePads(DetState& s, int tick, const PADStatus* pads) {
   if (!(m == KbmTick{}))
     std::fprintf(s.record, " m %x,%a,%a,%a,%a,%a,%a", m.flags, static_cast<double>(m.cx), static_cast<double>(m.cy),
                  static_cast<double>(m.rot), static_cast<double>(m.zoom), static_cast<double>(m.panX), static_cast<double>(m.panY));
+  // PC mod: network play: pad port 2's (the joining PC's keyboard and mouse), " n ...".
+  const KbmTick& m1 = kbm_tick_port(1);
+  if (!(m1 == KbmTick{}))
+    std::fprintf(s.record, " n %x,%a,%a,%a,%a,%a,%a", m1.flags, static_cast<double>(m1.cx), static_cast<double>(m1.cy),
+                 static_cast<double>(m1.rot), static_cast<double>(m1.zoom), static_cast<double>(m1.panX), static_cast<double>(m1.panY));
   std::fprintf(s.record, "\n");
 }
 
@@ -519,10 +536,12 @@ bool ReadPads(DetState& s, int tick, PADStatus* pads) {
       q.analogB = static_cast<u8>(v[9]);
       q.extButton = static_cast<u32>(v[10]);
     }
-    KbmTick& m = kbm_tick_for_det();
-    m = KbmTick{};
-    while (*p == ' ') ++p;
-    if (*p == 'm') {
+    kbm_tick_port_for_det(0) = KbmTick{};
+    kbm_tick_port_for_det(1) = KbmTick{};
+    for (int port = 0; port < 2; ++port) {
+      while (*p == ' ') ++p;
+      if (*p != (port == 0 ? 'm' : 'n')) continue;  // " m" port 1's record, " n" port 2's (network play)
+      KbmTick& m = kbm_tick_port_for_det(port);
       ++p;
       m.flags = static_cast<unsigned>(std::strtoul(p, &p, 16));
       float* f[6] = {&m.cx, &m.cy, &m.rot, &m.zoom, &m.panX, &m.panY};
@@ -563,16 +582,31 @@ void det_pads(PADStatus* pads) {
   DetState& s = St();
   if (!s.tick && !s.boot) return;
   const int tick = s.tick + 1;  // the frame starting now
-  if (s.replay) {
+  if (net_pads(tick, pads)) {
+    // PC mod: network play: both PCs' input of this tick (pc_net.cpp).
+  } else if (s.replay) {
     if (s.replayDone || !ReadPads(s, tick, pads)) {
       for (int k = 0; k < 4; ++k) {
         pads[k] = PADStatus{};
         pads[k].err = k == 0 ? PAD_ERR_NONE : PAD_ERR_NO_CONTROLLER;
       }
-      kbm_tick_for_det() = KbmTick{};
+      kbm_tick_port_for_det(0) = KbmTick{};
+      kbm_tick_port_for_det(1) = KbmTick{};
     }
   }
   if (s.record) WritePads(s, tick, pads);
+}
+
+// PC mod: network play (pc_net.cpp): a session runs as a SIMMY_DET_BOOT replay does (virtual timing,
+// ticks from boot) and records its input (the agreed input of both PCs: a replay file for the session).
+void det_net_enable(FILE* record, const std::string& recordPath) {
+  DetState& s = St();
+  s.on = true;
+  s.boot = true;
+  if (!s.record && record) s.record = record;
+  else if (record) std::fclose(record);  // (SIMMY_DET_RECORD is already open)
+  std::fprintf(stderr, "[det] network play: virtual timing from boot, input recorded to %s\n",
+               record ? recordPath.c_str() : "SIMMY_DET_RECORD's file, if any");
 }
 
 bool det_replaying() { return St().replay != nullptr && St().tick > 0; }
@@ -588,7 +622,11 @@ bool det_frame_end() {
       if (const char* sp = Env("SIMMY_DET_SPEED"); sp && Globs_pSimulator) Globs_pSimulator->SetSpeed(SimSpeed{std::atoi(sp)});
     }
     s.liveRan = false;
-    if (s.hash || s.dump || s.lines) HashTick(s);
+    // PC mod: network play: every hash_every ticks the state hash (and its dump) goes to the partner.
+    const bool netHash = net_wants_hash(s.tick);
+    NetHash nh;
+    if (s.hash || s.dump || s.lines || netHash) HashTick(s, netHash ? &nh : nullptr);
+    net_frame_end(s.tick, netHash ? &nh : nullptr);
     if (s.tick % 3000 == 0) {
       if (s.hash) std::fflush(s.hash);
       if (s.record) std::fflush(s.record);
