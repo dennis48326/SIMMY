@@ -218,6 +218,29 @@ bool split_window_pixel_size(int index, unsigned& width, unsigned& height);
 // fire_code_limit= in simmy.ini (pc_settings.cpp): the GameCube's lot object limit (fire-code meter) is on.
 bool settings_fire_code_limit();
 
+// ---- PC mod: mods (pc_mods.cpp; the game side is src/game/modobjects.cpp) ----
+// Off unless a mod folder exists (mods= in simmy.ini, SIMMY_MODS, or "mods" next to the exe). Each
+// sub-folder with a mod.ini is a mod: [object] sections (objects the converter made from the user's own
+// PC install, tools/pcobj/) and resource files "<manager>_<ID>.res" (e.g. models_9A3F0C12.res: the
+// resource's bytes as an archive would hold them). Nothing of a mod is ever read from or written to
+// the disc data or the saves except the objects' GUIDs.
+struct ModObject {
+  std::string mod;               // the mod's folder name
+  unsigned int guid = 0;         // the new object's GUID
+  unsigned int baseGuid = 0;     // the GameCube object it copies (behaviour, slots, catalogue tab), or
+  std::string baseFile;          //   its object file name
+  std::u16string name, desc;     // catalogue name and description
+  int price = -1;                // -1: the base object's
+  unsigned int model = 0;        // its model resource (every state), 0: the base object's
+  unsigned int thumbnail = 0;    // its catalogue thumbnail shader, 0: the base object's
+};
+void mods_init();                // once at start-up (main thread), after settings_load
+bool mods_enabled();             // a mod folder was found (also when it holds no mods)
+const std::vector<ModObject>& mods_objects();
+// A mod's resource for manager `manager` ("models", "shaders", "textures", ...) by id, or null. Only
+// asked for ids the disc's archives lack (the disc always wins).
+const std::vector<unsigned char>* mods_resource(const char* manager, unsigned int id);
+
 // ---- Widescreen (pc_splitscreen.cpp, pc_hud.cpp; settings in pc_settings.cpp) ----
 // aspect=16:9 (single player): the frame fills the window (aurora's "stretch" viewport policy) and
 // the 3D views are projected at its aspect (split_screen_aspect). Everything else the game draws in

@@ -112,6 +112,11 @@
 ; objects once it is full. off: the meter stays empty and the lot has no object limit.
 ;fire_code_limit = on
 
+; PC mod: mods (docs/mods.md). A folder of mods, e.g. objects converted from your own The Sims 2 (PC)
+; install with tools/pcobj/pcobj_convert.py. Relative to this file. Without it, a "mods" folder next to
+; the exe is used when there is one; with neither, mods are off and nothing changes.
+;mods = mods
+
 ; PC mod: network play: two PCs play the two-player game together (docs/netplay.md). Usually started
 ; from the command line (simmy --host / simmy --join <address>) or run_net_host.bat / run_net_join.bat;
 ; settings here apply to every start, so leave host / join commented out unless this PC always hosts.

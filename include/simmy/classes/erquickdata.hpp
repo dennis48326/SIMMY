@@ -122,6 +122,11 @@ struct ERQuickdata : public EResource {
   int GetTableCount() const { return m_image ? S32(m_image, kImageTableCount) : 0; }
   const void* GetTableByIndex(int i) const { return m_image + kImageTables + i * kTableEntrySize; }
 
+  // PC mod: mods. The zeroed bytes after the image's cells that every image gets when a mod folder
+  // exists (null without one): mod rows placed there can point into the image (modobjects.cpp).
+  static constexpr unsigned int kModTail = 0x10000;
+  unsigned char* ModTail() const;
+
   unsigned char* m_image = nullptr;  // +0x14, the XImage (PC: allocation also holds the slot cells)
   unsigned int m_imageSize = 0;      // +0x18, image + largest language blob, as on the GameCube
   unsigned int m_cellCount = 0;      // PC: native slot cells after m_imageSize (8-aligned)

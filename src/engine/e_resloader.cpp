@@ -9,10 +9,42 @@
 
 // 8030FC90 EResourceLoader::EResourceLoader (defaulted in the header)
 // 8030FCA4 EResourceLoader::~EResourceLoader (defaulted in the header)
+#include "simmy/platform.hpp"
+
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <vector>
+
+namespace {
+// PC mod: mods. A read-only file over a mod resource's bytes (simmy::mods_resource), for the
+// resource's own loader (AllocateAndLoadResource) as if it came from the archive.
+struct ModMemFile final : public EFile {
+  explicit ModMemFile(const std::vector<unsigned char>& data) : m_data(data) { m_length = static_cast<int>(data.size()); }
+  void Destroy() override { delete this; }
+  int Read(void* dst, unsigned int size) override {
+    const std::size_t left = m_data.size() - m_pos, n = size < left ? size : left;
+    if (n) std::memcpy(dst, m_data.data() + m_pos, n);
+    m_pos += n;
+    return static_cast<int>(n);
+  }
+  int Write(void*, unsigned int) override { return 0; }
+  int Seek(int offset, EFile::SeekType type) override {
+    long long p = offset;
+    if (type == EFile__SeekType::Cur) p += static_cast<long long>(m_pos);
+    else if (type == EFile__SeekType::End) p += static_cast<long long>(m_data.size());
+    m_pos = static_cast<std::size_t>(p < 0 ? 0 : (p > static_cast<long long>(m_data.size()) ? static_cast<long long>(m_data.size()) : p));
+    return static_cast<int>(m_pos);
+  }
+  int Tell() const override { return static_cast<int>(m_pos); }
+  int Flush() override { return 0; }
+  int GetLastError() const override { return 0; }
+  void* GetSystemHandle() const override { return nullptr; }
+  const std::vector<unsigned char>& m_data;
+  std::size_t m_pos = 0;
+};
+}  // namespace
 
 static EResourceLoaderImpl _resLoader;
 EResourceLoaderImpl* _pResLoader = &_resLoader;  // 805000A4
@@ -242,11 +274,19 @@ const unsigned char* EResourceLoaderImpl::getIndexPointer(const char* managerNam
 EResource* EResourceLoaderImpl::DoLoadResource(EResourceManager* mgr, unsigned int id, EFile* file, unsigned int pos,
                                                unsigned int size) {
   int restorePos = 0;
+  ModMemFile* modFile = nullptr;
   if (!file) {
-    if (!mgr->LookupId(id, pos, size)) return nullptr;
-    file = mgr->GetArchiveFile();
-    if (!file) return nullptr;
-    file->Seek(static_cast<int>(pos), EFile__SeekType::Set);
+    if (!mgr->LookupId(id, pos, size)) {
+      // PC mod: mods. An id the archive lacks may be a mod's (only when a mod folder exists).
+      const std::vector<unsigned char>* mod = simmy::mods_enabled() ? simmy::mods_resource(mgr->m_name, id) : nullptr;
+      if (!mod) return nullptr;
+      file = modFile = new ModMemFile(*mod);
+      size = static_cast<unsigned int>(mod->size());
+    } else {
+      file = mgr->GetArchiveFile();
+      if (!file) return nullptr;
+      file->Seek(static_cast<int>(pos), EFile__SeekType::Set);
+    }
   } else if (std::strcmp(mgr->m_name, "simdatas") == 0) {
     file->Seek(static_cast<int>(pos), EFile__SeekType::Set);
   } else {
@@ -261,6 +301,7 @@ EResource* EResourceLoaderImpl::DoLoadResource(EResourceManager* mgr, unsigned i
     if (!restorePos) mgr->LogResourceLoad(res);
   }
   if (restorePos && file->Tell() != restorePos) file->Seek(restorePos, EFile__SeekType::Set);
+  if (modFile) modFile->Destroy();
   return res;
 }
 

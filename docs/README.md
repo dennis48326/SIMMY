@@ -23,6 +23,7 @@ history, not reference (many of their "not ported" lists are out of date).
 | [coop-and-players.md](coop-and-players.md) | Two-player mode end to end, split modes, private screens, everything hard-coded to two players (for 3-4 player work) |
 | [multiplayer.md](multiplayer.md) | PC mod: 3 and 4 players in Free Play (`players=`), one window each: joining, dropping out, what extra players have, how the slots, windows and pads work, test knobs, limits |
 | [netplay.md](netplay.md) | PC mod: network play, two PCs in lockstep (`--host` / `--join`): how to play, what is shared, desync files, protocol, test knobs, limits |
+| [mods.md](mods.md) | PC mod: mods: the mod folder, objects converted from the user's own PC The Sims 2 install (tools/pcobj), how they enter the object database, catalogue and saves, unknown GUIDs |
 | [determinism-and-netplay.md](determinism-and-netplay.md) | `SIMMY_DET`, RNG streams, record/replay, hashing, rules for deterministic code, remaining netplay work |
 | [shutdown-and-crashes.md](shutdown-and-crashes.md) | The exit sequence, why static destructors are skipped, crash capture, the watchdog |
 | [launcher.md](launcher.md) | SimmyLauncher internals: disc check, ini editing, starting the game, failure reporting |

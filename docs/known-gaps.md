@@ -172,3 +172,7 @@ pad motor through `EVibrate` and aurora's `PADControlMotor` (one on/off motor, a
   for 24000 ticks with build dj; an Intel PC is not checked yet).
 - Windows-only code (crash handler, launcher process/env handling, two-window present on D3D12) was
   written on Linux and only syntax- or review-checked there; MSVC builds are the user's.
+- PC mod: mods ([mods.md](mods.md)): converted PC objects are decorative copies of a GameCube base object
+  (its behaviour, footprint, slots); PC behaviour (BHAV), skinned/animated meshes, multi-tile objects and
+  PC animations are not converted. In buy placement mode the held object is drawn about a tile from the
+  yellow cursor square; GameCube objects do the same in the port (not mod-specific).

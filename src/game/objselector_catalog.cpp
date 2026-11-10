@@ -43,16 +43,23 @@ RET_UNKNOWN ObjSelector::GetMasterSelector() {
 
 // 801108F0
 // The catalogue name's slot (the master selector's entry).
+// PC mod: mods. A mod object's own name (modobjects.cpp) in place of the object file's.
 RET_UNKNOWN ObjSelector::GetCatalogName() {
-  return CatalogSlot(reinterpret_cast<ObjSelector*>(GetMasterSelector()), 4);
+  auto* master = reinterpret_cast<ObjSelector*>(GetMasterSelector());
+  if (master && master->m_modNameSlot) return reinterpret_cast<RET_UNKNOWN>(&master->m_modNameSlot);
+  return CatalogSlot(master, 4);
 }
 // 8011094C
 RET_UNKNOWN ObjSelector::GetCatalogDescription() {
-  return CatalogSlot(reinterpret_cast<ObjSelector*>(GetMasterSelector()), 8);
+  auto* master = reinterpret_cast<ObjSelector*>(GetMasterSelector());
+  if (master && master->m_modDescSlot) return reinterpret_cast<RET_UNKNOWN>(&master->m_modDescSlot);
+  return CatalogSlot(master, 8);
 }
 // 801109A8
 RET_UNKNOWN ObjSelector::GetCatalogShortName() {
-  return CatalogSlot(reinterpret_cast<ObjSelector*>(GetMasterSelector()), 0xc);
+  auto* master = reinterpret_cast<ObjSelector*>(GetMasterSelector());
+  if (master && master->m_modNameSlot) return reinterpret_cast<RET_UNKNOWN>(&master->m_modNameSlot);
+  return CatalogSlot(master, 0xc);
 }
 
 // 80111148

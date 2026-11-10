@@ -99,6 +99,7 @@ for house loads (so free-play edits to unplayed lots persist).
 | GPU pipeline cache | `<pref path>/cache_<exe size>_<mtime>` |
 | Screenshots, WAV dumps, portrait dumps | paths given by the developer (cwd) |
 | The disc image / data folder | **never written** |
+| Mods (PC mod) | read only, from `mods=` / `mods` next to the exe ([mods.md](mods.md)); a save names a mod object by GUID only |
 
 ## Gotchas
 
@@ -109,3 +110,6 @@ for house loads (so free-play edits to unplayed lots persist).
 - Tests that save need a fresh card dir per run (delete the `USA` folder) and must not run from the build
   directory headless (the card lands there).
 - `--data` beats the disc image even when `iso=` is set (logged).
+- PC mod: with a mod folder, a resource id the archives lack is looked up in the mods (`EResourceLoaderImpl::DoLoadResource`,
+  `simmy::mods_resource`), and every quickdata image gets 64 KB of zeroed tail (`ERQuickdata::ModTail`) where mod rows live
+  ([mods.md](mods.md)). Without a mod folder neither happens.

@@ -84,7 +84,7 @@ const char* const kKeys[] = {"window", "fullscreen", "resolution", "aspect", "hu
                              "anisotropy", "vsync", "fpscap", "backend", "resampler", "split",
                              "window2", "window2pos", "window2display", "fullscreen2", "iso",
                              "p1input", "mouseedgepan", "mouserotatespeed", "mousezoomspeed", "mouseinvertx",
-                             "mouseinverty", "mouseinvertwheel", "firecodelimit", "players"};
+                             "mouseinverty", "mouseinvertwheel", "firecodelimit", "players", "mods"};
 bool KnownKey(const std::string& k) {
   for (const char* known : kKeys)
     if (k == known) return true;
@@ -267,6 +267,8 @@ void ApplyValue(GraphicsSettings& g, const std::string& key, const std::string& 
     if (!ParseBool(v, b)) Warn(key, v, "on or off");
   } else if (key == "firecodelimit") {
     if (!ParseBool(v, g.fireCodeLimit)) Warn(key, v, "on or off");
+  } else if (key == "mods") {
+    g.modsPath = Trim(v);
   }
 }
 
@@ -732,6 +734,8 @@ std::string settings_value_string(const GraphicsSettings& g, const char* rawKey)
     return g.mouseInvertWheel ? "on" : "off";
   } else if (key == "firecodelimit") {
     return g.fireCodeLimit ? "on" : "off";
+  } else if (key == "mods") {
+    return g.modsPath;
   } else if (key == "players") {
     std::snprintf(buf, sizeof buf, "%d", g.maxPlayers);
   }
@@ -742,6 +746,26 @@ bool settings_fire_code_limit() { return graphics_settings().fireCodeLimit; }
 
 // PC mod: 4 players.
 int settings_max_players() { return graphics_settings().maxPlayers; }
+
+// PC mod: mods. The mod folder: mods= (relative to simmy.ini's folder), else SIMMY_MODS, else "mods"
+// next to the exe when it is a folder; "" when none (mods off).
+std::string settings_mods_dir() {
+  const GraphicsSettings& g = graphics_settings();
+  auto isDir = [](const std::string& p) {
+    SDL_PathInfo info;
+    return !p.empty() && SDL_GetPathInfo(p.c_str(), &info) && info.type == SDL_PATHTYPE_DIRECTORY;
+  };
+  std::string dir = g.modsPath;
+  if (!dir.empty() && !(dir[0] == '/' || dir[0] == '\\' || (dir.size() > 1 && dir[1] == ':'))) {
+    const std::string ini = settings_ini_path();
+    const size_t slash = ini.find_last_of("/\\");
+    if (slash != std::string::npos) dir = ini.substr(0, slash + 1) + dir;
+  }
+  if (dir.empty())
+    if (const char* env = std::getenv("SIMMY_MODS")) dir = env;
+  if (dir.empty() && isDir(g_exeDir + "mods")) dir = g_exeDir + "mods";
+  return isDir(dir) ? dir : std::string();
+}
 
 std::string settings_ini_path() {
   const GraphicsSettings& g = graphics_settings();

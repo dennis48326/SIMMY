@@ -218,6 +218,7 @@ the file: `--<setting> <value>` or `--<setting>=<value>`.
 | `window2_display` | the display it opens on (`0` = the first) or `auto` (another than window 1's) | `auto` |
 | `fullscreen2` | `off` or `borderless` (fullscreen on its display) | `off` |
 | `players` | PC mod: `2` (the GameCube's co-op, default), `1` (no co-op), `3` or `4`: in a two-player Free Play game with `split=windows`, players 3 and 4 join by pressing Start on their controller (one window each, "SIMMY - Player N"); see [docs/multiplayer.md](docs/multiplayer.md) | `2` |
+| `mods` | PC mod: a mod folder (relative to simmy.ini), e.g. objects converted from your own The Sims 2 PC install; default: `mods` next to the exe if it exists, else mods are off. See [docs/mods.md](docs/mods.md) | (none) |
 | `fire_code_limit` | gameplay, not graphics: `on` (as on the GameCube, the buy/build fire-code meter fills with the lot's objects and stops new ones when full) or `off` (empty meter, no limit); not in the F1 menu | `on` |
 
 Example: `simmy.exe --iso D:\Games\Sims2.iso --aspect 16:9 --resolution 1440p --msaa 4 --fullscreen`.

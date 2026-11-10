@@ -588,6 +588,7 @@ int main(int argc, char* argv[]) {  // aurora/main.h renames this to aurora_main
 
   simmy::settings_load(argc > 0 ? argv[0] : nullptr);  // also --iso / iso= (pc_settings.cpp)
   simmy::kbm_init();  // player 1's keys ([keys] in simmy.ini, pc_kbm.cpp)
+  simmy::mods_init();  // PC mod: mods (a mod folder, pc_mods.cpp; nothing happens without one)
   if (!open_game_data(dataDir)) return 1;
   if (!simmy::g_headless) {
     AuroraConfig config{};

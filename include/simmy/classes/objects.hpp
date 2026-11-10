@@ -131,6 +131,12 @@ struct ObjSelector {
   unsigned int m_flags = 0;                // +0x7C bit 1: saved with other tree versions
   short m_saveId = 0;                      // +0x6C its type id in the house being loaded ('objt')
   ObjSelector* m_next = nullptr;           // +0xA4 the next with the same GUID low byte
+  // PC mod: mods (modobjects.cpp). A mod object's catalogue name and description (GetCatalogName /
+  // GetCatalogDescription return their slots instead of the object file's) and its mod's name.
+  std::u16string m_modName, m_modDesc;
+  const unsigned short* m_modNameSlot = nullptr;
+  const unsigned short* m_modDescSlot = nullptr;
+  const char* m_mod = nullptr;
 };
 
 struct ObjectFolderImpl {
@@ -153,6 +159,7 @@ struct ObjectFolderImpl {
   virtual RET_UNKNOWN OpenResFile(ObjSelector *);  // 800EE148
   virtual void CloseResFile(ObjSelector *);  // 800EE20C
   void LoadDatabase();  // 800EE2B4
+  void AddModObjects();  // PC mod: mods (modobjects.cpp): the selectors of the mods' objects
   virtual void ReconSelector(ObjSelector** selector, ReconBuffer* buffer, bool bySaveId, int version);  // 800EE98C
   virtual RET_UNKNOWN GetSelectorByBehavior(Behavior *);  // 800EEB60
   virtual void ReconBehavior(Behavior **, ReconBuffer *, int);  // 800EED2C

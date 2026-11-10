@@ -160,6 +160,7 @@ void ObjectFolderImpl::LoadDatabase() {
     // The template person's definition, copied by the user selectors (GC: +0x6B8).
     if (row == templateFile && n) m_templateDef = static_cast<const ObjDefinition*>(ERQuickdata::Ptr(defs, 0));
   }
+  AddModObjects();  // PC mod: mods (nothing without a mod folder)
 }
 
 // 800EDD94

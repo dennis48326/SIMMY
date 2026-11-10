@@ -64,6 +64,9 @@ struct GraphicsSettings {
   // GameCube's co-op; 3 or 4 let extra players join a free-play game (split=windows, one window
   // each); 1 turns co-op off (the front end offers one player only).
   int maxPlayers = 2;
+  // Not graphics: mods= (PC mod: mods, pc_mods.cpp). The mod folder; empty: "mods" next to the exe
+  // when that folder exists, else mods are off.
+  std::string modsPath;
   // The [keys] section: "action = key, key" lines as read (pc_kbm.cpp parses and warns).
   struct KeyLine {
     std::string action, keys, where;  // where: "file:line"
@@ -111,6 +114,8 @@ bool settings_save_keys(const char* const* keys, size_t count, std::string& mess
 // The ini the overlay saves to: the file that was read (--config, SIMMY_INI), else simmy.ini next to
 // the executable.
 std::string settings_ini_path();
+// PC mod: mods (pc_mods.cpp): the mod folder, or "" when mods are off.
+std::string settings_mods_dir();
 // Writes the settings to settings_ini_path(), keeping its comments, layout and unknown lines (a key's
 // commented-out example line is replaced in place). Keys at their default are only rewritten where
 // the file already sets them. `message` gets the result for the user.
