@@ -40,13 +40,17 @@ SUFFIX = {rcol.T_CRES: '_cres', rcol.T_SHPE: '_shpe', rcol.T_GMND: '_gmnd', rcol
 
 
 class Install:
-    """All the .package files under <res>/Sims3D (and the given extra packages), opened lazily."""
-    def __init__(self, res_dirs):
+    """Scenegraph packages, opened lazily and searched in order (put the newest pack's first: a
+    resource a later pack re-ships wins). `paths`: package files, or TSData/Res folders (their
+    Sims3D, 3D, Catalog/Bins and Objects packages)."""
+    def __init__(self, paths):
         self.paths = []
-        for r in res_dirs:
-            self.paths += sorted(glob.glob(os.path.join(r, 'Sims3D', '*.package')))
-            self.paths += sorted(glob.glob(os.path.join(r, 'Catalog', 'Bins', '*.package')))
-            self.paths += sorted(glob.glob(os.path.join(r, 'Objects', '*.package')))
+        for r in paths:
+            if os.path.isdir(r):
+                for sub in ('Sims3D', '3D', os.path.join('Catalog', 'Bins'), 'Objects'):
+                    self.paths += sorted(glob.glob(os.path.join(r, sub, '*.package')))
+            else:
+                self.paths.append(r)
         self._pk = {}
 
     def pk(self, path):

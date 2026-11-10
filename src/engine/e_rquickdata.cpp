@@ -78,7 +78,8 @@ bool applyFixups(EFile* file, unsigned int fileStart, const EXPORT_DIRECTORY& di
 // at align4(image size), into `image` (when it is set and `size` is non-zero; the sizes must match) or a
 // new allocation. `size` gets image + the largest language blob, as on the GameCube.
 // PC: also builds the slot cells (`cellCount` of them, after `size`) and encodes the pointers.
-unsigned char* ReloadXImage(EFile* file, unsigned char* image, unsigned int& size, unsigned int& cellCount, int language) {
+unsigned char* ReloadXImage(EFile* file, unsigned char* image, unsigned int& size, unsigned int& cellCount, int language,
+                            unsigned int tail = 0) {
   const int start = file->Tell();
   EXPORT_DIRECTORY header;
   if (!ReadDirectory(file, header)) return nullptr;
@@ -111,10 +112,9 @@ unsigned char* ReloadXImage(EFile* file, unsigned char* image, unsigned int& siz
   if (!SeekTo(file, start + static_cast<int>(header.m_dataOffset))) return nullptr;
   bool allocated = false;
   if (!image || size == 0) {
-    // PC mod: mods. With a mod folder, every image gets ERQuickdata::kModTail zeroed bytes after its
-    // cells, where mod rows (copies of rows with their own values) can live in reach of the image's
-    // self-relative pointers (modobjects.cpp). None without one.
-    const unsigned int tail = simmy::mods_enabled() ? ERQuickdata::kModTail : 0;
+    // PC mod: mods. `tail` zeroed bytes after the cells (the "SimsObjects" image with a mod folder:
+    // ERQuickdata::ModTailSize), where mod rows (copies of rows with their own values) live in reach of
+    // the image's self-relative pointers (modobjects.cpp). None without mods.
     image = static_cast<unsigned char*>(_quickdataman.Alloc(cellsStart + cells * sizeof(void*) + tail, 8));
     if (image && tail) std::memset(image + cellsStart + cells * sizeof(void*), 0, tail);
     allocated = true;
@@ -236,8 +236,11 @@ void ERQuickdata::UnlockImage() {}
 void ERQuickdata::LockImage() {}
 
 // PC mod: mods (see the header).
+unsigned int ERQuickdata::ModTailSize() const {
+  return m_id == kModTailImage && simmy::mods_enabled() ? simmy::mods_tail_bytes() : 0;
+}
 unsigned char* ERQuickdata::ModTail() const {
-  return m_image && simmy::mods_enabled() ? m_image + ((m_imageSize + 7) & ~7u) + m_cellCount * sizeof(void*) : nullptr;
+  return m_image && ModTailSize() ? m_image + ((m_imageSize + 7) & ~7u) + m_cellCount * sizeof(void*) : nullptr;
 }
 
 // 8031B8F8
@@ -253,7 +256,7 @@ void ERQuickdata::Reload(EFile* file) {
 // 8031B948
 void ERQuickdata::Load(EFile* file, int language) {
   reset();
-  m_image = qdimage::ReloadXImage(file, m_image, m_imageSize, m_cellCount, language);
+  m_image = qdimage::ReloadXImage(file, m_image, m_imageSize, m_cellCount, language, ModTailSize());
   if (m_image) m_flags = m_imageSize << 8 | (m_flags & 0xff);
   LockImage();
 }

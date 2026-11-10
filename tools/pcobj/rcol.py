@@ -155,19 +155,26 @@ def parse_gmdc(data):
 
 
 def gmdc_group_mesh(g, gi):
-    """(positions, normals, uvs, triangles) for group gi, resolved through its link's element order."""
+    """(elements by name, triangles) for group gi, resolved through its link: the link's elements in
+    order; the first three may be indexed through the link's alias lists (vertex i -> element entry)."""
     gr = g['groups'][gi]
     link = g['links'][gr['link']]
     out = {}
     for k, ei in enumerate(link['items']):
         e = g['elements'][ei]
         nm = ELEMENT_NAMES.get(e['id'], f"{e['id']:08X}")
+        if nm in out:
+            continue
         comps = e['comps']
         vals = e['data']
         verts = [tuple(vals[i * comps:(i + 1) * comps]) for i in range(len(vals) // comps)]
-        alias = link['aliases'][min(k, 2)] if False else None
-        out.setdefault(nm, verts)
-    tris = [tuple(gr['faces'][i:i + 3]) for i in range(0, len(gr['faces']), 3)]
+        alias = link['aliases'][k] if k < 3 else []
+        if alias:
+            verts = [verts[a] if a < len(verts) else verts[-1] for a in alias]
+        out[nm] = verts
+    tris = [tuple(gr['faces'][i:i + 3]) for i in range(0, len(gr['faces']) - 2, 3)]
+    n = min((len(v) for v in out.values()), default=0)
+    tris = [t for t in tris if max(t) < n]
     return out, tris
 
 
@@ -280,3 +287,152 @@ def parse_lifo(data):
     fname = sgresource(r)
     w = r.u32(); h = r.u32(); z = r.u32(); n = r.u32()
     return {'name': fname, 'w': w, 'h': h, 'data': r.raw(n)}
+
+
+# ---- CRES: the transform hierarchy ------------------------------------------------------------------
+
+CRES_BLOCKS = {0xE519C933: 'cResourceNode', 0x65245517: 'cShapeRefNode', 0x65246462: 'cTransformNode',
+               0x6A836D56: 'cDataListExtension', 0x0C152B8E: 'cViewerRefNodeRecursive',
+               0x253D2018: 'cLightRefNode', 0xC9C81B9B: 'cAmbientLight', 0xC9C81BA3: 'cDirectionalLight',
+               0xC9C81BA9: 'cPointLight', 0xC9C81BAD: 'cSpotLight', 0x2A5F2F6C: 'cBoneDataExtension'}
+
+
+def _children(r):
+    n = r.u32()
+    if n > 10000:
+        raise ValueError('bad child count')
+    out = []
+    for _ in range(n):
+        r.u8(); r.u8(); out.append(r.u32())
+    return out
+
+
+def _ogn(r):
+    """cObjectGraphNode (tag already read): version, extensions, (v4) name."""
+    ver = r.u32()
+    _children(r)  # extensions
+    return r.s() if ver >= 4 else ''
+
+
+def _tag(r, want):
+    name = r.s()
+    if name != want:
+        raise ValueError(f'expected {want}, got {name!r}')
+    r.u32()
+    return name
+
+
+def _transform(r):
+    """cTransformNode body (after its own tag + id): (name, children, translation, quaternion, joint)."""
+    r.u32()                                   # version
+    _tag(r, 'cCompositionTreeNode'); r.u32()  # its version
+    _tag(r, 'cObjectGraphNode')
+    name = _ogn(r)
+    kids = _children(r)
+    t = r.fs(3)
+    q = r.fs(4)
+    joint = r.u32()
+    return name, kids, t, q, joint
+
+
+def parse_cres(data):
+    """The CRES's blocks: [{'type', 'name', 'children', 't', 'q', 'shapes'}] (shapes: indices into the
+    RCOL links, for cShapeRefNode blocks). Blocks that are not decoded keep only their type."""
+    links, ids, r = rcol_header(data)
+    blocks = []
+    for k, bid in enumerate(ids):
+        start = r.p
+        b = {'type': CRES_BLOCKS.get(bid, f'{bid:08X}'), 'name': '', 'children': [], 't': (0.0, 0.0, 0.0),
+             'q': (0.0, 0.0, 0.0, 1.0), 'shapes': []}
+        try:
+            tname = r.s(); r.u32()
+            if tname == 'cResourceNode':
+                r.u32()
+                if r.d[r.p] != 11:   # a flag byte before the cSGResource
+                    r.u8()
+                sgresource(r)
+                _tag(r, 'cCompositionTreeNode'); r.u32()
+                _tag(r, 'cObjectGraphNode')
+                b['name'] = _ogn(r)
+                b['children'] = _children(r)
+            elif tname == 'cTransformNode':
+                b['name'], b['children'], b['t'], b['q'], _ = _transform(r)
+            elif tname == 'cShapeRefNode':
+                r.u32()
+                _tag(r, 'cRenderableNode'); r.u32()
+                _tag(r, 'cBoundedNode'); r.u32()
+                _tag(r, 'cTransformNode')
+                b['name'], b['children'], b['t'], b['q'], _ = _transform(r)
+                r.u16()
+                for _ in range(r.u32()):
+                    r.s()
+                r.u32(); r.u8()
+                b['shapes'] = _children(r)
+        except (ValueError, struct.error, IndexError, UnicodeDecodeError):
+            pass
+        blocks.append(b)
+        # the next block: its tag (a 7-bit-length string) followed by its type id
+        if k + 1 < len(ids):
+            nxt = struct.pack('<I', ids[k + 1])
+            p = max(r.p, start + 1)
+            while True:
+                p = data.find(nxt, p)
+                if p < 0:
+                    return blocks
+                n = data[p - 1] if p >= 1 else 0
+                # walk back over the name: [len][name][id]
+                found = False
+                for ln in range(1, 64):
+                    q = p - ln - 1
+                    if q < start:
+                        break
+                    if data[q] == ln and data[q + 1:p][:1] == b'c':
+                        found = True
+                        break
+                if found:
+                    r.p = q
+                    break
+                p += 1
+    return blocks
+
+
+def quat_matrix(q):
+    x, y, z, w = q
+    return [[1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+            [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+            [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)]]
+
+
+def cres_shape_transforms(data):
+    """{RCOL link index of a SHPE: (3x3 rotation, translation, rooted)}: the shape's node and its
+    parents' transforms, composed (world = parent * child); rooted: the node hangs from the resource
+    node (else its place comes from an animation the CRES does not hold)."""
+    blocks = parse_cres(data)
+    parent = {}
+    for i, b in enumerate(blocks):
+        for c in b['children']:
+            if 0 <= c < len(blocks) and c != i:
+                parent.setdefault(c, i)
+
+    def world(i, depth=0):
+        b = blocks[i]
+        R = quat_matrix(b['q']); t = list(b['t'])
+        if i in parent and depth < 64:
+            PR, Pt = world(parent[i], depth + 1)
+            R2 = [[sum(PR[a][k] * R[k][c] for k in range(3)) for c in range(3)] for a in range(3)]
+            t2 = [sum(PR[a][k] * t[k] for k in range(3)) + Pt[a] for a in range(3)]
+            return R2, t2
+        return R, t
+
+    def rooted(i):
+        seen = set()
+        while i in parent and i not in seen:
+            seen.add(i); i = parent[i]
+        return i == 0
+
+    out = {}
+    for i, b in enumerate(blocks):
+        for s in b['shapes']:
+            R, t = world(i)
+            out.setdefault(s, (R, t, rooted(i)))
+    return out

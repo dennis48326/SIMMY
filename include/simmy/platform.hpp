@@ -224,22 +224,35 @@ bool settings_fire_code_limit();
 // PC install, tools/pcobj/) and resource files "<manager>_<ID>.res" (e.g. models_9A3F0C12.res: the
 // resource's bytes as an archive would hold them). Nothing of a mod is ever read from or written to
 // the disc data or the saves except the objects' GUIDs.
+struct ModTile {
+  int x = 0, y = 0;              // the tile's offset from the group's first tile (sub index x << 8 | y)
+  unsigned int guid = 0;         // its own GUID (saves name every part by GUID)
+};
 struct ModObject {
   std::string mod;               // the mod's folder name
-  unsigned int guid = 0;         // the new object's GUID
+  unsigned int guid = 0;         // the new object's GUID (a multi-tile object's: its lead's)
   unsigned int baseGuid = 0;     // the GameCube object it copies (behaviour, slots, catalogue tab), or
   std::string baseFile;          //   its object file name
   std::u16string name, desc;     // catalogue name and description
   int price = -1;                // -1: the base object's
   unsigned int model = 0;        // its model resource (every state), 0: the base object's
   unsigned int thumbnail = 0;    // its catalogue thumbnail shader, 0: the base object's
+  int functions = -1;            // catalogue function flags (the buy tab), -1: the base object's
+  int room = -1;                 // catalogue room rating, -1: the base object's
+  std::vector<ModTile> tiles;    // more than none: a multi-tile object of these tiles (a group made from
+                                 // the base: its lead, its first tile drawing the model)
+  std::string pack;              // where it came from (informational)
 };
 void mods_init();                // once at start-up (main thread), after settings_load
 bool mods_enabled();             // a mod folder was found (also when it holds no mods)
 const std::vector<ModObject>& mods_objects();
-// A mod's resource for manager `manager` ("models", "shaders", "textures", ...) by id, or null. Only
-// asked for ids the disc's archives lack (the disc always wins).
-const std::vector<unsigned char>* mods_resource(const char* manager, unsigned int id);
+// A mod's resource for manager `manager` ("models", "shaders", "textures", ...) by id, read from its
+// file into `out` (on demand: nothing is kept in memory); false if no mod has it. Only asked for ids
+// the disc's archives lack (the disc always wins). Thread-safe (house loads run on a thread).
+bool mods_resource(const char* manager, unsigned int id, std::vector<unsigned char>& out);
+// The bytes the "SimsObjects" quickdata image keeps after its cells for the mod objects' rows
+// (modobjects.cpp), sized from the mods' objects and tiles; 0 without mods.
+unsigned int mods_tail_bytes();
 
 // ---- Widescreen (pc_splitscreen.cpp, pc_hud.cpp; settings in pc_settings.cpp) ----
 // aspect=16:9 (single player): the frame fills the window (aurora's "stretch" viewport policy) and

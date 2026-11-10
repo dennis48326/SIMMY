@@ -10,7 +10,12 @@
 //   price = 150                (default: the base object's)
 //   model = 0x12345678         model resource id (default: the base object's)
 //   thumbnail = 0x12345678     catalogue thumbnail shader id (default: the base object's)
-// Resource files next to it: "<manager>_<8 hex digits>.res", e.g. "models_9A3F0C12.res".
+//   functions = 0x20           catalogue function flags: the buy-mode tab (default: the base object's)
+//   room = 3                   catalogue room rating (default: the base object's)
+//   tiles = 0,0:0xGUID 1,0:0xGUID   a multi-tile object: each tile's offset (x,y) and GUID
+//   pack = ...                 where the object came from (informational)
+// Resource files next to it: "<manager>_<8 hex digits>.res", e.g. "models_9A3F0C12.res". Only their
+// names are read at start-up; a resource is read from its file each time the game loads it.
 #include "pc_settings.hpp"
 
 #include "simmy/platform.hpp"
@@ -18,6 +23,7 @@
 #include <SDL3/SDL_filesystem.h>
 #include <SDL3/SDL_iostream.h>
 #include <SDL3/SDL_stdinc.h>
+#include <SDL3/SDL_timer.h>
 
 #include <algorithm>
 #include <cctype>
@@ -33,8 +39,8 @@ namespace simmy {
 namespace {
 bool g_modsEnabled = false;
 std::vector<ModObject> g_modObjects;
-// (manager name lower-case, id) -> the resource's bytes.
-std::map<std::pair<std::string, unsigned int>, std::vector<unsigned char>> g_modResources;
+// (manager name lower-case, id) -> the resource's file.
+std::map<std::pair<std::string, unsigned int>, std::string> g_modResources;
 
 std::string Lower(std::string s) {
   for (char& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
@@ -83,6 +89,27 @@ bool ParseU32(const std::string& v, unsigned int& out) {
   return true;
 }
 
+// "x,y:0xGUID x,y:0xGUID ...": a multi-tile object's tiles (offsets 0..127).
+bool ParseTiles(const std::string& v, std::vector<ModTile>& out) {
+  out.clear();
+  size_t pos = 0;
+  while (pos < v.size()) {
+    while (pos < v.size() && std::isspace(static_cast<unsigned char>(v[pos]))) ++pos;
+    if (pos >= v.size()) break;
+    size_t end = pos;
+    while (end < v.size() && !std::isspace(static_cast<unsigned char>(v[end]))) ++end;
+    const std::string item = v.substr(pos, end - pos);
+    pos = end;
+    ModTile t;
+    char guid[32] = {};
+    if (std::sscanf(item.c_str(), "%d,%d:%31s", &t.x, &t.y, guid) != 3 || !ParseU32(guid, t.guid) || !t.guid ||
+        t.x < 0 || t.y < 0 || t.x > 127 || t.y > 127)
+      return false;
+    out.push_back(t);
+  }
+  return !out.empty();
+}
+
 void LoadModIni(const std::string& mod, const std::string& path) {
   std::vector<unsigned char> raw;
   if (!LoadFile(path, raw)) return;
@@ -120,6 +147,13 @@ void LoadModIni(const std::string& mod, const std::string& path) {
     else if (key == "price") cur->price = std::atoi(v.c_str());
     else if (key == "model") ok = ParseU32(v, cur->model);
     else if (key == "thumbnail") ok = ParseU32(v, cur->thumbnail);
+    else if (key == "functions") {
+      unsigned int f = 0;
+      ok = ParseU32(v, f);
+      if (ok) cur->functions = static_cast<int>(f & 0xffff);
+    } else if (key == "room") cur->room = std::atoi(v.c_str());
+    else if (key == "pack") cur->pack = v;
+    else if (key == "tiles") ok = ParseTiles(v, cur->tiles);
     if (!ok) std::fprintf(stderr, "[mods] %s:%d: bad value \"%s\"\n", path.c_str(), lineNo, v.c_str());
   }
   for (ModObject& o : objects) {
@@ -145,14 +179,12 @@ void LoadModResources(const std::string& mod, const std::string& dir) {
       std::fprintf(stderr, "[mods] %s/%s: not <manager>_<id>.res\n", mod.c_str(), name.c_str());
       continue;
     }
-    std::vector<unsigned char> data;
-    if (!LoadFile(dir + "/" + name, data)) continue;
     const auto key = std::make_pair(Lower(name.substr(0, us)), id);
     if (g_modResources.count(key)) {
       std::fprintf(stderr, "[mods] %s/%s: id %08X is already given by another mod; skipped\n", mod.c_str(), name.c_str(), id);
       continue;
     }
-    g_modResources.emplace(key, std::move(data));
+    g_modResources.emplace(key, dir + "/" + name);
   }
   SDL_free(names);
 }
@@ -161,6 +193,7 @@ void LoadModResources(const std::string& mod, const std::string& dir) {
 void mods_init() {
   const std::string dir = settings_mods_dir();
   if (dir.empty()) return;
+  const Uint64 start = SDL_GetTicksNS();
   g_modsEnabled = true;
   int count = 0;
   char** entries = SDL_GlobDirectory(dir.c_str(), nullptr, 0, &count);
@@ -178,17 +211,39 @@ void mods_init() {
     LoadModIni(m, dir + "/" + m + "/mod.ini");
     LoadModResources(m, dir + "/" + m);
   }
-  std::fprintf(stderr, "[mods] %s: %zu mod(s), %zu object(s), %zu resource(s)\n", dir.c_str(), mods.size(),
-               g_modObjects.size(), g_modResources.size());
+  size_t tiles = 0;
+  for (const ModObject& o : g_modObjects) tiles += o.tiles.size();
+  std::fprintf(stderr, "[mods] %s: %zu mod(s), %zu object(s) (%zu multi-tile parts), %zu resource(s); read in %.1f ms\n",
+               dir.c_str(), mods.size(), g_modObjects.size(), tiles, g_modResources.size(),
+               static_cast<double>(SDL_GetTicksNS() - start) / 1e6);
 }
 
 bool mods_enabled() { return g_modsEnabled; }
 
 const std::vector<ModObject>& mods_objects() { return g_modObjects; }
 
-const std::vector<unsigned char>* mods_resource(const char* manager, unsigned int id) {
-  if (!g_modsEnabled || !manager) return nullptr;
+bool mods_resource(const char* manager, unsigned int id, std::vector<unsigned char>& out) {
+  if (!g_modsEnabled || !manager) return false;
   const auto it = g_modResources.find(std::make_pair(Lower(manager), id));
-  return it != g_modResources.end() ? &it->second : nullptr;
+  if (it == g_modResources.end()) return false;
+  if (!LoadFile(it->second, out)) {
+    std::fprintf(stderr, "[mods] %s: cannot be read\n", it->second.c_str());
+    return false;
+  }
+  return true;
+}
+
+// Per object: its definition, its ResData and up to 32 states (the lead of a group the same), and per
+// tile a definition (the first tile's ResData too).
+unsigned int mods_tail_bytes() {
+  if (!g_modsEnabled) return 0;
+  unsigned long long bytes = 0;
+  for (const ModObject& o : g_modObjects) {
+    const unsigned long long res = 0x38 + 4 + 32 * 0x20;
+    bytes += 0xc4 + res;
+    if (!o.tiles.empty()) bytes += o.tiles.size() * 0xc4 + res;
+  }
+  bytes = (bytes + 0x1000 + 0xfff) & ~0xfffull;
+  return bytes > 0x4000000ull ? 0x4000000u : static_cast<unsigned int>(bytes);
 }
 }  // namespace simmy

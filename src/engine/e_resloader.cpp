@@ -15,13 +15,14 @@
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace {
-// PC mod: mods. A read-only file over a mod resource's bytes (simmy::mods_resource), for the
-// resource's own loader (AllocateAndLoadResource) as if it came from the archive.
+// PC mod: mods. A read-only file over a mod resource's bytes (simmy::mods_resource reads them from the
+// mod's file), for the resource's own loader (AllocateAndLoadResource) as if it came from the archive.
 struct ModMemFile final : public EFile {
-  explicit ModMemFile(const std::vector<unsigned char>& data) : m_data(data) { m_length = static_cast<int>(data.size()); }
+  explicit ModMemFile(std::vector<unsigned char>&& data) : m_data(std::move(data)) { m_length = static_cast<int>(m_data.size()); }
   void Destroy() override { delete this; }
   int Read(void* dst, unsigned int size) override {
     const std::size_t left = m_data.size() - m_pos, n = size < left ? size : left;
@@ -41,7 +42,7 @@ struct ModMemFile final : public EFile {
   int Flush() override { return 0; }
   int GetLastError() const override { return 0; }
   void* GetSystemHandle() const override { return nullptr; }
-  const std::vector<unsigned char>& m_data;
+  std::vector<unsigned char> m_data;
   std::size_t m_pos = 0;
 };
 }  // namespace
@@ -278,10 +279,10 @@ EResource* EResourceLoaderImpl::DoLoadResource(EResourceManager* mgr, unsigned i
   if (!file) {
     if (!mgr->LookupId(id, pos, size)) {
       // PC mod: mods. An id the archive lacks may be a mod's (only when a mod folder exists).
-      const std::vector<unsigned char>* mod = simmy::mods_enabled() ? simmy::mods_resource(mgr->m_name, id) : nullptr;
-      if (!mod) return nullptr;
-      file = modFile = new ModMemFile(*mod);
-      size = static_cast<unsigned int>(mod->size());
+      std::vector<unsigned char> mod;
+      if (!simmy::mods_enabled() || !simmy::mods_resource(mgr->m_name, id, mod)) return nullptr;
+      size = static_cast<unsigned int>(mod.size());
+      file = modFile = new ModMemFile(std::move(mod));
     } else {
       file = mgr->GetArchiveFile();
       if (!file) return nullptr;

@@ -1062,6 +1062,7 @@ bool UpdatePlaceManipulator(int player, float dt) {
 //   chain@x,y             the tile's object chain printed (the tile map's object and its siblings)
 //   model#<hex>           the object files whose first ObjAnimDef draws that model printed
 //   paperroom@x,y,i[,sell] the room at the tile papered with WallSet entry i (or stripped), wallpainter.cpp
+//   probe:<guid>@x,y,dir|...  the first legal spot of the list (tested only); try:<guid>@... puts it there
 void WallPainterRoomTest(int x, int y, int index, bool sell);  // wallpainter.cpp
 int TestCreateObjectAt(const char* fileName, int x, int y);     // objectsim.cpp
 void PlacementTestTick(int ticks) {
@@ -1113,10 +1114,57 @@ void PlacementTestTick(int ticks) {
         po.ResetLocation();
         po.DestroyGridObject();
       }
+    } else if (std::strncmp(a, "probe:", 6) == 0 || std::strncmp(a, "try:", 4) == 0) {
+      // probe:<guid>@x,y,dir|x,y,dir|...  the first spot where a new object of that GUID may be put
+      // (tested only: the object is destroyed again); try:... puts it there.
+      const bool put = a[0] == 't';
+      const unsigned int guid = static_cast<unsigned int>(std::strtoul(a + (put ? 4 : 6), nullptr, 16));
+      const char* at = std::strchr(a, '@');
+      const char* end = std::strchr(a, ';');
+      PlacementObject po;
+      if (!at || !po.CreateNewPlacementObjectFromGuid(guid, 0)) {
+        std::printf("[place] probe 0x%08x: no object\n", guid);
+        continue;
+      }
+      int found = 0, error = 0, fx = 0, fy = 0, fd = 0;
+      for (const char* q = at + 1; q && (!end || q < end) && *q;) {
+        int dir = 0;
+        if (std::sscanf(q, "%d,%d,%d", &x, &y, &dir) < 2) break;
+        SetObjectDirection(dir, po.m_object);
+        int pos[2] = {y * 16 + 8, x * 16 + 8};
+        PlacementData data;
+        if (po.IsLegalToPlaceAtLocation(pos, data)) {
+          found = 1, fx = x, fy = y, fd = dir;
+          if (put) {
+            po.Place(pos, data);
+            found = po.Drop() ? 2 : 0;
+          }
+          break;
+        }
+        error = gPlacementError;
+        q = std::strchr(q, '|');
+        if (q) ++q;
+      }
+      if (found) std::printf("[place] %s 0x%08x: %s at %d,%d dir %d\n", put ? "try" : "probe", guid, put ? "placed" : "legal", fx, fy, fd);
+      else std::printf("[place] %s 0x%08x: nowhere (last error 0x%x)\n", put ? "try" : "probe", guid, error);
+      if (found != 2) po.Destroy();
+    } else if (std::strncmp(a, "info#", 5) == 0) {
+      // The object's placement data once made (heights: data 4; flags: data 8; wall placement flags: data 0xD).
+      PlacementObject po;
+      const unsigned int guid = static_cast<unsigned int>(std::strtoul(a + 5, nullptr, 16));
+      if (po.CreateNewPlacementObjectFromGuid(guid, 0) && po.m_object) {
+        cXObjectImpl* o = po.m_object;
+        std::printf("[place] info 0x%08x %s: heights 0x%x flags 0x%x wall 0x%x d17 %d multi %d\n", guid, o->DebugName(),
+                    static_cast<unsigned short>(o->GetData(4)), static_cast<unsigned short>(o->GetData(8)),
+                    static_cast<unsigned short>(o->GetData(0xd)), o->GetData(0x17), o->IsMultiTile() ? 1 : 0);
+        po.Destroy();
+      }
     } else {
       unsigned int guid = static_cast<unsigned int>(std::strtoul(a, nullptr, 16));
       const char* at = std::strchr(a, '@');
-      if (at && !std::isxdigit(static_cast<unsigned char>(*a)) && Globs_pObjectFolder) {
+      const char* hexEnd = a;
+      while (std::isxdigit(static_cast<unsigned char>(*hexEnd))) ++hexEnd;
+      if (at && hexEnd != at && Globs_pObjectFolder) {
         // An object file's name instead of the GUID (e.g. scenery_tree_boxwood@10,4).
         const std::string name(a, at);
         for (ObjSelector* first : Globs_pObjectFolder->m_selectors)

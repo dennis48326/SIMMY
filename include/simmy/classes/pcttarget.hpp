@@ -91,6 +91,7 @@ struct PCTTarget : UIObjectBase {
   void SetVariable(char* name, char* value) override;  // 801D3618
   char* GetVariable(char* name) override;  // 801D3D68
   unsigned short* GetLocalizable(char* name) override;  // 801D4170
+  void PageWithCStick();  // PC mod: mods (pcttarget.cpp)
   void Update() override;  // 801D464C
   void Draw(ERC* rc) override;  // 801D49A4
   unsigned int get_cell_info_array_index(unsigned int cell) const;  // 801D49D0

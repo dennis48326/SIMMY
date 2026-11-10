@@ -440,6 +440,8 @@ PCTTarget::~PCTTarget() {
 void PCTTarget::SetVariable(char* name, char* value) {
   char text[0x40] = {};
   int n = 0;
+  static const bool trace = std::getenv("SIMMY_UI_TRACE") != nullptr;  // PC dev trace
+  if (trace) std::fprintf(stderr, "[pct] set %s = %s (cell %u page %u)\n", name, value ? value : "", m_cell, m_page);
   if (!std::strcmp("PCT_CurrCell", name)) {
     if (m_closing || std::sscanf(value, "%d", &n) != 1) return;
     if (n < 0) n = 0xb;
@@ -646,6 +648,7 @@ unsigned short* PCTTarget::GetLocalizable(char* name) {
 // dialog with "ok".
 void PCTTarget::Update() {
   if (m_actionMenu) m_actionMenu->Run();
+  PageWithCStick();
   if (m_bbh && m_bbh->IsBuildBuyHUDActive()) m_bbh->UpdateBuildBuyHUD();
   if (!m_fireDialog1 && !m_fireDialog2 && !m_fireDialog3) return;
   auto text = [](const unsigned short* const* handle) {
@@ -673,6 +676,34 @@ void PCTTarget::Update() {
   play_sound(0x3804219f);
   m_dialogActive = 1;
   m_dialog.SpawnDialog();
+}
+
+// PC mod: mods. The C stick left/right pages the shown catalogue four columns back/on (the decorative tab
+// holds hundreds of entries with the converted PC objects; the GameCube's movie only moves a column at a
+// time). Only with a mod folder; the GameCube's catalogue ignores the C stick.
+void PCTTarget::PageWithCStick() {
+  if (!simmy::mods_enabled() || !m_visible || m_closing || m_tab >= m_tabCount || m_dialogActive) return;
+  static int wait = 0;
+  if (wait > 0) {
+    --wait;
+    return;
+  }
+  EController* pad = _pCtrlMan ? _pCtrlMan->GetController(static_cast<unsigned int>(_pCtrlMan->GetPlayerControllerIndex(m_player))) : nullptr;
+  if (!pad) return;
+  const double x = pad->GetStick(1, 0, ~0u);
+  if (x > -0.6 && x < 0.6) return;
+  const unsigned int n = static_cast<unsigned int>(m_cells.size());
+  const unsigned int columns = n / 6 + (n % 6 != 0);
+  if (columns <= 2) return;
+  const unsigned int last = columns - 2;  // two columns show
+  const unsigned int page = x < 0 ? (m_page >= 4 ? m_page - 4 : 0) : (m_page + 4 <= last ? m_page + 4 : last);
+  wait = 12;
+  if (page == m_page) return;
+  m_page = page;
+  while (m_cell > 0 && get_cell_info_array_index(m_cell) >= n) --m_cell;
+  update_grid_shaders();
+  on_selection_changed();
+  play_sound(0x93914889);  // PCT_SndScroll
 }
 
 // 801D49A4

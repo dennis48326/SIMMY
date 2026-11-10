@@ -155,7 +155,7 @@ class GcObjects:
                 rd = q.ptr(d + 0xC0)
                 anim = q.ptr(rd) if rd is not None else None
                 na = q.u32(anim - 4) if anim is not None else 0
-                out.append(dict(guid=q.u32(d + 0x1C), type=q.s16(d + 0x12), master=q.s16(d + 0x14),
+                out.append(dict(guid=q.u32(d + 0x1C), type=q.s16(d + 0x12), master=q.s16(d + 0x14), sub=q.s16(d + 0x16),
                                 price=q.s16(d + 0x24), functions=q.s16(d + 0x50) & 0xFFFF,
                                 model=q.u32(anim) if na else 0, thumbnail=q.u32(rd + 0x1C) if rd is not None else 0))
             self.files[rf_name(q, rf, i)] = out

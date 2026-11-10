@@ -1,13 +1,20 @@
 // PC mod: mods. The objects the mods add to the object database (see platform.hpp, pc_mods.cpp).
 //
-// A mod object is a copy of a GameCube object (its "base"): its ObjDefinition row with the mod's GUID
-// and price, its ResData with the mod's thumbnail, and its ObjAnimDef table with the mod's model in
-// every state (state animations, shader swaps, particles and the animated character dropped: they
-// belong to the base's model). The copies live in the "SimsObjects" quickdata's mod tail
-// (ERQuickdata::ModTail), so their self-relative pointers reach the image like the originals'. The
-// selector shares the base's object file (ResFile row): its trees, tree tables, slots, catalogue
-// function and semi-globals, so it behaves exactly like the base. Only single-tile bases with a
-// ResData are taken.
+// A mod object is a copy of a GameCube object (its "base"): its ObjDefinition row with the mod's GUID,
+// price, catalogue functions and room rating, its ResData with the mod's thumbnail, and its ObjAnimDef
+// table with the mod's model in every state (state animations, shader swaps, particles and the
+// animated character dropped: they belong to the base's model). The copies live in the "SimsObjects"
+// quickdata's mod tail (ERQuickdata::ModTail, sized from the mods), so their self-relative pointers
+// reach the image like the originals'. The selector shares the base's object file (ResFile row): its
+// trees, tree tables, slots, catalogue function and semi-globals, so it behaves like the base.
+//
+// Multi-tile objects (mod.ini "tiles"): a group made from the base, as the GameCube's own groups are: a
+// lead (sub index -1, the catalogue entry: price, name, thumbnail; never put in the world) and one part
+// per tile (sub index x << 8 | y), all with a master id of their own in the base's object file. The
+// first tile draws the model (the GameCube draws a group's model at the middle of its tiles); the
+// other tiles have no ResData. From a single-tile base every part is a copy of the base (each runs its
+// trees, as the parts of the GameCube's two-tile paintings do); from a group base (a rug) the lead is
+// the group's lead and the parts its parts.
 //
 // Saves name an object type by GUID ('objt'), so a lot keeps its mod objects while the mod is there;
 // without the mod the GUID is unknown and the object loads as the placeholder, which the load removes
@@ -16,14 +23,19 @@
 #include "simmy/unported_globals.hpp"
 #include "simmy/platform.hpp"
 
+#include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <map>
 #include <string>
+#include <vector>
 
 namespace {
 constexpr unsigned int kDefSize = 0xc4;      // an ObjDefinition row (pointer at +0xC0: ResData)
 constexpr unsigned int kResDataSize = 0x38;  // ResData (pointer at +0x00: the ObjAnimDef table)
 constexpr unsigned int kAnimDefSize = 0x20;  // ObjAnimDef (no pointers)
+constexpr unsigned int kMaxStates = 32;      // states copied (mods_tail_bytes counts as many)
 
 void PutBE32(unsigned char* p, unsigned int v) {
   p[0] = static_cast<unsigned char>(v >> 24), p[1] = static_cast<unsigned char>(v >> 16);
@@ -43,88 +55,206 @@ std::string Narrow(const std::u16string& s) {
   return out;
 }
 
-ObjSelector* FindBase(ObjectFolderImpl* folder, const simmy::ModObject& m) {
-  if (m.baseGuid) return folder->GetSelectorByGUID(static_cast<int>(m.baseGuid));
-  for (ObjSelector* s = folder->GetNextSelector(nullptr); s; s = folder->GetNextSelector(s)) {
-    if (s->m_mod || !s->m_def || !s->m_fileName || s->m_fileName != m.baseFile) continue;
-    if (objdef::MasterID(s->m_def) == 0 && objdef::ResData(s->m_def)) return s;
+// The base's rows: the definition a single-tile copy (or a group's lead) copies, and for a group base
+// its part that draws (has a ResData) and a part that does not.
+struct Base {
+  ObjSelector* selector = nullptr;  // the base (a group's lead)
+  const ObjDefinition* lead = nullptr;
+  const ObjDefinition* drawing = nullptr;
+  const ObjDefinition* plain = nullptr;
+  bool group = false;
+};
+
+Base FindBase(ObjectFolderImpl* folder, const simmy::ModObject& m) {
+  Base b;
+  ObjSelector* found = nullptr;
+  if (m.baseGuid) {
+    found = folder->GetSelectorByGUID(static_cast<int>(m.baseGuid));
+    if (found) found = reinterpret_cast<ObjSelector*>(found->GetMasterSelector());
+  } else {
+    // a single-tile object of the file with a model, else the file's first group lead
+    for (ObjSelector* s = folder->GetNextSelector(nullptr); s; s = folder->GetNextSelector(s)) {
+      if (s->m_mod || !s->m_def || !s->m_fileName || s->m_fileName != m.baseFile) continue;
+      if (objdef::MasterID(s->m_def) == 0 && objdef::ResData(s->m_def)) {
+        found = s;
+        break;
+      }
+      if (!found && objdef::MasterID(s->m_def) != 0 && objdef::SubIndex(s->m_def) == -1) found = s;
+    }
   }
-  return nullptr;
+  if (!found || !found->m_def || found->m_mod) return b;
+  b.selector = found;
+  b.lead = found->m_def;
+  if (objdef::MasterID(found->m_def) == 0) {
+    b.drawing = b.plain = found->m_def;
+    return b;
+  }
+  b.group = true;
+  for (int n = 0;; ++n) {
+    auto* part = reinterpret_cast<ObjSelector*>(folder->GetNthSubSelector(found, n));
+    if (!part) break;
+    const unsigned char* res = objdef::ResData(part->m_def);
+    if (res && objdef::AnimDefCount(objdef::AnimDefs(res)) && !b.drawing) b.drawing = part->m_def;
+    else if (!res && !b.plain) b.plain = part->m_def;
+  }
+  if (!b.drawing) b.drawing = b.plain;
+  if (!b.plain) b.plain = b.drawing;
+  return b;
+}
+
+// Mod rows in the tail, one after another.
+struct Tail {
+  unsigned char* base = nullptr;
+  unsigned int used = 0, size = 0;
+  unsigned char* Take(unsigned int n) {
+    n = (n + 3) & ~3u;
+    if (used + n > size) return nullptr;
+    unsigned char* p = base + used;
+    used += n;
+    return p;
+  }
+};
+
+// A copy of `from` with the mod's GUID, price, functions and room rating, and (withRes) a ResData copy
+// with the mod's thumbnail and model in every state; without: no ResData (a part that draws nothing).
+unsigned char* CopyDef(Tail& tail, const ObjDefinition* from, const simmy::ModObject& m, unsigned int guid,
+                       bool withRes, int room) {
+  const unsigned char* baseRes = objdef::ResData(from);
+  const unsigned char* baseAnims = baseRes ? objdef::AnimDefs(baseRes) : nullptr;
+  unsigned int anims = objdef::AnimDefCount(baseAnims);
+  if (anims > kMaxStates) anims = kMaxStates;
+  const unsigned int n = anims ? anims : 1;
+  unsigned char* def = tail.Take(kDefSize + (withRes ? kResDataSize + 4 + n * kAnimDefSize : 0));
+  if (!def) return nullptr;
+  std::memcpy(def, from, kDefSize);
+  PutBE32(def + 0x1c, guid);
+  if (m.price >= 0) PutBE16(def + 0x24, static_cast<unsigned int>(m.price > 0x7fff ? 0x7fff : m.price));
+  if (m.functions >= 0) PutBE16(def + 0x50, static_cast<unsigned int>(m.functions));
+  if (room >= 0) PutBE16(def + 0xb0, static_cast<unsigned int>(room));
+  if (!withRes) {
+    PutPtr(def + 0xc0, nullptr);
+    return def;
+  }
+  unsigned char* res = def + kDefSize;
+  unsigned char* animCount = res + kResDataSize;
+  unsigned char* animDefs = animCount + 4;
+  PutPtr(def + 0xc0, res);
+  // ResData: the mod's thumbnail; no animated character (+0x20: its skeleton is the base model's).
+  if (baseRes) std::memcpy(res, baseRes, kResDataSize);
+  else std::memset(res, 0, kResDataSize);
+  PutPtr(res, animDefs);
+  if (m.thumbnail) PutBE32(res + 0x1c, m.thumbnail);
+  if (m.model) PutBE32(res + 0x20, 0);
+  // The state table: every state shows the mod's model, without the base's animation, effects and
+  // shader swaps (they name the base model's parts).
+  PutBE32(animCount, n);
+  for (unsigned int i = 0; i < n; ++i) {
+    unsigned char* d = animDefs + i * kAnimDefSize;
+    if (anims) std::memcpy(d, baseAnims + i * kAnimDefSize, kAnimDefSize);
+    else std::memset(d, 0, kAnimDefSize), PutBE32(d + 0x18, 0xffffffffu);
+    if (!m.model) continue;
+    PutBE32(d + 0x00, m.model);
+    PutBE32(d + 0x04, 0);
+    PutBE32(d + 0x08, 0);
+    PutBE32(d + 0x0c, 0);
+    PutBE32(d + 0x10, 0);
+  }
+  return def;
 }
 }  // namespace
 
 void ObjectFolderImpl::AddModObjects() {
   if (!simmy::mods_enabled() || !m_objects) return;
-  unsigned char* const tail = m_objects->ModTail();
-  if (!tail) return;
+  Tail tail{m_objects->ModTail(), 0, m_objects->ModTailSize()};
+  if (!tail.base) return;
   const void* resFiles = m_objects->getTable("ResFile");
   if (!resFiles) return;
-  unsigned int used = 0;
+  static const bool verbose = std::getenv("SIMMY_MODS_VERBOSE") != nullptr;
+  const auto start = std::chrono::steady_clock::now();
+  // the next free master id of each object file (a group's parts share their file and master id)
+  std::map<const void*, short> nextMaster;
+  auto masterFor = [&](ObjSelector* base) -> short {
+    auto it = nextMaster.find(base->m_resFile);
+    if (it == nextMaster.end()) {
+      short top = 0;
+      for (ObjSelector* s = GetNextSelector(nullptr); s; s = GetNextSelector(s))
+        if (s->m_resFile == base->m_resFile && s->m_def && objdef::MasterID(s->m_def) > top) top = objdef::MasterID(s->m_def);
+      it = nextMaster.emplace(base->m_resFile, static_cast<short>(top < 0x100 ? 0x100 : top + 1)).first;
+    }
+    return it->second < 0x7fff ? it->second++ : 0;
+  };
+  int added = 0, groups = 0, skipped = 0;
   for (const simmy::ModObject& m : simmy::mods_objects()) {
     const std::string what = m.mod + " " + Narrow(m.name);
-    if (GetSelectorByGUID(static_cast<int>(m.guid))) {
-      std::fprintf(stderr, "[mods] %s: GUID %08X is taken; skipped\n", what.c_str(), m.guid);
+    bool taken = GetSelectorByGUID(static_cast<int>(m.guid)) != nullptr;
+    for (const simmy::ModTile& t : m.tiles) taken = taken || GetSelectorByGUID(static_cast<int>(t.guid)) || t.guid == m.guid;
+    if (taken) {
+      std::fprintf(stderr, "[mods] %s: GUID %08X (or a tile's) is taken; skipped\n", what.c_str(), m.guid);
+      ++skipped;
       continue;
     }
-    ObjSelector* base = FindBase(this, m);
-    if (!base || !base->m_def || base->m_mod) {
-      std::fprintf(stderr, "[mods] %s: base object \"%s\" (%08X) not found; skipped\n", what.c_str(), m.baseFile.c_str(), m.baseGuid);
+    const Base base = FindBase(this, m);
+    if (!base.selector || objdef::Type(base.lead) == 2 || objdef::Type(base.lead) == 8 || !base.drawing ||
+        !objdef::ResData(base.drawing)) {
+      std::fprintf(stderr, "[mods] %s: base object \"%s\" (%08X) not found or not usable; skipped\n", what.c_str(),
+                   m.baseFile.c_str(), m.baseGuid);
+      ++skipped;
       continue;
     }
-    const auto* baseDef = reinterpret_cast<const unsigned char*>(base->m_def);
-    const unsigned char* baseRes = objdef::ResData(base->m_def);
-    const unsigned char* baseAnims = objdef::AnimDefs(baseRes);
-    const unsigned int anims = objdef::AnimDefCount(baseAnims);
-    if (objdef::MasterID(base->m_def) != 0 || !baseRes || objdef::Type(base->m_def) == 2 || objdef::Type(base->m_def) == 8) {
-      std::fprintf(stderr, "[mods] %s: base \"%s\" is not a single-tile object with a model; skipped\n", what.c_str(),
-                   base->m_fileName);
+    const bool multi = !m.tiles.empty();
+    if (base.group && !multi) {
+      std::fprintf(stderr, "[mods] %s: base \"%s\" is a multi-tile group: the object needs tiles; skipped\n", what.c_str(),
+                   base.selector->m_fileName);
+      ++skipped;
       continue;
     }
-    const unsigned int need = kDefSize + kResDataSize + 4 + (anims ? anims : 1) * kAnimDefSize;
-    if (used + need > ERQuickdata::kModTail) {
-      std::fprintf(stderr, "[mods] %s: too many mod objects; skipped\n", what.c_str());
-      break;
+    char* file = const_cast<char*>(base.selector->m_fileName);
+    auto* resFile = reinterpret_cast<ResFile*>(const_cast<void*>(base.selector->m_resFile));
+    const unsigned int mark = tail.used;
+    unsigned char* lead = CopyDef(tail, multi ? base.lead : base.drawing, m, m.guid, true, m.room);
+    std::vector<unsigned char*> parts;
+    short master = 0;
+    if (lead && multi) {
+      master = masterFor(base.selector);
+      PutBE16(lead + 0x14, static_cast<unsigned int>(master));
+      PutBE16(lead + 0x16, 0xffff);
+      bool first = true;
+      for (const simmy::ModTile& t : m.tiles) {
+        unsigned char* d = CopyDef(tail, first ? base.drawing : base.plain, m, t.guid, first, first ? m.room : 0);
+        if (!d) break;
+        PutBE16(d + 0x14, static_cast<unsigned int>(master));
+        PutBE16(d + 0x16, static_cast<unsigned int>(t.x << 8 | t.y));
+        parts.push_back(d);
+        first = false;
+      }
     }
-    unsigned char* def = tail + used;
-    unsigned char* res = def + kDefSize;
-    unsigned char* animCount = res + kResDataSize;
-    unsigned char* animDefs = animCount + 4;
-    used += need;
-    // The definition: the base's, with the mod's GUID, price and ResData.
-    std::memcpy(def, baseDef, kDefSize);
-    PutBE32(def + 0x1c, m.guid);
-    if (m.price >= 0) PutBE16(def + 0x24, static_cast<unsigned int>(m.price > 0x7fff ? 0x7fff : m.price));
-    PutPtr(def + 0xc0, res);
-    // ResData: the mod's thumbnail; no animated character (+0x20: its skeleton is the base model's).
-    std::memcpy(res, baseRes, kResDataSize);
-    PutPtr(res, animDefs);
-    if (m.thumbnail) PutBE32(res + 0x1c, m.thumbnail);
-    if (m.model) PutBE32(res + 0x20, 0);
-    // The state table: every state shows the mod's model, without the base's animation, effects and
-    // shader swaps (they name the base model's parts).
-    const unsigned int n = anims ? anims : 1;
-    PutBE32(animCount, n);
-    for (unsigned int i = 0; i < n; ++i) {
-      unsigned char* d = animDefs + i * kAnimDefSize;
-      if (anims) std::memcpy(d, baseAnims + i * kAnimDefSize, kAnimDefSize);
-      else PutBE32(d + 0x18, 0xffffffffu);
-      if (!m.model) continue;
-      PutBE32(d + 0x00, m.model);
-      PutBE32(d + 0x04, 0);
-      PutBE32(d + 0x08, 0);
-      PutBE32(d + 0x0c, 0);
-      PutBE32(d + 0x10, 0);
+    if (!lead || (multi && (parts.size() != m.tiles.size() || !master))) {
+      tail.used = mark;
+      std::fprintf(stderr, "[mods] %s: no room for its rows (mod tail %u bytes); skipped\n", what.c_str(), tail.size);
+      ++skipped;
+      continue;
     }
-    const int added = AddSelector(reinterpret_cast<ObjDefinition*>(def), const_cast<char*>(base->m_fileName), const_cast<char*>(base->m_fileName),
-                reinterpret_cast<ResFile*>(const_cast<void*>(base->m_resFile)), ERQuickdata::S16(def, 0xbc), nullptr);
-    ObjSelector* s = GetSelectorByGUID(static_cast<int>(m.guid));
-    if (!added || !s) continue;
-    s->m_mod = m.mod.c_str();
+    auto add = [&](unsigned char* def) -> ObjSelector* {
+      if (!AddSelector(reinterpret_cast<ObjDefinition*>(def), file, file, resFile, ERQuickdata::S16(def, 0xbc), nullptr)) return nullptr;
+      ObjSelector* s = GetSelectorByGUID(static_cast<int>(objdef::GUID(reinterpret_cast<ObjDefinition*>(def))));
+      if (s) s->m_mod = m.mod.c_str();
+      return s;
+    };
+    ObjSelector* s = add(lead);
+    if (!s) continue;
+    for (unsigned char* d : parts) add(d);
     s->m_modName = m.name;
     s->m_modDesc = m.desc;
     if (!s->m_modName.empty()) s->m_modNameSlot = reinterpret_cast<const unsigned short*>(s->m_modName.c_str());
     if (!s->m_modDesc.empty()) s->m_modDescSlot = reinterpret_cast<const unsigned short*>(s->m_modDesc.c_str());
-    std::fprintf(stderr, "[mods] %s: object %08X (a copy of %s %08X), price %d, model %08X\n", what.c_str(), m.guid,
-                 base->m_fileName, objdef::GUID(base->m_def), ERQuickdata::S16(def, 0x24), m.model);
+    ++added;
+    if (multi) ++groups;
+    if (verbose || simmy::mods_objects().size() <= 20)
+      std::fprintf(stderr, "[mods] %s: object %08X (a copy of %s %08X%s), price %d, model %08X\n", what.c_str(), m.guid,
+                   base.selector->m_fileName, objdef::GUID(base.lead),
+                   multi ? (", " + std::to_string(parts.size()) + " tiles").c_str() : "", ERQuickdata::S16(lead, 0x24), m.model);
   }
+  const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+  std::fprintf(stderr, "[mods] objects: %d added (%d multi-tile), %d skipped; rows %u of %u bytes; %.1f ms\n", added, groups,
+               skipped, tail.used, tail.size, ms);
 }

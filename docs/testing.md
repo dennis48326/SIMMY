@@ -230,6 +230,9 @@ Development only: the launcher removes all of them except `SIMMY_INI` from the g
 | `SIMMY_ROOM_TRACE=1` | The room score constants and every room recomputed (area, floor, walls, objects, impact, light, score) |
 | `SIMMY_PLACE_TRACE=1` | Placement event trees run (placed, picked up, user placed / picked up, wall adjacency) |
 | `SIMMY_MODS=<dir>` | PC mod: mods: the mod folder when simmy.ini has no `mods=` ([mods.md](mods.md)); place a mod object with `SIMMY_PLACE_TEST=<tick>:<its GUID>@x,y` |
+| `SIMMY_MODS_VERBOSE=1` | PC mod: mods: a log line per mod object even with more than 20 ([mods.md](mods.md)) |
+| `SIMMY_PLACE_TEST` mod actions | `probe:<guid>@x,y,dir\|x,y,dir...` first legal spot (nothing placed), `try:<guid>@...` place at the first legal spot, `info#<guid>` an object's placement data (heights, flags, wall flags, footprint) ([`placemanipulator.cpp`](../src/game/placemanipulator.cpp)) |
+| `SIMMY_CAM_LOOK=x,y,distance,yaw,pitch[,height]` | The house camera looks at a tile (screenshots; [`camera.cpp`](../src/game/camera.cpp)) |
 | `SIMMY_PLACE_TEST="<tick>:<action>;..."` | At sim ticks: `<guid hex or object file name>@x,y[,dir]` buy-place a new object, `model#<hex>` list the object files drawing that model, `grab#<id>` grab and put back, `create:<object file>@x,y` make an object and put it there as CreateObject does (dynamic ones such as `efx_flood` merge), `wall@x,y,seg` delete a wall segment, `chain@x,y` print a tile's object chain, `paperroom@x,y,i[,sell]` paper (strip) the room with WallSet entry i ([`placemanipulator.cpp`](../src/game/placemanipulator.cpp)) |
 | `SIMMY_CTL_TRACE=1`, `SIMMY_COOP_TRACE=1`, `SIMMY_SWITCH_TRACE=1`, `SIMMY_CAM_TRACE=1` | Classic cursor (and its Go Here tile); both players; sim switching; the lot intro camera's steps |
 | `SIMMY_HL_TRACE=1` | Direct control's highlights every 60 frames: the objects the influence map lists at the sim's tile, the lit ones, the sim's location and facing |
