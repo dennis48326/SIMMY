@@ -25,6 +25,9 @@
 #include <SDL3/SDL_cpuinfo.h>
 #include <SDL3/SDL_thread.h>
 #ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #endif
