@@ -219,6 +219,52 @@ double's two halves are split at its middle (each side its own state). A second 
 blanket some double beds have inside the first (the PC's turned-down sheet, showing through in the
 bind pose) is left out.
 
+**Bar stools at counters.** On the GameCube a sim eats only at a table (or sitting without one: the
+plate in the lap; or standing). The food's "Eat" (food_carry_sg) asks for the best *eating surface*:
+`TryFindFunctionalObject` function 7 scores every object whose tree table has entry 0x19 and whose
+check tree passes by its data 0x26 (a table's: 65 cheap, 80-81 the dearer and end tables) less 3 per
+tile of distance. Only tables have that entry (table_sg "Function - Eating Surface"): its test wants
+the part's middle slot free and a chair on a side tile, in the same room, facing the part, free or the
+eater's, with the part's slot on that side free ("Find adjacent good chair"), and the held food's data
+4 flag 3. Its tree routes to the part with seat goals (the routing finds those chairs and runs the
+chair's entry 0x1A "Function - Sit"), plays the put-down (misc animation 9) and drops the plate into
+the slot on that side (1/4 tile from the middle, as high as the top); "Eat Sitting Down" then pulls the
+chair in (global "Sit - Scoot - In": state 1, 0.24 tiles) and eats. With no table: "Do - Sit" (any
+chair, plate in the lap), else "Eat Standing Up". A plate already on a table (a served meal, an
+interrupted one) is eaten from the chair on its side (the table's named tree
+`ct_chair_id_from_food_id`), else picked up and the search runs again. Counters (food_counter_sg)
+have no entry 0x19.
+
+A converted bar stool is a *counter seat*: a counter (any object with the prep and surface entries
+0x12 and 0x14: every GameCube counter, and the converted counters and islands copied from
+`counter_cheap1`) with a counter seat on one of its four side tiles, facing it, in its room, is an
+eating surface too (score 65, the cheapest GameCube table's: the nearer spot wins at equal quality).
+The game runs PC trees for it, written in the GameCube's own SimAntics bytecode in
+`src/game/countereat.cpp` (ids 0x1F00-0x1F03, past every object file's own) and run like the disc's:
+the test (holding food; a stool for this sim with its spot free; the food flag), the eating surface
+(sit on the stool through its own "Function - Sit", check again, the table's put-down, the plate into
+the counter's *eating slot* on the stool's side), a stand-in for `ct_chair_id_from_food_id` (a plate in
+an eating slot is eaten from its stool), and the counter's pickup for a plate in an eating slot (the
+counter's own reaches from its front only, where the stool stands: the sim sits on the stool, as at a
+table, and takes it). Primitive 0x60 (not used on the disc) finds and checks the stool. The eating
+slots are the counter's middle slot moved 1/4 tile toward each side (indices 0x60 + side, past its
+slot list: the counter's own trees, its slot count and the placement checks never see them; at the
+counter's height, a converted counter's own top). A spot needs the counter's middle slot empty (no
+appliance) and, on its front side, its prep slot too. Then everything else is the GameCube's: the
+stool is pulled in (its state 1 model), the eat animation (the counter top is 1.0, as the GameCube's
+tables), autonomy choosing to eat, "Serve" (the pot goes on a counter or table as before; the sims
+grab plates and take them to eating spots, stools included), talking while eating, the dirty plate
+cleared ("Throw Out" from the stool), getting up.
+
+mod.ini `counter_seat = 1` makes a chair a counter seat (`0`: never); without the key a chair whose
+`seat_offset` is 0.08 or more (a bar stool's height) is one. The converter writes it for every bar
+stool (1) and dining chair (0). With no mod object that is a counter seat none of this runs: a game
+without mods plays exactly as before (the determinism replay's hash is unchanged). Loading a save
+without the mods while a sim sat on a stool: the stool is gone (as any missing object); the sim stands
+up where it was and starts afresh (PC fix: before, it kept its sitting state and every route failed
+until its behaviour was switched off); a plate left in a GameCube counter's eating slot stays there
+and is cleared from the front. `SIMMY_COUNTER_EAT_TRACE=1` logs each stool search and check.
+
 ## Mod folder
 
 ```
@@ -244,7 +290,7 @@ mod.ini `[object]` keys: `guid`, `base` (object file) or `base_guid`, `name`, `d
 (`x,y:GUID[:height] ...`: a multi-tile object), `surface` (a surface's top, tiles), `connect`,
 `model_corner`, `model_end_px`, `model_end_nx`, `model_ends` (counter pieces), `seat_offset`,
 `state_models`, `base_parts`, `tile_model` (repeatable, after `tiles`), `comfort`,
-`energy` (seating and beds), `pack` (informational). Mods are read in folder-name order; a GUID
+`energy`, `counter_seat` (seating and beds), `pack` (informational). Mods are read in folder-name order; a GUID
 or resource id given twice keeps the first. A resource id the disc has is never taken from a mod.
 
 ## How it works
@@ -258,6 +304,7 @@ or resource id given twice keeps the first. A resource id the disc has is never 
 | Catalogue | `ObjSelector::GetCatalogName/Description/ShortName` (objselector_catalog.cpp), `PCTTarget::PageWithCStick` (pcttarget.cpp) | A mod object's own text (`m_modNameSlot`, `m_modDescSlot`); the cell list is a vector (no limit); the C stick pages four columns |
 | Surfaces | `ObjectSlotDescriptor` / `ObjectSlotHeight` (xrouting.cpp), `ModCounterPiece` / `ISimsCounterTopObject::SetObjOrient` (isimsobjectmodel.cpp) | The selector's `m_modSurface` (per part) and `m_modObject`: object slots at the mod's top; counter pieces by neighbours (`SIMMY_COUNTER_TRACE=1` logs the choice) |
 | Seating, beds | `SAnimator2::positionCharacter` / `ModSeatOffset` (sanimator2.cpp), `CopyDef` / `BasePart` (modobjects.cpp) | A sim in a converted seat or bed drawn at its seat's height (`SIMMY_SEAT_TRACE=1` logs container, state, root, pelvis and offset every 30 frames); per-state and per-part models, base parts by tile, ratings |
+| Bar stools at counters | `src/game/countereat.cpp` (`simmy::countereat`), hooks in `TryFindFunctionalObject` / `TryCallFunctionalTree` / `TryCallNamedTree` / `TryElement` 0x60 (objectsim.cpp), `Behavior::GetTree` (treesim.cpp), `ObjectSlotDescriptor` (xrouting.cpp) | A counter with a counter seat facing it offers eating surface entry 0x19 through PC trees (SimAntics bytecode built in code, ids 0x1F00-0x1F03), its eating slots 0x60-0x63 and the pickup from them; nothing runs unless a loaded mod object is a counter seat |
 | Fire code | `EIObjectMan::CountObjects` (iobjectman.cpp) | A mod object's model counts at 5/7 of its size: what it would weigh with the disc's fixed-point vertices (16 bytes a vertex against 28) |
 | Saves | unchanged | `objt` names types by GUID; a mod object (and each part) saves and loads like any other |
 
@@ -271,7 +318,7 @@ next save no longer has it. Things that stood on a removed surface are on the fl
 nothing placed), `try:<guid>@...` (placed there), `info#<guid>` (an object's placement data),
 `sell#<id>` (an object sold, e.g. to put a converted table where the lot's own stood; note that an object
 file name in a place action may name a mod object, which copies the file: use GUIDs);
-`SIMMY_COUNTER_TRACE=1` (counter pieces); `SIMMY_SLOT_TRACE=1` (slot heights); `SIMMY_SEAT_TRACE=1` (sims in seats and beds: offsets);
+`SIMMY_COUNTER_TRACE=1` (counter pieces); `SIMMY_COUNTER_EAT_TRACE=1` (bar stools at counters); `SIMMY_SLOT_TRACE=1` (slot heights); `SIMMY_SEAT_TRACE=1` (sims in seats and beds: offsets);
 `SIMMY_CAM_LOOK=x,y,distance,yaw,pitch[,height]` (the camera looks at a tile: screenshots).
 
 ## The converter (tools/pcobj/)
@@ -294,9 +341,9 @@ file name in a place action may name a mod object, which copies the file: use GU
 - The copy behaves like its GameCube base (room score from the PC room rating, price, the base's
   interactions); PC behaviour (BHAVs: aquariums' fish, fountains' water, clocks, shrines) is not
   converted. Animated objects show their mesh in its bind pose; no particles, no animated water.
-- Seating and beds behave as their GameCube base: no PC-only actions (recliners do not recline, no
-  bar stool use at counters: the GameCube's sims eat only at tables and have no bars; a stool pulled up
-  to a table works); comfort / energy gained are the base tier's. The sit and sleep animations are the
+- Seating and beds behave as their GameCube base: no PC-only actions (recliners do not recline;
+  bar stools are the exception: sims eat at counters on them, see "Bar stools at counters", but no bar
+  drinks, and a sim does not eat standing at a counter; a stool pulled up to a table works too); comfort / energy gained are the base tier's. The sit and sleep animations are the
   GameCube's (a lounge chair is sat on upright; a sim on a PC chair leans its arms at the GameCube's
   table height). "Nap" on a sofa is the GameCube's own: its check refused it in our runs on the
   GameCube's sofa too. Beds have two static models (made, slept in) instead of the animated blanket.

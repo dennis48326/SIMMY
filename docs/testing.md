@@ -171,6 +171,7 @@ Development only: the launcher removes all of them except `SIMMY_INI` from the g
 | `SIMMY_SPRITE_TRACE=1`, `SIMMY_SPRITE_HOLD=1` | Balloons: trace; keep up for shots |
 | `SIMMY_SLOT_TRACE=1`, `SIMMY_SLOT_OFFSET_OFF=1` | Slot offsets: trace; disable |
 | `SIMMY_COUNTER_TRACE=1` | PC mod: mods: the piece (plain, corner, ends) each converted counter shows and its neighbours |
+| `SIMMY_COUNTER_EAT_TRACE=1` | PC mod: mods: each bar-stool search at a counter (who, which counter, the stool and eating slot found or none) and each check before the plate goes down ([mods.md](mods.md) "Bar stools at counters") |
 | `SIMMY_SEAT_TRACE=1` | PC mod: mods: every 30 frames, each sim's container (seat, bed), its state, the sim's root and pelvis and the seat offset drawn ([mods.md](mods.md) "Seating and beds") |
 | `SIMMY_PORTRAIT_DUMP=<prefix>` | Write each finished portrait as BMP |
 | `SIMMY_UI3D_TRACE=1` | UI3D displays every 60 frames |

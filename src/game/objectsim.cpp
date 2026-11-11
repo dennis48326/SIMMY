@@ -9,6 +9,7 @@
 #include "simmy/sn_qsort.hpp"
 #include "simmy/mp4.hpp"  // PC mod: 4 players
 #include "simmy/detmath.hpp"
+#include "simmy/countereat.hpp"  // PC mod: mods (bar stools at counters)
 
 #include <algorithm>
 #include <cmath>
@@ -384,6 +385,8 @@ int cXObjectImpl::TryElement(StackElem* frame, short op, const unsigned char* pa
     case 0x41: r = TryPassiveInfluence(frame, params); break;
     case 0x42: r = TryWantsAndFearsNotify(frame, params); break;
     case 0x43: r = TryChangeWantFearTree(frame, params); break;
+    // PC mod: mods. The counter-seat primitive of the PC counter-eating trees (not on the disc).
+    case 0x60: r = simmy::countereat::TryCounterSeat(this, frame, params); break;
     default:
       if (m_treeSim) m_treeSim->SetError(5);
       Error(5);
@@ -2512,15 +2515,18 @@ int cXObjectImpl::TryFindFunctionalObject(StackElem* frame, const unsigned char*
   }
   cXObjectImpl* best = nullptr;
   float bestScore = 0.0f;
+  // PC mod: mods. A counter with a bar stool facing it is an eating surface too (countereat.cpp).
+  const bool counters = entry == 0x19 && simmy::countereat::Active();
   for (cXObjectImpl* o = Globs_pObjectModule ? Globs_pObjectModule->m_first : nullptr; o; o = o->m_nextObject) {
     // In use, or burning (cXObjectImpl::IsBurning 800EB5F8: data 8 bit 0x200).
     if (o->GetData(0x19) >= 1 || (static_cast<unsigned short>(o->GetData(8)) >> 9 & 1)) continue;
-    if (!o->GetTreeID(entry)) continue;
+    const bool counter = counters && !o->GetTreeID(entry) && simmy::countereat::IsEatSurface(o);
+    if (!counter && !o->GetTreeID(entry)) continue;
     int score = 0x32;
-    if (scoreData != -1) score = o->GetData(scoreData);
+    if (scoreData != -1) score = counter ? simmy::countereat::kScore : o->GetData(scoreData);
     m_data.WriteVar(0x42, static_cast<short>(score));
     if (score == 0) continue;
-    if (const short check = FnCheckTreeID(o, entry)) {
+    if (const short check = counter ? simmy::countereat::kEatTest : FnCheckTreeID(o, entry)) {
       if (!m_treeSim || !m_treeSim->RunCheckTree(o->GetBehavior(), check, static_cast<short>(o->m_id), nullptr))
         continue;
       if (GetData(0x42) == 0) continue;
@@ -2552,7 +2558,11 @@ int cXObjectImpl::TryCallFunctionalTree(StackElem* frame, const unsigned char* p
   const int fn = static_cast<short>(simmy::be16(params));
   if (fn < 0 || fn > 14) return 0;
   cXObjectImpl* o = x->GetObjectImplementation();
-  const short tree = o ? o->GetTreeID(kEntries[fn]) : 0;
+  short tree = o ? o->GetTreeID(kEntries[fn]) : 0;
+  // PC mod: mods. A counter's eating surface with a bar stool (countereat.cpp).
+  if (!tree && fn == 7 && simmy::countereat::IsEatSurface(o)) tree = simmy::countereat::kEatTree;
+  // ... and its pickup for a plate in its eating slot (from the stool on that side).
+  if (fn == 5 && tree && simmy::countereat::IsEatSlotPickup(o, this)) tree = simmy::countereat::kPickupTree;
   if (!tree) return 0;
   return GosubObjectTree(x, nullptr, tree, (simmy::be16(params + 2) & 1) != 0) ? 3 : 0;
 }
@@ -2928,7 +2938,9 @@ int cXObjectImpl::TryCallNamedTree(StackElem* frame, const unsigned char* params
     return -1;
   }
   Behavior* tb = target->GetBehavior();
-  const short tree = TreeIDByName(tb, name);
+  short tree = TreeIDByName(tb, name);
+  // PC mod: mods. The tables' ct_chair_id_from_food_id for a plate on a counter (countereat.cpp).
+  if (!tree) tree = simmy::countereat::NamedTree(target, name);
   if (TraceVM(m_id)) std::printf("[vm] %s calls \"%s\" (%04x) of %s, mode %d\n", DebugName(), name, static_cast<unsigned short>(tree), target->DebugName(), mode);
   if (!tree) return 0;
   if (mode < 2) {

@@ -3,6 +3,7 @@
 // motive decay. See treesim.hpp.
 #include "simmy/types_gen.hpp"
 #include "simmy/unported_globals.hpp"
+#include "simmy/countereat.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -142,12 +143,15 @@ EREdithTreeSet* Behavior::TreeSetFor(short id) {
 
 // 800AC384
 const unsigned char* Behavior::GetTree(short id) {
+  // PC mod: mods. The PC counter-eating trees (ids past every object file's own: countereat.cpp).
+  if (const unsigned char* pc = simmy::countereat::Tree(id)) return pc;
   EREdithTreeSet* set = TreeSetFor(id);
   return set ? set->GetBehaviorTree(static_cast<unsigned short>(id)) : nullptr;
 }
 
 // 800AC4A4
 const char* Behavior::GetTreeName(short id) {
+  if (const char* pc = simmy::countereat::TreeName(id)) return pc;  // PC mod: mods
   if (EREdithTreeSet* set = TreeSetFor(id))
     for (const EREdithTreeSet::Tree& t : set->m_trees)
       if (t.m_id == static_cast<unsigned short>(id)) return t.m_name;

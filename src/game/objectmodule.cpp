@@ -357,13 +357,30 @@ void ObjectModuleImpl::DoStream(ReconBuffer* b, int version) {
   SIMMY_STUB("ObjectModuleImpl::DoStream: the selected people, object lists", 0x800F3C94);
   // The placeholders (objects of a type the folder does not have, GUID 0x3C08965F) go (vtable 0x5C),
   // the list walked again from its start after each.
+  bool placeholders = false;
   if (b->m_mode == ReconBuffer__Mode::kRead)
     for (cXObjectImpl* o = m_first; o;) {
       if (o->m_def && objdef::GUID(o->m_def) == kPlaceholderGUID) {
         KillObject(static_cast<short>(o->m_id));
+        placeholders = true;
         o = m_first;
       } else {
         o = o->m_nextObject;
+      }
+    }
+  // PC fix: a person saved sitting on a seat that is gone now (a mod's chair or bar stool loaded without
+  // the mod) keeps its sitting state (person data 0 = 1) with no chair to stand up from: every later
+  // route fails (error 0x35, TryGotoRoutingSlot) until the person's behaviour is switched off, and what
+// it was doing there (eating) goes on in the air. It stands and starts afresh (its trees reset, as
+// after a tree error: Cleanup).
+  if (placeholders)
+    for (cXObjectImpl* o = m_first; o; o = o->m_nextObject) {
+      auto* p = dynamic_cast<cXPersonImpl*>(o);
+      cXObject* seat = p ? p->GetContainer() : nullptr;
+      if (p && p->GetIdleState() == 1 && !(seat && seat->GetObjectImplementation() && seat->GetObjectImplementation()->IsChair())) {
+        std::printf("[vm] %s: its seat is gone, it stands\n", p->DebugName());
+        p->SetPersonData(0, 0);
+        p->Cleanup(nullptr);
       }
     }
   // The objects in the world take their places on the passive influence map (targets).

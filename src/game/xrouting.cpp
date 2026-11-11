@@ -4,6 +4,7 @@
 // Y = [0] / 16. Directions are eighths of a turn: 0 toward -[0], 2 toward +[1], 4 +[0], 6 -[1].
 #include "simmy/types_gen.hpp"
 #include "simmy/classes/placement.hpp"
+#include "simmy/countereat.hpp"
 #include "simmy/unported_globals.hpp"
 #include "simmy/detmath.hpp"
 
@@ -224,6 +225,8 @@ int ObjectSlotCount(cXObjectImpl* object) {
 // or null.
 const unsigned char* ObjectSlotDescriptor(cXObjectImpl* object, int index) {
   if (!object || !object->m_def || index < 0) return nullptr;
+  // PC mod: mods. A counter's eating slots (bar stools: countereat.cpp), past its own slot list.
+  if (index >= simmy::countereat::kCounterEatSlot) return simmy::countereat::SlotDescriptor(object, index);
   const short id = ERQuickdata::S16(object->m_def, 0x28);
   const unsigned char* file = SelectorResFile(object->m_selector);
   if (id == 0 || !file) return nullptr;

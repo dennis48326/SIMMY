@@ -23,6 +23,8 @@
 //   base_parts = 1             a group base's parts are matched by tile (x << 8 | y sub index)
 //   tile_model = 1,0:0xMODEL 1:0x... 2:0x...   (repeatable) the model a tile's part draws, its states
 //   comfort = 7, energy = 2    motive ratings, where the base has one
+//   counter_seat = 1           a bar stool: sims sit on it to eat at the counter it faces (0: never;
+//                              no key: a chair with seat_offset 0.08 or more)
 // Resource files next to it: "<manager>_<8 hex digits>.res", e.g. "models_9A3F0C12.res". Only their
 // names are read at start-up; a resource is read from its file each time the game loads it.
 #include "pc_settings.hpp"
@@ -212,6 +214,10 @@ void LoadModIni(const std::string& mod, const std::string& path) {
     else if (key == "base_parts") cur->baseParts = std::atoi(v.c_str()) != 0;
     else if (key == "comfort") cur->comfort = std::atoi(v.c_str());
     else if (key == "energy") cur->energy = std::atoi(v.c_str());
+    else if (key == "counter_seat") {
+      cur->counterSeat = std::atoi(v.c_str()) != 0 ? 1 : 0;
+      ok = v == "0" || v == "1";
+    }
     else if (key == "tile_model") {
       // (after "tiles") "x,y:0xMODEL [state:0xMODEL ...]"
       int x = 0, y = 0, n = 0;

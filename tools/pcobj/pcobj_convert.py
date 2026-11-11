@@ -834,6 +834,9 @@ def convert(s, it, base_override=None, write=True):
                 f.write(f'energy = {seat["energy"]}\n')
             if 'in' in sids:
                 f.write(f'state_models = 1:0x{sids["in"]:08X}\n')
+            # a bar stool: sims sit on it to eat at the counter it faces (game: countereat.cpp); a dining
+            # chair never (its seat is below a counter's reach even when tall)
+            f.write(f'counter_seat = {1 if kind == "barstool" else 0}\n' if kind in ('dining', 'barstool') else '')
         if tiles:
             f.write('tiles = ' + ' '.join(f'{x},{y}:0x{g:08X}' + (f':{h:.3f}' if surface and h else '')
                                           for x, y, g, h in tiles) + '\n')

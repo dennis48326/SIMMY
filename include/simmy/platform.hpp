@@ -268,6 +268,9 @@ struct ModObject {
   bool baseParts = false;
   // The catalogue's motive ratings (comfort, energy): written where the base has one (-1: the base's).
   int comfort = -1, energy = -1;
+  // A bar stool (counter_seat = 1): a person sits on it to eat at the counter it faces (countereat.cpp);
+  // -1 (no key): a chair seated 0.08 tiles or more above the GameCube's seats (a bar stool's height).
+  int counterSeat = -1;
 };
 void mods_init();                // once at start-up (main thread), after settings_load
 bool mods_enabled();             // a mod folder was found (also when it holds no mods)
