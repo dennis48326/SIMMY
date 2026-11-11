@@ -117,6 +117,20 @@
 ; the exe is used when there is one; with neither, mods are off and nothing changes.
 ;mods = mods
 
+; Performance (docs/performance.md). disc_cache: the game's archives (about 870 MB of the disc image;
+; not the movies and music) are read into RAM by a background thread at start, so a sound, animation or
+; texture the game loads during play never waits for the disc (the GameCube read them from the disc as
+; it went; from a hard disk or a cold file cache that was the random hitching). auto (default): on with
+; 8 GB of RAM or more, else "warm" (the same reads through the system's file cache, nothing kept);
+; on / ram, warm, off.
+;disc_cache = auto
+
+; frame_pacing: how frames are held to the game's 60 Hz. precise (default): an exact sleep to each
+; frame's deadline. sleep: the older millisecond sleep. vsync: with vsync on and a 59-61 Hz display,
+; let the display's refresh pace the game (no beat between the two clocks); falls back to precise
+; when the display does not pace (vsync off, other refresh rates, network play).
+;frame_pacing = precise
+
 ; PC mod: network play: two PCs play the two-player game together (docs/netplay.md). Usually started
 ; from the command line (simmy --host / simmy --join <address>) or run_net_host.bat / run_net_join.bat;
 ; settings here apply to every start, so leave host / join commented out unless this PC always hosts.
@@ -163,3 +177,10 @@
 ;pan_down = kp_2
 ;pan_left = kp_4
 ;pan_right = kp_6
+
+; Diagnostics. perf = on: the frame-hitch profiler (also F3 in the game, or the F1 menu): every frame
+; that takes much longer than usual is written with what happened in it to perf_log.txt next to
+; simmy.exe, with a summary when the game exits. Send that file with game_log.txt when reporting
+; slowdowns (docs/performance.md).
+[debug]
+;perf = off

@@ -1,6 +1,7 @@
 // Port of game/simulator.cpp (cSimulatorImpl) and game/timeofday.cpp (GameTime): the game clock and the
 // lot's tick. See simulator.hpp.
 #include "simmy/types_gen.hpp"
+#include "simmy/perf.hpp"
 #include "simmy/unported_globals.hpp"
 
 #include <cstdio>
@@ -229,6 +230,8 @@ void cSimulatorImpl::CommitPendingFunds() {
 // One tick: the objects (with the tick's own random sequence), then two game seconds (three or one
 // while catching up with PostSecondOfDay), with the minute, hour, day, month and year rolling over.
 int cSimulatorImpl::SimulateOneTick() {
+  SIMMY_PERF_SCOPE(Sim);  // PC: the frame-hitch profiler (perf.hpp); reads the clock only
+  simmy::perf::count_sim_tick();
   int message = 0;
   bool hourChanged = false;
   CommitPendingFunds();

@@ -6,6 +6,7 @@
 // system. Both are read-only: nothing is ever written next to the game data.
 #include "simmy/platform.hpp"
 #include "gcm_disc.hpp"
+#include "simmy/perf.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -18,11 +19,31 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
+
+#include <SDL3/SDL_cpuinfo.h>
+#include <SDL3/SDL_thread.h>
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#endif
 
 namespace fs = std::filesystem;
 
 namespace simmy {
+
+// PC: the RAM copy of the game's archives (disc_cache, see data_source_start_cache below). One per
+// cached file: its bytes, filled by a background thread in 4 MiB chunks, each chunk usable as soon as
+// it is marked ready. Never freed (the process ends with _Exit).
+struct CachedFile {
+  std::string key;  // GcmDisc::normalize'd game path
+  std::uint64_t size = 0;
+  unsigned char* data = nullptr;
+  std::unique_ptr<std::atomic<bool>[]> ready;  // per chunk
+  std::size_t chunks = 0;
+  std::atomic<bool> complete{false};
+};
 
 struct DataFile {
   const HostFile* host = nullptr;  // the disc image, or `owned` (a file of the data folder)
@@ -30,6 +51,8 @@ struct DataFile {
   std::uint64_t base = 0;  // where the file starts in `host`
   std::uint64_t size = 0;
   std::uint64_t pos = 0;   // data_read / data_seek position
+  std::string name;        // the game path (perf.hpp's disc read counts)
+  CachedFile* cache = nullptr;  // its RAM copy (disc_cache), if it is one of the cached archives
   bool error = false;
   // The position and read-ahead are the game's EFile state: one thread uses a handle at a time, as on
   // the GC, but a stray concurrent use must not corrupt the buffer (std::FILE also locked per call).
@@ -58,12 +81,38 @@ struct IoStats {
 };
 IoStats g_io;
 
-std::size_t HostRead(const HostFile* host, std::uint64_t offset, void* dst, std::size_t size, bool* ioError = nullptr) {
-  if (!g_io.on) return host->read_at(offset, dst, size, ioError);
+constexpr std::uint64_t kCacheChunk = 4u << 20;
+std::atomic<unsigned long long> g_cacheHits{0}, g_cacheHitBytes{0};
+
+// From the RAM copy when every chunk the read touches is in (the same bytes as the image's).
+bool CacheRead(const DataFile* f, std::uint64_t offset, void* dst, std::size_t size) {
+  CachedFile* c = f->cache;
+  if (!c || size == 0) return false;
+  const std::uint64_t rel = offset - f->base;
+  if (rel + size > c->size) return false;
+  if (!c->complete.load(std::memory_order_acquire)) {
+    for (std::uint64_t k = rel / kCacheChunk, last = (rel + size - 1) / kCacheChunk; k <= last; ++k)
+      if (!c->ready[k].load(std::memory_order_acquire)) return false;
+  }
+  std::memcpy(dst, c->data + rel, size);
+  g_cacheHits.fetch_add(1, std::memory_order_relaxed);
+  g_cacheHitBytes.fetch_add(size, std::memory_order_relaxed);
+  return true;
+}
+
+std::size_t HostRead(const DataFile* f, std::uint64_t offset, void* dst, std::size_t size, bool* ioError = nullptr) {
+  if (CacheRead(f, offset, dst, size)) return size;
+  const HostFile* host = f->host;
+  const bool perfOn = perf::on();
+  if (!g_io.on && !perfOn) return host->read_at(offset, dst, size, ioError);
+  SIMMY_PERF_SCOPE(Disc);
   const auto t0 = std::chrono::steady_clock::now();
   const std::size_t n = host->read_at(offset, dst, size, ioError);
-  g_io.nanoseconds += static_cast<unsigned long long>(
+  const auto ns = static_cast<unsigned long long>(
       std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - t0).count());
+  if (perfOn) perf::count_disc(f->name.c_str(), n, ns);
+  if (!g_io.on) return n;
+  g_io.nanoseconds += ns;
   ++g_io.reads;
   g_io.bytes += n;
   return n;
@@ -194,6 +243,114 @@ std::string data_source_description() {
 }
 
 static DataFile* OpenFile(const char* gamePath);
+static DataFile* OpenFileForCache(const char* gamePath);
+
+// ---- disc_cache: the game's archives in RAM ------------------------------------------------------
+// The GameCube read its archives from the disc as it needed them, and the port did the same: every
+// resource the game loads during play (a sound the first time a sim makes it, an animation, a texture,
+// a model) was a synchronous read on the main thread, at a random place in a 1.4 GB image. From a hard
+// disk or a cold OS cache that is a seek each (10-500 ms, measured in perf_log.txt as "disc"), which
+// is the random hitching. With disc_cache on (default: auto = when the PC has 8 GB of RAM or more) a
+// background thread reads the archives the game loads resources from, start to end in 4 MiB chunks,
+// at low priority, into RAM (about 870 MB; movies.arc and audiostr.arc, streamed by their own threads,
+// are left out); from then on the game's reads are memory copies. The bytes are the image's: the game
+// sees no difference except time.
+namespace {
+// Smallest first (cheap, read early), then the big ones in the order in-play loads need them.
+const char* const kCachedArchives[] = {
+    "data/index.ind",    "data/index1.ind",   "data/levels.arc",   "data/ambients.arc", "data/effectsa.arc",
+    "data/effectse.arc", "data/effectss.arc", "data/soundtra.arc", "data/fonts.arc",    "data/soundeve.arc",
+    "data/binaries.arc", "data/characte.arc", "data/emitters.arc", "data/shaders.arc",  "data/edithtre.arc",
+    "data/flashes.arc",  "data/quickdat.arc", "data/animatio.arc", "data/samples.arc",  "data/models.arc",
+    "data/textures.arc", "data/datasets.arc"};
+std::vector<std::unique_ptr<CachedFile>> g_cache;  // set up before any reader can see it
+std::atomic<bool> g_cacheStarted{false};
+
+CachedFile* FindCache(const char* gamePath) {
+  if (g_cache.empty()) return nullptr;
+  const std::string key = GcmDisc::normalize(gamePath);
+  for (const auto& c : g_cache)
+    if (c->key == key) return c.get();
+  return nullptr;
+}
+
+bool g_cacheWarmOnly = false;  // disc_cache = warm: read through the OS file cache only, keep nothing
+
+void CacheThread() {
+#ifdef _WIN32
+  // Low CPU and I/O priority: the game's own reads go first.
+  SetThreadPriority(GetCurrentThread(), THREAD_MODE_BACKGROUND_BEGIN);
+#else
+  SDL_SetCurrentThreadPriority(SDL_THREAD_PRIORITY_LOW);
+#endif
+  const auto t0 = std::chrono::steady_clock::now();
+  std::uint64_t total = 0;
+  for (const auto& c : g_cache) {
+    DataFile* f = OpenFileForCache(c->key.c_str());
+    if (!f) continue;
+    for (std::size_t k = 0; k < c->chunks; ++k) {
+      const std::uint64_t at = k * kCacheChunk;
+      const std::size_t n = static_cast<std::size_t>(std::min<std::uint64_t>(kCacheChunk, c->size - at));
+      bool ioError = false;
+      if (g_cacheWarmOnly) {
+        static std::vector<unsigned char> scratch(kCacheChunk);
+        if (f->host->read_at(f->base + at, scratch.data(), n, &ioError) != n) break;
+        total += n;
+        continue;
+      }
+      if (f->host->read_at(f->base + at, c->data + at, n, &ioError) != n) {
+        std::fprintf(stderr, "[disc] cache: short read in %s at %llu: the rest of it is read from the disc\n",
+                     c->key.c_str(), static_cast<unsigned long long>(at));
+        break;
+      }
+      c->ready[k].store(true, std::memory_order_release);
+      total += n;
+    }
+    bool all = !g_cacheWarmOnly;
+    for (std::size_t k = 0; all && k < c->chunks; ++k) all = all && c->ready[k].load();
+    c->complete.store(all, std::memory_order_release);
+    delete f;
+  }
+  const double s = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+  std::fprintf(stderr, "[disc] cache: %.0f MB of game archives %s after %.1f s\n", static_cast<double>(total) / 1048576.0,
+               g_cacheWarmOnly ? "read through the OS file cache" : "in RAM", s);
+}
+}  // namespace
+
+void data_source_start_cache(int mode) {
+  // mode: 0 off, 1 on (RAM), 2 auto (RAM with 8 GB of RAM or more, else warm), 3 warm
+  if (g_cacheStarted.exchange(true) || g_kind == Kind::None) return;
+  const int ramMb = SDL_GetSystemRAM();
+  if (mode == 0) {
+    std::fprintf(stderr, "[disc] cache: off (disc_cache = off)\n");
+    return;
+  }
+  g_cacheWarmOnly = mode == 3 || (mode == 2 && ramMb > 0 && ramMb < 7600);
+  std::uint64_t total = 0;
+  for (const char* name : kCachedArchives) {
+    DataFile* f = OpenFileForCache(name);
+    if (!f) continue;
+    auto c = std::make_unique<CachedFile>();
+    c->key = GcmDisc::normalize(name);
+    c->size = f->size;
+    c->chunks = static_cast<std::size_t>((c->size + kCacheChunk - 1) / kCacheChunk);
+    c->ready = std::make_unique<std::atomic<bool>[]>(c->chunks);
+    for (std::size_t k = 0; k < c->chunks; ++k) c->ready[k] = false;
+    if (!g_cacheWarmOnly) c->data = new (std::nothrow) unsigned char[c->size ? c->size : 1];
+    delete f;
+    if (!g_cacheWarmOnly && !c->data) break;
+    total += c->size;
+    g_cache.push_back(std::move(c));
+  }
+  std::fprintf(stderr, "[disc] cache: reading %zu archives (%.0f MB) %s in the background (%d MB of RAM)\n",
+               g_cache.size(), static_cast<double>(total) / 1048576.0,
+               g_cacheWarmOnly ? "through the OS file cache (warm: nothing kept)" : "into RAM", ramMb);
+  std::thread(CacheThread).detach();
+}
+
+void data_cache_stats(unsigned long long& hits, unsigned long long& bytes) {
+  hits = g_cacheHits.load(), bytes = g_cacheHitBytes.load();
+}
 
 DataFile* data_open(const char* gamePath) {
   if (!g_io.on) return OpenFile(gamePath);
@@ -206,6 +363,12 @@ DataFile* data_open(const char* gamePath) {
 }
 
 static DataFile* OpenFile(const char* gamePath) {
+  DataFile* f = OpenFileForCache(gamePath);
+  if (f) f->cache = FindCache(gamePath);
+  return f;
+}
+
+static DataFile* OpenFileForCache(const char* gamePath) {
   if (!gamePath) return nullptr;
   if (g_kind == Kind::Disc) {
     const GcmDisc::File* f = g_disc->find(gamePath);
@@ -214,6 +377,7 @@ static DataFile* OpenFile(const char* gamePath) {
     file->host = &g_disc->image();
     file->base = f->offset;
     file->size = f->size;
+    file->name = gamePath;
     return file;
   }
   if (g_kind == Kind::Folder) {
@@ -225,6 +389,7 @@ static DataFile* OpenFile(const char* gamePath) {
     file->size = host->size();
     file->host = host.get();
     file->owned = std::move(host);
+    file->name = gamePath;
     return file;
   }
   return nullptr;
@@ -263,7 +428,7 @@ std::size_t data_read_at(const DataFile* f, std::uint64_t offset, void* dst, std
   if (!f || offset >= f->size) return 0;
   const std::uint64_t left = f->size - offset;
   if (size > left) size = static_cast<std::size_t>(left);
-  return HostRead(f->host, f->base + offset, dst, size);
+  return HostRead(f, f->base + offset, dst, size);
 }
 
 std::size_t data_read(DataFile* f, void* dst, std::size_t size) {
@@ -287,7 +452,7 @@ std::size_t data_read(DataFile* f, void* dst, std::size_t size) {
     const std::size_t want = size - done;
     bool ioError = false;
     if (want >= kReadAhead) {  // large reads go straight into the caller's memory
-      const std::size_t n = HostRead(f->host, f->base + f->pos, out + done, want, &ioError);
+      const std::size_t n = HostRead(f, f->base + f->pos, out + done, want, &ioError);
       done += n;
       f->pos += n;
       if (n < want) {
@@ -299,7 +464,7 @@ std::size_t data_read(DataFile* f, void* dst, std::size_t size) {
     if (f->buf.empty()) f->buf.resize(kReadAhead);
     const std::size_t fill = static_cast<std::size_t>(std::min<std::uint64_t>(kReadAhead, f->size - f->pos));
     f->bufPos = f->pos;
-    f->bufLen = HostRead(f->host, f->base + f->pos, f->buf.data(), fill, &ioError);
+    f->bufLen = HostRead(f, f->base + f->pos, f->buf.data(), fill, &ioError);
     if (f->bufLen == 0) {
       f->error = true;
       break;

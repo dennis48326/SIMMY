@@ -4,6 +4,7 @@
 // ranges (heaps are host-backed, see base/e_standard_heap.cpp), the SN debug-target check and the
 // DVD fatal-error screen. The main thread's Idle() becomes the window/event loop.
 #include "simmy/types_gen.hpp"
+#include "simmy/perf.hpp"
 #include "simmy/platform.hpp"
 #include "simmy/unported_globals.hpp"
 
@@ -55,7 +56,10 @@ void ENgcEngine::InitializeProfiler() {}
 // 8032E63C
 // PC: also does the event thread's audio work (_pActualAudio->Update(), see InitConsole) once a frame.
 void ENgcEngine::PreFrameUpdate() {
-  if (_pActualAudio) _pActualAudio->Update();
+  if (_pActualAudio) {
+    SIMMY_PERF_SCOPE(Audio);  // PC: the frame-hitch profiler (perf.hpp)
+    _pActualAudio->Update();
+  }
   EEngine::PreFrameUpdate();
 }
 

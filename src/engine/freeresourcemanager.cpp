@@ -1,5 +1,6 @@
 // Port of engine/freeresourcemanager.cpp: cached resources with no references, evicted on demand.
 #include "simmy/types_gen.hpp"
+#include "simmy/perf.hpp"
 
 #include <algorithm>
 
@@ -16,6 +17,7 @@ void FreeResourceManager::AddItem(EResource* res) {
     lock.lock();
     if (static_cast<int>(m_items.size()) == m_capacity) {
       lock.unlock();
+      simmy::perf::count_evict(m_owner->m_name, 1);
       res->SafeDelete();  // still full: drop it outright
       return;
     }
@@ -58,6 +60,7 @@ int FreeResourceManager::MakeSpace(int count) {
     m_items.erase(m_items.begin(), m_items.begin() + count);
     m_items.insert(m_items.begin(), keep.begin(), keep.end());
   }
+  simmy::perf::count_evict(m_owner->m_name, static_cast<int>(victims.size()));  // PC: perf.hpp
   int freed = 0;
   for (EResource* r : victims) {
     freed += 1 + static_cast<int>(r->m_flags >> 8);

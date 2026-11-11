@@ -3,6 +3,7 @@
 // Every SDK call's result goes through the same table (CardResult). Each operation probes the slot,
 // mounts it (a "broken" card still mounts so CARDCheck can report it), works, and unmounts.
 #include "simmy/types_gen.hpp"
+#include "simmy/perf.hpp"
 #include "simmy/platform.hpp"
 #include "simmy/unported_globals.hpp"
 
@@ -43,6 +44,7 @@ static int CardResult(s32 r) {
 
 // Probes until the slot is not busy.
 static int Probe(s32 chan, s32* memSize = nullptr, s32* sectorSize = nullptr) {
+  SIMMY_PERF_SCOPE(Card);  // PC: the frame-hitch profiler (perf.hpp)
   s32 mem = 0, sector = 0, r;
   do r = CARDProbeEx(chan, &mem, &sector);
   while (r == CARD_RESULT_BUSY);
@@ -60,6 +62,7 @@ static s32 Unmount(s32 chan) {
 
 // CARDMount then CARDCheck. A broken card mounts, and CARDCheck then reports (or repairs) it.
 static int MountAndCheck(s32 chan) {
+  SIMMY_PERF_SCOPE(Card);  // PC: the frame-hitch profiler (perf.hpp)
   const s32 r = CARDMount(chan, s_WorkArea, nullptr);
   if (r != CARD_RESULT_READY && r != CARD_RESULT_BROKEN) return CardResult(r);
   return CardResult(CARDCheck(chan));
@@ -127,6 +130,7 @@ int ENgcMemoryCard::CloseForIO(char*, unsigned int) { return 1; }
 
 // 803301C4
 int ENgcMemoryCard::LoadDataChunkS(char* name, unsigned int card, unsigned int size, unsigned int offset, void* dst) {
+  SIMMY_PERF_SCOPE(Card);  // PC: the frame-hitch profiler (perf.hpp)
   BeginCardOperation();
   int r = Probe(card);
   if (r == 1) r = MountAndCheck(card);
@@ -151,6 +155,7 @@ int ENgcMemoryCard::LoadDataS(char* name, unsigned int card, unsigned int size, 
 // Writes `size` bytes at `offset`. CARDWrite works in whole sectors, so unaligned ends are
 // read-modify-written through a one-sector buffer.
 int ENgcMemoryCard::SaveDataChunkS(char* name, unsigned int card, unsigned int size, unsigned int offset, void* src) {
+  SIMMY_PERF_SCOPE(Card);  // PC: the frame-hitch profiler (perf.hpp)
   BeginCardOperation();
   s32 sectorSize = 0;
   int r = Probe(card, nullptr, &sectorSize);
@@ -199,6 +204,7 @@ int ENgcMemoryCard::SaveDataChunkS(char* name, unsigned int card, unsigned int s
 // Creates the file if needed and writes `size` bytes from the start. (The GameCube copied data that
 // lived in ARAM-backed virtual memory through a sector buffer first; host memory needs no copy.)
 int ENgcMemoryCard::SaveDataS(char* name, unsigned int card, unsigned int size, void* src) {
+  SIMMY_PERF_SCOPE(Card);  // PC: the frame-hitch profiler (perf.hpp)
   BeginCardOperation();
   int r = Probe(card);
   if (r == 1) r = MountAndCheck(card);
@@ -224,6 +230,7 @@ int ENgcMemoryCard::SaveDataS(char* name, unsigned int card, unsigned int size, 
 // Creates a save file of exactly `size` bytes (recreating it if one of another size exists), then
 // writes the banner, icon and comments into its first 0x4000 bytes.
 int ENgcMemoryCard::CreateFileS(char* name, unsigned int card, unsigned int size) {
+  SIMMY_PERF_SCOPE(Card);  // PC: the frame-hitch profiler (perf.hpp)
   BeginCardOperation();
   int r = Probe(card);
   if (r == 1) r = MountAndCheck(card);
@@ -252,6 +259,7 @@ int ENgcMemoryCard::CreateFileS(char* name, unsigned int card, unsigned int size
 
 // 803326B4
 int ENgcMemoryCard::CheckAndWriteBannerAndIcon(char* name, unsigned int card) {
+  SIMMY_PERF_SCOPE(Card);  // PC: the frame-hitch profiler (perf.hpp)
   BeginCardOperation();
   int r = Probe(card);
   if (r == 1) r = MountAndCheck(card);
@@ -293,12 +301,14 @@ int ENgcMemoryCard::CheckAndWriteBannerAndIcon(char* name, unsigned int card) {
 
 // Mount for delete/format: also proceeds when the card's character encoding does not match.
 static int MountForMaintenance(s32 chan) {
+  SIMMY_PERF_SCOPE(Card);  // PC: the frame-hitch profiler (perf.hpp)
   const s32 r = CARDMount(chan, s_WorkArea, nullptr);
   return r == CARD_RESULT_READY || r == CARD_RESULT_BROKEN || r == CARD_RESULT_ENCODING ? 1 : CardResult(r);
 }
 
 // 80332CE4
 int ENgcMemoryCard::DeleteDataS(char* name, unsigned int card) {
+  SIMMY_PERF_SCOPE(Card);  // PC: the frame-hitch profiler (perf.hpp)
   BeginCardOperation();
   int r = Probe(card);
   if (r == 1) r = MountForMaintenance(card);
@@ -313,6 +323,7 @@ int ENgcMemoryCard::DeleteDataS(char* name, unsigned int card) {
 
 // 80332FEC
 int ENgcMemoryCard::FormatCardS(unsigned int card) {
+  SIMMY_PERF_SCOPE(Card);  // PC: the frame-hitch profiler (perf.hpp)
   BeginCardOperation();
   int r = Probe(card);
   if (r == 1) r = MountForMaintenance(card);
@@ -342,6 +353,7 @@ int ENgcMemoryCard::UpdateOperation(EMC_Operation, bool&) { return 0; }
 
 // 80333318
 int ENgcMemoryCard::GetFreeSpaceS(unsigned int card, unsigned int& bytes) {
+  SIMMY_PERF_SCOPE(Card);  // PC: the frame-hitch profiler (perf.hpp)
   BeginCardOperation();
   int r = Probe(card);
   if (r == 1) {
@@ -358,6 +370,7 @@ int ENgcMemoryCard::GetFreeSpaceS(unsigned int card, unsigned int& bytes) {
 
 // 80333784
 int ENgcMemoryCard::GetFreeFilesS(unsigned int card, int& files) {
+  SIMMY_PERF_SCOPE(Card);  // PC: the frame-hitch profiler (perf.hpp)
   BeginCardOperation();
   int r = Probe(card);
   if (r == 1) {
@@ -401,6 +414,7 @@ int ENgcMemoryCard::CheckForOverwriteSpace(unsigned int, unsigned int, EMC_SaveT
 // 80333CD4
 // A card is present when it answers, even if it is the wrong kind of device.
 int ENgcMemoryCard::IsCardAvailable(unsigned int card) {
+  SIMMY_PERF_SCOPE(Card);  // PC: the frame-hitch profiler (perf.hpp)
   BeginCardOperation();
   const int r = Probe(card);
   EndCardOperation();
@@ -409,6 +423,7 @@ int ENgcMemoryCard::IsCardAvailable(unsigned int card) {
 
 // 80333E40
 bool ENgcMemoryCard::IsWrongDevice(unsigned int card) {
+  SIMMY_PERF_SCOPE(Card);  // PC: the frame-hitch profiler (perf.hpp)
   BeginCardOperation();
   const int r = Probe(card);
   EndCardOperation();
@@ -418,6 +433,7 @@ bool ENgcMemoryCard::IsWrongDevice(unsigned int card) {
 // 80333FA0
 // Prefers slot A: sets `card` to the lowest present slot and leaves it alone when none is present.
 bool ENgcMemoryCard::AnyCardsPresent(int& card) {
+  SIMMY_PERF_SCOPE(Card);  // PC: the frame-hitch profiler (perf.hpp)
   if (IsCardAvailable(1)) card = 1;
   if (IsCardAvailable(0)) card = 0;
   return card != -1;
@@ -425,6 +441,7 @@ bool ENgcMemoryCard::AnyCardsPresent(int& card) {
 
 // 80334040
 int ENgcMemoryCard::IsCardFormated(unsigned int card, bool& formatted) {
+  SIMMY_PERF_SCOPE(Card);  // PC: the frame-hitch profiler (perf.hpp)
   BeginCardOperation();
   int r = Probe(card);
   if (r == 1) {
@@ -447,6 +464,7 @@ int ENgcMemoryCard::IsCardFormated(unsigned int card, bool& formatted) {
 // 803343E8
 // Lists this game's files (up to `max`). Returns the result of the last directory entry examined.
 int ENgcMemoryCard::GetFileList(unsigned int card, char*, unsigned int max, char (*names)[32]) {
+  SIMMY_PERF_SCOPE(Card);  // PC: the frame-hitch profiler (perf.hpp)
   BeginCardOperation();
   int r = Probe(card);
   if (r == 1) r = MountAndCheck(card);
@@ -476,6 +494,7 @@ void ENgcMemoryCard::SetGameCode(char*) {}
 
 // 80334898
 int ENgcMemoryCard::DoesFileExist(char* name, unsigned int card, bool& exists) {
+  SIMMY_PERF_SCOPE(Card);  // PC: the frame-hitch profiler (perf.hpp)
   exists = false;
   BeginCardOperation();
   int r = Probe(card);

@@ -6,6 +6,7 @@
 // FindHeapForAddress() work without the original allocator. Budgets are kept as information only.
 // The game's malloc/free/new/delete wrappers in this file are not ported; the host CRT provides them.
 #include "simmy/types_gen.hpp"
+#include "simmy/perf.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -26,6 +27,7 @@ int g_checkPoint = 0;
 
 void* host_alloc(EAHeap* heap, std::size_t size, std::size_t align) {
   if (align < 16) align = 16;
+  simmy::perf::count_alloc(size);  // PC: the frame-hitch profiler's allocation count (off: one load)
   const std::size_t total = size + sizeof(BlockHeader) + align;
   auto* raw = static_cast<std::uint8_t*>(std::malloc(total));
   if (!raw) return nullptr;

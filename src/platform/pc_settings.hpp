@@ -67,6 +67,16 @@ struct GraphicsSettings {
   // Not graphics: mods= (PC mod: mods, pc_mods.cpp). The mod folder; empty: "mods" next to the exe
   // when that folder exists, else mods are off.
   std::string modsPath;
+  // Not graphics: perf= ([debug] section; also SIMMY_PERF=1, F3): the frame-hitch profiler writes
+  // perf_log.txt (pc_perf.cpp, docs/performance.md). Off by default.
+  bool perf = false;
+  // Not graphics: disc_cache= (data_path.cpp): the game's archives read into RAM in the background so
+  // resource loads during play never wait for the disc. 0 off, 1 on, 2 auto (default: on with 8 GB of
+  // RAM or more).
+  int discCache = 2;
+  // Not graphics: frame_pacing= (pc_main.cpp): 1 precise (default: SDL_DelayPrecise to each 60 Hz
+  // deadline), 0 sleep (the previous std::this_thread::sleep_until), 2 vsync (a ~60 Hz display paces).
+  int framePacing = 1;
   // The [keys] section: "action = key, key" lines as read (pc_kbm.cpp parses and warns).
   struct KeyLine {
     std::string action, keys, where;  // where: "file:line"

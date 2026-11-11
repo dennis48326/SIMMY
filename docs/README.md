@@ -25,6 +25,7 @@ history, not reference (many of their "not ported" lists are out of date).
 | [netplay.md](netplay.md) | PC mod: network play, two PCs in lockstep (`--host` / `--join`): how to play, what is shared, desync files, protocol, test knobs, limits |
 | [mods.md](mods.md) | PC mod: mods: the mod folder, objects converted from the user's own PC The Sims 2 install (tools/pcobj), how they enter the object database, catalogue and saves, unknown GUIDs |
 | [determinism-and-netplay.md](determinism-and-netplay.md) | `SIMMY_DET`, RNG streams, record/replay, hashing, rules for deterministic code, remaining netplay work |
+| [performance.md](performance.md) | Frame hitches: the frame-hitch profiler (`perf_log.txt`, F3), what caused the random slowdowns (synchronous disc reads), the disc cache, frame pacing, GPU pipeline and texture costs, how to capture a log on Windows |
 | [shutdown-and-crashes.md](shutdown-and-crashes.md) | The exit sequence, why static destructors are skipped, crash capture, the watchdog |
 | [launcher.md](launcher.md) | SimmyLauncher internals: disc check, ini editing, starting the game, failure reporting |
 | [testing.md](testing.md) | How the port is tested: headless/offscreen runs, scripted input, the regression suite, every `SIMMY_*` variable |

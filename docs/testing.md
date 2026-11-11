@@ -132,6 +132,10 @@ Development only: the launcher removes all of them except `SIMMY_INI` from the g
 | `SIMMY_FAKE_PADS=N` | Scripted pads 1..N plugged in from the start (`p3:`/`p4:` script steps press pads 3 and 4) |
 | `SIMMY_MP4_START`, `SIMMY_MP4_OBJECTS`, `SIMMY_MP4_PICK`, `SIMMY_MP4_TRACE` | Extra players' test aids: put the joining sim on a tile, put an object in their action menu, start the menu cursor on a row, trace pads and objects ([multiplayer.md](multiplayer.md)) |
 | `SIMMY_IO_STATS=1` | File opens/reads summary at exit |
+| `SIMMY_PERF=1` | The frame-hitch profiler ([performance.md](performance.md)); `SIMMY_PERF_LOG=<file>` where `perf_log.txt` goes (default: next to the exe), `SIMMY_PERF_MS=<ms>` the hitch threshold (default 25) |
+| `SIMMY_DISC_CACHE=0\|1\|auto\|warm` | `disc_cache` for A/B tests ([performance.md](performance.md)) |
+| `SIMMY_FRAME_PACING=precise\|sleep\|vsync` | `frame_pacing` for A/B tests |
+| `SIMMY_DRAWS_BLOCKING=0` | Offscreen: skip draws whose GPU pipeline is not built yet, as a window does (default offscreen: wait for it), to measure pipeline costs |
 | `SIMMY_LOG_LOADS=1` | Every resource load |
 | `SIMMY_WATCHDOG=N` | (Windows) all thread stacks to `simmy_watchdog.txt` after N s |
 | `SIMMY_LSAN=1` | (ASan builds) run LeakSanitizer's check at the exit (`_Exit` skips its own) |

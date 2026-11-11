@@ -220,6 +220,9 @@ the file: `--<setting> <value>` or `--<setting>=<value>`.
 | `players` | PC mod: `2` (the GameCube's co-op, default), `1` (no co-op), `3` or `4`: in a two-player Free Play game with `split=windows`, players 3 and 4 join by pressing Start on their controller (one window each, "SIMMY - Player N"); see [docs/multiplayer.md](docs/multiplayer.md) | `2` |
 | `mods` | PC mod: a mod folder (relative to simmy.ini), e.g. objects converted from your own The Sims 2 PC install; default: `mods` next to the exe if it exists, else mods are off. See [docs/mods.md](docs/mods.md) | (none) |
 | `fire_code_limit` | gameplay, not graphics: `on` (as on the GameCube, the buy/build fire-code meter fills with the lot's objects and stops new ones when full) or `off` (empty meter, no limit); not in the F1 menu | `on` |
+| `disc_cache` | `auto`, `on`, `warm`, `off`: the game's archives (about 870 MB, not movies or music) read into RAM in the background at start, so loads during play never wait for the disc; `auto` = on with 8 GB of RAM or more, else `warm` (read through the system's file cache only). See [docs/performance.md](docs/performance.md) | `auto` |
+| `frame_pacing` | `precise` (exact sleep to each 60 Hz deadline), `sleep` (the older millisecond sleep), `vsync` (with vsync on and a 59-61 Hz display, the display paces the game) | `precise` |
+| `perf` | in a `[debug]` section: `on` writes the frame-hitch profiler's `perf_log.txt` next to the exe (also F3 in the game, or the F1 menu); see [docs/performance.md](docs/performance.md) | `off` |
 
 Example: `simmy.exe --iso D:\Games\Sims2.iso --aspect 16:9 --resolution 1440p --msaa 4 --fullscreen`.
 Alt+Enter switches between windowed and fullscreen. The game keeps its own timing (it counts 60 Hz

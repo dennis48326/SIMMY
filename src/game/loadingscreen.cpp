@@ -1,6 +1,7 @@
 // Port of game/loadingscreen.cpp (CLoadingScreen) and game/loadingscreenstate.cpp (the 'LdSc' state
 // machine and its four states).
 #include "simmy/types_gen.hpp"
+#include "simmy/perf.hpp"
 #include "simmy/unported_globals.hpp"
 #include "simmy/platform.hpp"
 
@@ -34,6 +35,7 @@ int s_bDrawPressStart = 0;  // 804FF7B0
 // 80056A64
 // The plumb bob spins in place (no bounce) at the origin.
 CLoadingScreen::CLoadingScreen(eLoadingScreenMode mode) : m_mode(mode) {
+  simmy::perf::loading_screen(+1);  // PC: the profiler counts these frames as "loading" (perf.hpp)
   s_bDrawPressStart = 0;
   m_background = static_cast<ERShader*>(_shaderman.AddRef(kBackgroundShader, nullptr, 0));
   m_diamondModel = static_cast<ERModel*>(_modelman.AddRef(kDiamondModel, nullptr, 0));
@@ -65,6 +67,7 @@ DepthOfField* LoadDepthOfField() {
 // 80056BF0
 // Also switches depth of field back off (in-game loads).
 CLoadingScreen::~CLoadingScreen() {
+  simmy::perf::loading_screen(-1);
   if (m_background) m_background->DelRef();
   if (m_diamondModel) m_diamondModel->DelRef();
   if (m_glowModel) m_glowModel->DelRef();

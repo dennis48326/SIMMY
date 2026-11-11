@@ -22,6 +22,10 @@ layout in both places.
 - API ([`platform.hpp`](../include/simmy/platform.hpp)): `data_open/close/exists/size/read/seek/tell/error`,
   `data_read_at` (positional, lock-free: the music reader and THP decoder threads use it),
   `data_read_file`. Sequential reads use a 64 KB read-ahead. `SIMMY_IO_STATS=1` prints opens/reads at exit.
+  With `disc_cache` (default `auto`: on with 8 GB of RAM) a background thread reads the 22 archives the
+  game loads resources from (825 MB; not movies.arc / audiostr.arc) into RAM in 4 MiB chunks at start;
+  a read whose chunks are in is served from RAM (the same bytes), the rest from the disc. This removed
+  the in-play disc stalls; see [performance.md](performance.md).
 - The game's `ENgcFile` ([`e_ngcfile.cpp`](../src/base/e_ngcfile.cpp)) sits on a `DataFile`; write modes are
   refused. `EFileSystem`/`EFile` ([`e_filesystem.cpp`](../src/base/e_filesystem.cpp), [`e_file.cpp`](../src/base/e_file.cpp)) are ported as written.
 - Test images: `python tools/make_test_iso.py <folder> <out.iso>` (game ID `SIMT01`).

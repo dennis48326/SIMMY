@@ -84,7 +84,7 @@ const char* const kKeys[] = {"window", "fullscreen", "resolution", "aspect", "hu
                              "anisotropy", "vsync", "fpscap", "backend", "resampler", "split",
                              "window2", "window2pos", "window2display", "fullscreen2", "iso",
                              "p1input", "mouseedgepan", "mouserotatespeed", "mousezoomspeed", "mouseinvertx",
-                             "mouseinverty", "mouseinvertwheel", "firecodelimit", "players", "mods"};
+                             "mouseinverty", "mouseinvertwheel", "firecodelimit", "players", "mods", "perf", "disccache", "framepacing"};
 bool KnownKey(const std::string& k) {
   for (const char* known : kKeys)
     if (k == known) return true;
@@ -269,6 +269,20 @@ void ApplyValue(GraphicsSettings& g, const std::string& key, const std::string& 
     if (!ParseBool(v, g.fireCodeLimit)) Warn(key, v, "on or off");
   } else if (key == "mods") {
     g.modsPath = Trim(v);
+  } else if (key == "disccache") {  // the game's archives in RAM (data_path.cpp)
+    bool b = false;
+    if (v == "auto" || v == "default") g.discCache = 2;
+    else if (v == "warm" || v == "os") g.discCache = 3;
+    else if (v == "ram") g.discCache = 1;
+    else if (ParseBool(v, b)) g.discCache = b ? 1 : 0;
+    else Warn(key, v, "auto, on, warm or off");
+  } else if (key == "framepacing") {  // pc_main.cpp's frame limiter
+    if (v == "precise" || v == "auto" || v == "default") g.framePacing = 1;
+    else if (v == "sleep" || v == "legacy" || v == "old") g.framePacing = 0;
+    else if (v == "vsync" || v == "display") g.framePacing = 2;
+    else Warn(key, v, "precise, sleep or vsync");
+  } else if (key == "perf") {  // [debug] perf = on: the frame-hitch profiler (pc_perf.cpp)
+    if (!ParseBool(v, g.perf)) Warn(key, v, "on or off");
   }
 }
 
@@ -743,6 +757,23 @@ std::string settings_value_string(const GraphicsSettings& g, const char* rawKey)
 }
 
 bool settings_fire_code_limit() { return graphics_settings().fireCodeLimit; }
+bool settings_perf() { return graphics_settings().perf; }
+int settings_frame_pacing() {
+  if (const char* e = std::getenv("SIMMY_FRAME_PACING"); e && *e) {  // tests / A-B
+    GraphicsSettings tmp;
+    ApplyValue(tmp, "framepacing", e);
+    return tmp.framePacing;
+  }
+  return graphics_settings().framePacing;
+}
+int settings_disc_cache() {
+  if (const char* e = std::getenv("SIMMY_DISC_CACHE"); e && *e) {  // tests / A-B: 0, 1, auto
+    GraphicsSettings tmp;
+    ApplyValue(tmp, "disccache", e);
+    return tmp.discCache;
+  }
+  return graphics_settings().discCache;
+}
 
 // PC mod: 4 players.
 int settings_max_players() { return graphics_settings().maxPlayers; }

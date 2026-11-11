@@ -5,12 +5,14 @@
 // own direct path on the calling thread. Asynchronous requests therefore complete immediately,
 // which the game tolerates because it always polls IsLoaded / GetRef before using a resource.
 #include "simmy/types_gen.hpp"
+#include "simmy/perf.hpp"
 #include "simmy/unported_globals.hpp"
 
 // 8030FC90 EResourceLoader::EResourceLoader (defaulted in the header)
 // 8030FCA4 EResourceLoader::~EResourceLoader (defaulted in the header)
 #include "simmy/platform.hpp"
 
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -293,7 +295,18 @@ EResource* EResourceLoaderImpl::DoLoadResource(EResourceManager* mgr, unsigned i
   } else {
     restorePos = file->Tell() + static_cast<int>(size);  // leave the caller's file after this resource
   }
-  EResource* res = mgr->AllocateAndLoadResource(file, size, id);
+  // PC: the frame-hitch profiler (perf.hpp) times each load (its disc reads count as disc time).
+  const bool perfOn = simmy::perf::on();
+  const auto perfT0 = perfOn ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+  EResource* res;
+  {
+    SIMMY_PERF_SCOPE(Load);
+    res = mgr->AllocateAndLoadResource(file, size, id);
+  }
+  if (perfOn)
+    simmy::perf::count_load(mgr->m_name, id, size,
+                            static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                std::chrono::steady_clock::now() - perfT0).count()));
   static const bool log = std::getenv("SIMMY_LOG_LOADS") != nullptr;  // PC: trace every load
   if (log) std::fprintf(stderr, "[load] %-12s %08X %7u bytes %s\n", mgr->m_name, id, size, res ? "" : "FAILED");
   if (res) {

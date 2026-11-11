@@ -21,6 +21,7 @@
 #include "simmy/detmath.hpp"
 #include "simmy/types_gen.hpp"
 #include "simmy/platform.hpp"
+#include "simmy/perf.hpp"
 #include "simmy/unported_globals.hpp"
 #include "pc_settings.hpp"
 #include "pc_kbm.hpp"
@@ -36,7 +37,9 @@
 #include <SDL3/SDL_keyboard.h>
 #include <SDL3/SDL_messagebox.h>
 #include <SDL3/SDL_stdinc.h>
+#include <SDL3/SDL_timer.h>
 #include <SDL3/SDL_video.h>
+#include <SDL3/SDL_cpuinfo.h>
 #include <aurora/aurora.h>
 #include <aurora/event.h>
 #include <aurora/gfx.hpp>
@@ -125,6 +128,10 @@ bool platform_pump_events() {
       if (e->type == AURORA_SDL_EVENT && e->sdl.type == SDL_EVENT_KEY_DOWN && !e->sdl.key.repeat &&
           (e->sdl.key.key == SDLK_RETURN || e->sdl.key.key == SDLK_KP_ENTER) && (e->sdl.key.mod & SDL_KMOD_ALT))
         settings_toggle_fullscreen();
+      // F3: the frame-hitch profiler on / off (pc_perf.cpp; perf_log.txt next to the executable).
+      if (e->type == AURORA_SDL_EVENT && e->sdl.type == SDL_EVENT_KEY_DOWN && !e->sdl.key.repeat &&
+          e->sdl.key.key == SDLK_F3)
+        perf::set_enabled(!perf::on());
       // F2: show / hide the second player's window (split=windows).
       if (e->type == AURORA_SDL_EVENT && e->sdl.type == SDL_EVENT_KEY_DOWN && !e->sdl.key.repeat &&
           e->sdl.key.key == SDLK_F2 && split_mode() == SplitMode::Windows)
@@ -356,10 +363,20 @@ bool dev_trace_frame(const char* variable) {
 }
 
 bool platform_begin_frame() {
-  if (g_headless || !aurora_begin_frame()) return false;
+  if (g_headless) return false;
+  {
+    SIMMY_PERF_SCOPE(Acquire);  // the swapchain image (blocks under vsync back-pressure)
+    if (!aurora_begin_frame()) return false;
+  }
   if (Stats().on) Stats().begin = std::chrono::steady_clock::now();
   // Offscreen runs are for tests and screenshots: wait for shader pipelines instead of skipping draws.
-  if (dev_options().offscreen) AuroraSetDrawsBlocking(true);
+  // (SIMMY_DRAWS_BLOCKING=0: as in a window, a draw whose pipeline is still being built is skipped;
+  // for measuring with the frame-hitch profiler.)
+  static const bool blocking = [] {
+    const char* e = std::getenv("SIMMY_DRAWS_BLOCKING");
+    return !(e && *e == '0');
+  }();
+  if (dev_options().offscreen && blocking) AuroraSetDrawsBlocking(true);
   return true;
 }
 void platform_end_frame() {
@@ -385,8 +402,11 @@ void platform_end_frame() {
   FrameStats& st = Stats();
   const auto handOver = std::chrono::steady_clock::now();
   if (st.on) st.bytes += aurora::gx::fifo::get_buffer_size();
-  window2_present(split_windows_frame());  // the second player's window (pc_window2.cpp)
-  aurora_end_frame();
+  {
+    SIMMY_PERF_SCOPE(Gpu);  // GX processing, encode, submit, present (perf.hpp)
+    window2_present(split_windows_frame());  // the second player's window (pc_window2.cpp)
+    aurora_end_frame();
+  }
   if (st.on) {
     const auto done = std::chrono::steady_clock::now();
     st.game += std::chrono::duration<double, std::milli>(handOver - st.begin).count();
@@ -412,11 +432,83 @@ void platform_present_wait_frame() {
   aurora_end_frame();
 }
 
+// ---- Frame pacing (frame_pacing in simmy.ini; docs/performance.md) ----
+// The game measures every frame in 60 Hz retraces (EEngine::RetraceUpdate rounds the frame's time:
+// 25 ms or more is two retraces, so the game's clock jumps by 33 ms), so frames must come at a
+// steady 60 Hz. Modes:
+//   precise (default)  sleep to each frame's deadline with SDL_DelayPrecise (the OS sleep for all but
+//                      the last moment, then a short spin): wakes within ~0.1 ms of it. Before, the
+//                      C++ library's sleep_until (Sleep() in whole milliseconds on Windows, rounded
+//                      up, at the timer's resolution) woke up to 1-2 ms late, more under load, and
+//                      beat against vsync on a 60 Hz display.
+//   sleep              the previous behaviour (std::this_thread::sleep_until).
+//   vsync              with vsync on and a display at 59-61 Hz: the display paces the game (each
+//                      frame waits for its refresh in aurora's present); the sleep only stops frames
+//                      faster than 15 ms. Falls back to precise if frames come faster than 60 Hz
+//                      (vsync not honoured by the driver), and is not used in network play.
+namespace {
+int g_pacingMode = -1;  // 0 sleep, 1 precise, 2 vsync
+bool g_vsyncPacing = false;
+double g_intervalEma = 0.0;
+int g_pacingFrames = 0;
+std::chrono::steady_clock::time_point g_lastWake{};
+
+int PacingMode() {
+  if (g_pacingMode < 0) {
+    g_pacingMode = settings_frame_pacing();
+    if (g_pacingMode == 2) {
+      float hz = 0.0f;
+      if (SDL_Window* win = aurora_get_window())
+        if (const SDL_DisplayMode* m = SDL_GetCurrentDisplayMode(SDL_GetDisplayForWindow(win))) hz = m->refresh_rate;
+      g_vsyncPacing = graphics_settings().vsync && !net_session() && settings_frame_interval_us() == 16667 &&
+                      hz >= 59.0f && hz <= 61.0f && !g_headless;
+      std::fprintf(stderr, "[gfx] frame_pacing=vsync: display %.2f Hz, vsync %s: %s\n", hz,
+                   graphics_settings().vsync ? "on" : "off", g_vsyncPacing ? "the display paces the game" : "using precise");
+      if (!g_vsyncPacing) g_pacingMode = 1;
+    }
+  }
+  return g_pacingMode;
+}
+
+long long PacingInterval(long long interval) {
+  return PacingMode() == 2 && g_vsyncPacing ? std::min(interval, 15000LL) : interval;
+}
+
+void PaceUntil(std::chrono::steady_clock::time_point deadline) {
+  if (PacingMode() == 0) {
+    std::this_thread::sleep_until(deadline);
+    return;
+  }
+  const auto now = std::chrono::steady_clock::now();
+  if (deadline > now)
+    SDL_DelayPrecise(static_cast<Uint64>(std::chrono::duration_cast<std::chrono::nanoseconds>(deadline - now).count()));
+}
+
+// vsync pacing's safety net: frames that keep coming faster than 60 Hz mean the display does not pace.
+void PacingFrameDone(std::chrono::steady_clock::time_point woke, long long interval) {
+  if (g_pacingMode != 2 || !g_vsyncPacing) return;
+  if (g_lastWake.time_since_epoch().count()) {
+    const double ms = std::chrono::duration<double, std::milli>(woke - g_lastWake).count();
+    g_intervalEma = g_pacingFrames++ ? g_intervalEma + (std::min(ms, 50.0) - g_intervalEma) * 0.02 : ms;
+    if (g_pacingFrames > 300 && g_intervalEma < static_cast<double>(interval) / 1000.0 - 0.4) {
+      g_vsyncPacing = false;
+      g_pacingMode = 1;
+      std::fprintf(stderr, "[gfx] frame_pacing=vsync: frames every %.2f ms, faster than 60 Hz (vsync not honoured): "
+                   "using precise\n", g_intervalEma);
+    }
+  }
+  g_lastWake = woke;
+}
+}  // namespace
+
 void platform_frame_tick() {
   static unsigned int s_frames = 0;
   if (g_headless && ++s_frames % 300 == 0)
     std::fprintf(stderr, "[simmy] %u frames (gx fifo %u bytes)\n", s_frames, aurora::gx::fifo::get_buffer_size());
-  platform_pump_events();
+  {
+    SIMMY_PERF_SCOPE(Events);
+    platform_pump_events();
+  }
   if (!g_headless && !g_gameFramePresented && aurora_begin_frame()) {
     // Placeholder until the game renders its own frames: dark teal, so a live window is obvious.
     GXSetCopyClear(GXColor{0, 40, 48, 255}, GX_MAX_Z24);
@@ -448,11 +540,24 @@ void platform_frame_tick() {
   // ~60 Hz pacing (replaced by the renderer's retrace pacing once ported). PC fps_cap: a whole number
   // of 60 Hz retraces per frame, so the game's retrace-counted timing (EEngine::RetraceUpdate) keeps
   // its speed; it never runs faster than 60 Hz, whatever the display's refresh rate.
-  if (det_frame_end()) return;  // SIMMY_DET_*: hashes, jitter; SIMMY_DET_NOPACE: no pacing (pc_det.cpp)
-  // (PC mod: network play: always 60 frames a second, the game's speed on both PCs; fps_cap does not apply.)
-  const auto next = g_lastTick + std::chrono::microseconds(net_session() ? 50000 / 3 : settings_frame_interval_us());
-  std::this_thread::sleep_until(next);
-  g_lastTick = std::max(next, std::chrono::steady_clock::now() - std::chrono::milliseconds(100));
+  if (det_frame_end()) {  // SIMMY_DET_*: hashes, jitter; SIMMY_DET_NOPACE: no pacing (pc_det.cpp)
+    perf::frame_done(_globals.m_house != nullptr, _framecount);
+    return;
+  }
+  {
+    SIMMY_PERF_SCOPE(Pace);
+    // (PC mod: network play: always 60 frames a second, the game's speed on both PCs; fps_cap does not apply.)
+    const long long interval = net_session() ? 50000 / 3 : settings_frame_interval_us();
+    const auto next = g_lastTick + std::chrono::microseconds(PacingInterval(interval));
+    const auto asleep = std::chrono::steady_clock::now();
+    PaceUntil(next);
+    const auto woke = std::chrono::steady_clock::now();
+    if (perf::on())  // the profiler: how late the sleep woke (timer granularity, scheduler)
+      perf::pace_late(std::chrono::duration_cast<std::chrono::nanoseconds>(woke - std::max(next, asleep)).count());
+    PacingFrameDone(woke, interval);
+    g_lastTick = std::max(next, woke - std::chrono::milliseconds(100));
+  }
+  perf::frame_done(_globals.m_house != nullptr, _framecount);
 }
 }  // namespace simmy
 
@@ -477,6 +582,7 @@ void crash_reinstall_handlers();                // pc_crash_win.cpp
 // the files the game wrote are already closed (memory card commits are synchronous, simmy.ini is saved
 // in place) and stdout / stderr are unbuffered. Elsewhere _Exit. The exit code is the game's.
 [[noreturn]] void platform_shutdown_and_exit(int rc) {
+  perf::shutdown_summary();  // the frame-hitch profiler's perf_log.txt (when it was on)
   if (!g_headless) {
     window2_shutdown();
     overlay_shutdown();
@@ -587,9 +693,11 @@ int main(int argc, char* argv[]) {  // aurora/main.h renames this to aurora_main
   }
 
   simmy::settings_load(argc > 0 ? argv[0] : nullptr);  // also --iso / iso= (pc_settings.cpp)
+  simmy::perf::init();  // SIMMY_PERF=1 / [debug] perf = on: the frame-hitch profiler (pc_perf.cpp)
   simmy::kbm_init();  // player 1's keys ([keys] in simmy.ini, pc_kbm.cpp)
   simmy::mods_init();  // PC mod: mods (a mod folder, pc_mods.cpp; nothing happens without one)
   if (!open_game_data(dataDir)) return 1;
+  simmy::data_source_start_cache(simmy::settings_disc_cache());  // disc_cache: archives into RAM (data_path.cpp)
   if (!simmy::g_headless) {
     AuroraConfig config{};
     config.appName = "SIMMY";
@@ -641,6 +749,18 @@ int main(int argc, char* argv[]) {  // aurora/main.h renames this to aurora_main
     if (SDL_Window* win = aurora_get_window()) SDL_SetWindowTitle(win, SIMMY_PORT_VERSION);
     std::fprintf(stderr, "[gfx] backend in use: %s\n", simmy::settings_backend_name(info.backend));
     simmy::settings_after_init(simmy::dev_options().offscreen);
+    if (simmy::perf::on()) {  // the frame-hitch profiler's log: the setup the numbers come from
+      const simmy::GraphicsSettings& g = simmy::graphics_settings();
+      float hz = 0.0f;
+      if (SDL_Window* win = aurora_get_window())
+        if (const SDL_DisplayMode* m = SDL_GetCurrentDisplayMode(SDL_GetDisplayForWindow(win))) hz = m->refresh_rate;
+      simmy::perf::log_line("setup: backend %s, display %.2f Hz, vsync %s, fps cap %u, msaa %u, render height %u, "
+                            "frame_pacing %d (0 sleep, 1 precise, 2 vsync), disc_cache %d (0 off, 1 ram, 2 auto, 3 warm), "
+                            "%d MB RAM, %d CPUs, data: %s\n",
+                            simmy::settings_backend_name(info.backend), hz, g.vsync ? "on" : "off", g.fpsCap, g.msaa,
+                            g.renderHeight, simmy::settings_frame_pacing(), simmy::settings_disc_cache(),
+                            SDL_GetSystemRAM(), SDL_GetNumLogicalCPUCores(), simmy::data_source_description().c_str());
+    }
     // The window opens centred (settings_apply_config). If it is taller than the screen's work
     // area, centring would push the title bar above the top edge: keep the whole window frame
     // inside the work area so it can always be grabbed and moved.

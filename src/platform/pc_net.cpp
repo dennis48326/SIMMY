@@ -45,6 +45,7 @@
 // _FAKE_MATH / _FAKE_ISO change what this PC reports in the handshake, SIMMY_NET_ON_END=quit,
 // SIMMY_NET_DIR=<folder> (the session folder), SIMMY_NET_TRACE=1 (per-tick log).
 #include "simmy/types_gen.hpp"
+#include "simmy/perf.hpp"
 #include "simmy/platform.hpp"
 #include "simmy/detmath.hpp"
 #include "simmy/version.hpp"
@@ -618,7 +619,8 @@ bool LocalOnlySwitch(const std::string& name) {
       "SIMMY_DET_RANDLOG", "SIMMY_GFX",     "SIMMY_INI",        "SIMMY_KBM",       "SIMMY_SHOTS",      "SIMMY_FRAME",
       "SIMMY_AUDIO",      "SIMMY_BACKEND",  "SIMMY_SPLIT",      "SIMMY_OVERLAY",   "SIMMY_LSAN",       "SIMMY_VIRTUAL_PADS",
       "SIMMY_LOG",        "SIMMY_DATA",     "SIMMY_IO_STATS",   "SIMMY_GPU",       "SIMMY_GX_",        "SIMMY_WIN2",
-      "SIMMY_FAKE_PADS",  "SIMMY_DET",      "SIMMY_SKIP_INTRO", "SIMMY_PORTRAIT",  "SIMMY_WAV"};
+      "SIMMY_FAKE_PADS",  "SIMMY_DET",      "SIMMY_SKIP_INTRO", "SIMMY_PORTRAIT",  "SIMMY_WAV",
+      "SIMMY_PERF",       "SIMMY_DISC_CACHE", "SIMMY_DRAWS_BLOCKING"};  // (SIMMY_FRAME: _STATS, _PACING)
   for (const char* p : kLocal)
     if (name.rfind(p, 0) == 0 && !(std::strcmp(p, "SIMMY_DET") == 0 && name.rfind("SIMMY_DET_SPEED", 0) == 0) &&
         !(std::strcmp(p, "SIMMY_DET") == 0 && name.rfind("SIMMY_DET_SEED", 0) == 0))
@@ -1442,6 +1444,7 @@ bool net_wants_hash(int tick) {
 }
 
 void net_frame_end(int tick, const NetHash* hash) {
+  SIMMY_PERF_SCOPE(Net);  // the frame-hitch profiler (perf.hpp)
   Session& s = N();
   if (!s.active) return;
   s.lastTick = tick;

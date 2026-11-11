@@ -3,6 +3,7 @@
 // object location's +0x68, [1] +0x6C; the tile is CTilePt([1] >> 4, [0] >> 4)); "tile axes" X = [1] / 16,
 // Y = [0] / 16. Directions are eighths of a turn: 0 toward -[0], 2 toward +[1], 4 +[0], 6 -[1].
 #include "simmy/types_gen.hpp"
+#include "simmy/perf.hpp"
 #include "simmy/classes/placement.hpp"
 #include "simmy/countereat.hpp"
 #include "simmy/unported_globals.hpp"
@@ -959,6 +960,7 @@ void AverageLocation(cXObjectImpl* o, int out[2]) {
 // offset (score 100). No goal: the failure says why (9 a seat taken, 0xD a person, 8 an object, 0xB a
 // wall or another room, 0xC (EvalTileForGoal 4), 10 only sitting was allowed).
 void XRoute::ConstructGoals() {
+  SIMMY_PERF_SCOPE(Route);  // PC: the frame-hitch profiler (perf.hpp)
   ResetGoals();
   cXObjectImpl* object = Impl(m_object);
   if (!object) return;
@@ -1189,6 +1191,7 @@ void RunPath(Path& path, int limit) {
 // (over 256 tiles) with few objects searches coarse rectangles first and fails (3) if that finds
 // nothing. No goals: failure 1 becomes 7.
 int XRoute::FindPath(TileList& out) {
+  SIMMY_PERF_SCOPE(Route);  // PC: the frame-hitch profiler (perf.hpp)
   cXPersonImpl* person = PersonOf(m_person);
   cXObjectImpl* router = Impl(m_person);
   const bool ghost = person && person->IsGhost() != 0;

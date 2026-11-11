@@ -12,6 +12,7 @@
 // presses are also used here (B: back, Start: close, L/R: page), so the game's own button layout
 // works whatever the controller.
 #include "pc_overlay.hpp"
+#include "simmy/perf.hpp"
 #include "pc_net.hpp"
 #include "pc_kbm.hpp"
 #include "pc_window2.hpp"
@@ -520,6 +521,15 @@ void GraphicsPage() {
     }
     InfoRow("Graphics API in use", BackendLabel(o.backendInUse), "");
     {
+      // The frame-hitch profiler (pc_perf.cpp, docs/performance.md): perf_log.txt next to the game.
+      Choice c;
+      c.add("Off", "off");
+      c.add("On (perf_log.txt)", "on");
+      if ((pick = ChoiceRow("Frame-hitch profiler", "(F3)", kNote, c, perf::on() ? 1 : 0)) >= 0)
+        perf::set_enabled(pick == 1);
+      if (perf::on()) InfoRow("Profiler", perf::status_line(), "");
+    }
+    {
       // Two-player co-op: how the halves are shown (split=, --split); applies from the next frame.
       Choice c;
       c.add("GameCube (one 4:3 split)", "gc");
@@ -596,6 +606,7 @@ void ControlsPage() {
     };
     row("Open / close this menu", "F1");
     row("Fullscreen on / off", "Alt+Enter");
+    row("Frame-hitch profiler on / off", "F3");
     row("Move", "Arrow keys, D-pad, stick");
     row("Choose / next value", "Enter, Space, A, click");
     row("Change a value", "Left / Right");

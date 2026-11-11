@@ -1,6 +1,7 @@
 // Port of game/appmain.cpp (partial): the Sims application object.
 // Still stubbed: UpdateReset, the game sound player in UpdateAudio, big screenshots.
 #include "simmy/types_gen.hpp"
+#include "simmy/perf.hpp"
 #include "simmy/platform.hpp"
 #include "simmy/unported_globals.hpp"
 #include "simmy/mp4.hpp"  // PC mod: 4 players
@@ -317,6 +318,7 @@ void ESimsApp::UpdateGame() {
 // 800056F0
 // The game's sound player (cSoundPlayer, Globs::pSound) while no movie plays, then the UI sounds.
 void ESimsApp::UpdateAudio() {
+  SIMMY_PERF_SCOPE(Audio);  // PC: the frame-hitch profiler (perf.hpp)
   if (m_movieState == 0 && Globs_pSound) Globs_pSound->Update();
   UIAUDIO::Instance()->Update();
 }
@@ -362,6 +364,7 @@ void DrawGame(ERC* rc) {
 
 // 80005808
 void ESimsApp::UpdateDraw() {
+  SIMMY_PERF_SCOPE(Draw);  // PC: the frame-hitch profiler (perf.hpp)
   ERC* rc = _pGfx->Open(RCMode::Immediate);
   m_drawRC = rc;
   DrawGame(rc);

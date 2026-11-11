@@ -1,0 +1,49 @@
+diff --git a/lib/gx/texture.cpp b/lib/gx/texture.cpp
+index 33a8c99..47b59a7 100644
+--- a/lib/gx/texture.cpp
++++ b/lib/gx/texture.cpp
+@@ -116,6 +116,9 @@ absl::flat_hash_map<u32, TlutObjectCache> s_tlutObjectCaches;
+ absl::flat_hash_map<SourceKeyCacheKey, SourceKeyCacheEntry> s_sourceKeyCache;
+ absl::flat_hash_map<uint64_t, absl::flat_hash_set<u32>> s_replacementUsers;
+ TextureStats s_stats;
++// SIMMY: running totals of s_stats' per-frame counters (s_stats is reset every frame), for the
++// port's frame-hitch profiler (texture_stats_total).
++TextureStats s_totals;
+ gfx::LruCache<TextureContentKey, gfx::TextureHandle> s_contentCache{
+     {.bytes = texture::ContentCacheBudgetBytes},
+     [](const gfx::TextureHandle&) { ++s_stats.evictions; },
+@@ -502,6 +505,7 @@ bool use_replacement(std::optional<gfx::texture_replacement::ReplacementResult>
+ } // namespace
+ 
+ const TextureStats& texture_stats() noexcept { return s_stats; }
++const TextureStats& texture_stats_total() noexcept { return s_totals; }
+ 
+ namespace texture {
+ GXState::CopyTextureRef resolve_copy_texture(const GXState::CopyTextureKey& key) noexcept {
+@@ -732,6 +736,13 @@ void end_frame() noexcept {
+   TracyPlot("aurora: textureReplacementPublishes", static_cast<int64_t>(s_stats.publishes));
+   TracyPlot("aurora: textureReplacementPublishBytes", static_cast<int64_t>(s_stats.publishBytes));
+ 
++  s_totals.uploadBytes += s_stats.uploadBytes;
++  s_totals.hashedBytes += s_stats.hashedBytes;
++  s_totals.objectHits += s_stats.objectHits;
++  s_totals.contentHits += s_stats.contentHits;
++  s_totals.replacementHits += s_stats.replacementHits;
++  s_totals.misses += s_stats.misses;
++  s_totals.evictions += s_stats.evictions;
+   s_stats = {};
+   s_stats.pendingLoads = streamingStats.pendingLoads;
+   s_stats.publishes = streamingStats.publishes;
+diff --git a/lib/gx/texture.hpp b/lib/gx/texture.hpp
+index 4e06da3..763f786 100644
+--- a/lib/gx/texture.hpp
++++ b/lib/gx/texture.hpp
+@@ -28,6 +28,8 @@ struct TextureStats {
+ };
+ 
+ const TextureStats& texture_stats() noexcept;
++// SIMMY: the counters summed over all frames so far (texture_stats() is reset every frame).
++const TextureStats& texture_stats_total() noexcept;
+ 
+ namespace texture {
+ constexpr uint64_t ContentCacheBudgetBytes = 128ull * 1024ull * 1024ull;

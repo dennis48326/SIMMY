@@ -36,6 +36,11 @@ bool data_source_open_disc(const std::string& path, std::string& error);
 bool data_source_open_folder(const std::string& dir, std::string& error);
 bool data_source_ready();
 std::string data_source_description();  // "disc image G4ZE69" / "folder <dir>", for logs
+// disc_cache (simmy.ini, SIMMY_DISC_CACHE): after the source is open, read the archives the game loads
+// resources from into RAM on a background thread (mode 0 off, 1 on, 2 auto: with 8 GB of RAM or more).
+// Reads are then memory copies of the same bytes (data_path.cpp; docs/performance.md).
+void data_source_start_cache(int mode);
+void data_cache_stats(unsigned long long& hits, unsigned long long& bytes);
 
 struct DataFile;
 DataFile* data_open(const char* gamePath);  // null if there is no such file
@@ -218,6 +223,8 @@ bool split_window_open(int index);
 bool split_window_pixel_size(int index, unsigned& width, unsigned& height);
 // fire_code_limit= in simmy.ini (pc_settings.cpp): the GameCube's lot object limit (fire-code meter) is on.
 bool settings_fire_code_limit();
+int settings_disc_cache();
+int settings_frame_pacing();  // frame_pacing: 0 sleep, 1 precise, 2 vsync (pc_settings.cpp; SIMMY_FRAME_PACING)  // disc_cache: 0 off, 1 on, 2 auto (pc_settings.cpp; SIMMY_DISC_CACHE)
 
 // ---- PC mod: mods (pc_mods.cpp; the game side is src/game/modobjects.cpp) ----
 // Off unless a mod folder exists (mods= in simmy.ini, SIMMY_MODS, or "mods" next to the exe). Each

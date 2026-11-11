@@ -16,6 +16,9 @@
 #   0003-card-base-dir.patch  aurora_card_set_base_dir (card.h): before CARDInit, the folder the memory
 #     cards go under instead of the user folder (PC mod: network play, src/platform/pc_net.cpp: the joining
 #     PC plays on a copy of the host's card in its session folder, never on its own card).
+#   0004-texture-stat-totals.patch  aurora::gx::texture_stats_total (lib/gx/texture.hpp): the texture
+#     cache's per-frame counters (conversions + uploads, evictions, hits) summed over all frames, for the
+#     frame-hitch profiler (src/platform/pc_perf.cpp; texture_stats() is reset at every frame's end).
 
 function(simmy_patch_aurora source_dir)
   file(GLOB _patches ${CMAKE_CURRENT_FUNCTION_LIST_DIR}/aurora_patches/*.patch)

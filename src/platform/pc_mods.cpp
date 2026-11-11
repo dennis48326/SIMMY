@@ -35,6 +35,7 @@
 // names are read at start-up; a resource is read from its file each time the game loads it.
 #include "pc_settings.hpp"
 
+#include "simmy/perf.hpp"
 #include "simmy/platform.hpp"
 
 #include <SDL3/SDL_filesystem.h>
@@ -44,11 +45,14 @@
 
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <map>
+#include <mutex>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -339,9 +343,39 @@ bool mods_resource(const char* manager, unsigned int id, std::vector<unsigned ch
   if (!g_modsEnabled || !manager) return false;
   const auto it = g_modResources.find(std::make_pair(Lower(manager), id));
   if (it == g_modResources.end()) return false;
-  if (!LoadFile(it->second, out)) {
+  // PC: a resource read once stays in RAM (disc_cache on), so reloading it (the resource caches evict
+  // as on the GameCube) never waits for the disk again; at most 512 MB of mod files are kept.
+  static std::mutex cacheMutex;
+  static std::unordered_map<std::string, std::vector<unsigned char>> cache;
+  static std::size_t cacheBytes = 0;
+  static const bool useCache = settings_disc_cache() != 0;
+  if (useCache) {
+    std::lock_guard lock(cacheMutex);
+    if (const auto c = cache.find(it->second); c != cache.end()) {
+      out = c->second;
+      return true;
+    }
+  }
+  bool ok;
+  {
+    SIMMY_PERF_SCOPE(Disc);  // the frame-hitch profiler (perf.hpp)
+    const auto t0 = std::chrono::steady_clock::now();
+    ok = LoadFile(it->second, out);
+    if (perf::on())
+      perf::count_disc("mods", out.size(),
+                       static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                           std::chrono::steady_clock::now() - t0).count()));
+  }
+  if (!ok) {
     std::fprintf(stderr, "[mods] %s: cannot be read\n", it->second.c_str());
     return false;
+  }
+  if (useCache) {
+    std::lock_guard lock(cacheMutex);
+    if (cacheBytes + out.size() <= (512u << 20)) {
+      cacheBytes += out.size();
+      cache.emplace(it->second, out);
+    }
   }
   return true;
 }
