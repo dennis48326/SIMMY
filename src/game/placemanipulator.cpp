@@ -985,14 +985,20 @@ bool PlaceManipulatorDraw(int player, EOrderTableData* otd, InteractorModule__In
   // 802175EC InteractorVisualizer::Draw(PlacementObject&, EVec3&): the grid tile under each part, white
   // (red, 2 0 0, while the object can't go there: its instance's error light, flag 4), at the part's
   // tile plus the house's offset. GC: also the object itself (it is out of the world while carried; PC:
-  // the object stands in the world at the cursor and the house draws it).
+  // the object stands in the world at the cursor and the house draws it). GC's grid tiles are objects
+  // placed on the parts' tiles (PlacementObject::Place 8021BEE4), so the house draws them where it draws
+  // any object on that tile (ISimsObjectModel::SetObjOrient 80050D44: the tile plus the house's offset,
+  // which is already the tile's centre, EHouse +0x4C/+0x50 = 0.5; no further half tile: that put the
+  // square half a tile off along both axes from the object, the cursor and where the object lands).
   PlacementObject& po = m->m_placement;
   cXObjectImpl* o = po.m_object;
   if (!o || !po.m_gridModel) return true;
   const bool invalid = o->m_instance && (o->m_instance->m_cursFlags & ISimInstance::kErrorLight);
   EVec3 light = invalid ? EVec3{2.0f, 0.0f, 0.0f} : EVec3{1.0f, 1.0f, 1.0f};
   EHouse* house = _globals.m_house;
-  const float hx = house ? house->m_posY : 0.0f, hy = house ? house->m_posX : 0.0f;  // EHouse +0x4C, +0x50
+  // The engine's x is the tile's y (ISimsObjectModel::ApplyMatrix swaps the axes after adding the
+  // house's offset: the tile's x + EHouse +0x4C, its y + +0x50).
+  const float hx = house ? house->m_posX : 0.0f, hy = house ? house->m_posY : 0.0f;  // EHouse +0x50, +0x4C
   std::vector<cXObjectImpl*> parts;
   if (PlacementGroup* g = o->IsMultiTile() ? PlacementGroupOf(o) : nullptr) {
     for (auto& p : g->parts) parts.push_back(p.object);
@@ -1002,7 +1008,7 @@ bool PlaceManipulatorDraw(int player, EOrderTableData* otd, InteractorModule__In
   for (cXObjectImpl* part : parts) {
     EMat4 mat;
     mat.Id();
-    EVec3 at{static_cast<float>(part->m_location[0] >> 4) + 0.5f + hx, static_cast<float>(part->m_location[1] >> 4) + 0.5f + hy, 0.0f};
+    EVec3 at{static_cast<float>(part->m_location[0] >> 4) + hx, static_cast<float>(part->m_location[1] >> 4) + hy, 0.0f};
     mat.Translate(at);
     v.DrawLitModel(po.m_gridModel, light, &mat);
   }

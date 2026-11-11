@@ -190,8 +190,10 @@ flags; run on every room update (`PrepareForBudgetWindow`), each day (0xD8) and 
   (`ISimsObjectModel`, isimsobjectmodel.cpp; `SIMMY_SLOT_OFFSET_OFF=1` to compare, `SIMMY_SLOT_TRACE=1`). A
   multi-tile container's side with room (`IsLegalToPlaceSingleTileAtLocation`) is not chosen.
 - The grid tile object (GUID 0x437, `PlacementObject::CreateGridTile` 8021B27C and helpers) is not made;
-  its model is drawn directly. GC places the held object only where its grid object may go
-  (`PlacementObject::Place` 8021BEE4); the port places it anyway and shades it.
+  its model is drawn directly under each part, where the house would draw a grid object on that tile (the
+  tile plus the house's offset, i.e. its centre; `ISimsObjectModel::SetObjOrient` 80050D44). GC places the
+  held object only where its grid object may go (`PlacementObject::Place` 8021BEE4); the port places it
+  anyway and shades it.
 - The build tools' cursors and previews (`InteractorVisualizer`, interactorvisualizer.cpp; drawn through the
   house's order table like the other interactors: `SetupDrawCallback` -> `BuildToolPreDraw`, the record's
   callback -> `BuildToolDraw`, buildtools.cpp). Floor tool: the cursor's two models; with the trigger the
