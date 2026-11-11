@@ -120,6 +120,7 @@ struct SAnimator2 {
   void CheckOptionalMotionAnimStatusOnStateChange(int state);  // 80064C18
   void handleTurnAnimation();  // 80064C84
   void positionCharacter(EMat4* orient);  // 80065094
+  float ModSeatOffset();  // PC mod: mods (the converted seat or bed the person is in)
   virtual void GetBonePosAndDirForParticle(unsigned int, EMat4 &);  // 800653F8
   virtual void AttachParticleEffect(unsigned int, unsigned int, int);  // 80065420
   virtual void DetachParticleEffect(unsigned int, unsigned int, int);  // 800654F0

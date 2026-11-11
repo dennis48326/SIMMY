@@ -941,7 +941,9 @@ void cXPersonImpl::Cleanup(cXObject* object) {
     involved = true;
   if (involved) {
     m_gosubObjects.clear();
-    if (m_animator) {
+    // PC fix: not an animator that is not attached to its person yet (a house load killing a missing
+    // object type the person was using: its animator is set up after the objects are read)
+    if (m_animator && m_animator->GetPerson()) {
       // PC: the current animation stopped first (GC stops the animation controller's tracks after,
       // unless misc flag 0x40); then SetPixelated(0), Reset and ResetSuits (vtable 0xAC, 0x2C, 0x34).
       m_animator->stopCurAnim(false);
@@ -2236,6 +2238,17 @@ int PushInteraction(cXPersonImpl* person, cXObjectImpl* object, const char* pick
     // PC: entries of +0x16 > 99 are left to SIMMY_INTERACT_PICK (by name: the direct-control "Pick Up").
     static const char* pickEnvVar = std::getenv("SIMMY_INTERACT_PICK");
     const char* pickEnv = pickName ? pickName : pickEnvVar;
+    // "a,b;c": with SIMMY_INTERACT_NEAR, the n-th A press takes the n-th ';' part (the last from then on)
+    std::string pickPart;
+    if (!pickName && pickEnv && std::strchr(pickEnv, ';')) {
+      extern int g_pcInteractNearPresses;
+      const char* q = pickEnv;
+      for (int k = 1; k < g_pcInteractNearPresses; ++k)
+        if (const char* next = std::strchr(q, ';')) q = next + 1;
+      const char* end = std::strchr(q, ';');
+      pickPart.assign(q, end ? end : q + std::strlen(q));
+      pickEnv = pickPart.c_str();
+    }
     if (debug || !action || (ERQuickdata::S16(e, 0x16) > 99 && !pickEnv)) continue;
     if (!best) s_pushHasVars = false;
     int ok = 1;

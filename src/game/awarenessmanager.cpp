@@ -496,7 +496,9 @@ void AwarenessManager::MemoryAwarenessClearAction() {
     m_flags &= ~static_cast<unsigned int>(kMemoryAnimPending);
   }
   SAnimator2* a = m_animator;
-  if ((a && a->m_followMode == 6) || a->m_followMode == 7) a->setAwarenessFollowEnd();
+  // PC fix: the GC's test read `a` before checking it (null for a person whose animator is not made
+  // yet: a load killing the missing object a sleeping sim's bed was, mods.md)
+  if (a && (a->m_followMode == 6 || a->m_followMode == 7)) a->setAwarenessFollowEnd();
   if (m_anim && !m_anim->m_tracks.empty() && m_anim->IsTrackValid(eTrackFlags{0x400}))
     m_anim->SetTrackBlendSmooth(eTrackFlags{0x400}, 0.0f, kAwarenessBlendTime, 0.01f);
   if (m_flags & kTurning) {

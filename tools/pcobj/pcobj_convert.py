@@ -1,22 +1,23 @@
 #!/usr/bin/env python3
-"""PC mod: mods. Convert buy-mode objects (Decorative and Surfaces) from the user's own The Sims 2 (PC)
+"""PC mod: mods. Convert buy-mode objects (Decorative, Surfaces, Seating and beds) from the user's own The Sims 2 (PC)
 install (base game and every expansion and stuff pack found) into a SIMMY mod folder.
 
     pcobj_convert.py --pc "<The Sims 2 install>" --gc <GameCube disc image or data folder> --out <mods>
-                     --categories decorative,surfaces   every such object of every pack (or: all,
-                                                        --all-decorative, --all-surfaces)
+                     --categories decorative,surfaces,seating   every such object of every pack (or:
+                                                        all, --all-decorative, --all-surfaces, --all-seating)
     pcobj_convert.py ... --object <GUID | name>  [--base <GameCube object file>]   one object
     pcobj_convert.py ... --batch list.tsv         the GUIDs in the list's first column ([2nd: base])
     pcobj_convert.py --pc "<install>" --list ficus                                 find objects
     pcobj_convert.py --pc "<install>" --categories all --inventory inv.tsv         list, no output
 
-Each object becomes <out>/pc<k>_<name>_<guid>/ (surfaces: pcs<k>_...): mod.ini (a copy of a GameCube
-object, its "base": decorative objects by where they go (wall, floor, table top, ceiling, rug),
-surfaces a GameCube counter or table of the same footprint; with the PC object's GUID, name,
+Each object becomes <out>/pc<k>_<name>_<guid>/ (surfaces: pcs<k>_..., seating: pcc<k>_...): mod.ini (a
+copy of a GameCube object, its "base": decorative objects by where they go (wall, floor, table top,
+ceiling, rug), surfaces a GameCube counter or table of the same footprint, seating and beds a GameCube
+chair, sofa, bench or bed of the same footprint and comfort tier (seat height, made / slept-in beds); with the PC object's GUID, name,
 description, price, room rating, tiles, a surface's top height and a counter's pieces) and its
 resources in the GameCube's own formats (models_*: MODL, float indexed strips per material; shaders_*;
-textures_*: CMPR/RGB5A3 with mips; a thumbnail). <out>/pcdeco_inventory.tsv and pcsurf_inventory.tsv
-list every object found, converted or skipped (and why).
+textures_*: CMPR/RGB5A3 with mips; a thumbnail). <out>/pcdeco_inventory.tsv, pcsurf_inventory.tsv and
+pcseat_inventory.tsv list every object found, converted or skipped (and why).
 
 Never put the output in the source tree or share it: it is made of EA's PC game data, converted on the
 user's machine from the user's own copy. See docs/mods.md.
@@ -26,7 +27,7 @@ import argparse, os, re, shutil, struct, sys, time, zlib
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import rcol, sg, gcdata, gctex, pcmesh, pcinstall, pcsurf  # noqa: E402
+import rcol, sg, gcdata, gctex, pcmesh, pcinstall, pcsurf, pcseat  # noqa: E402
 from pcinstall import (W_PRICE, W_ROOMSORT, W_FUNCSORT, W_SUBSORT, W_RATINGS, SUBSORTS, F_DECORATIVE)  # noqa: E402
 
 # ---------------------------------------------------------------------------------------------------
@@ -44,6 +45,8 @@ BASES = {
     'ceiling': 'rug_outdoor_blanket',        # hangs from the ceiling: a rug tile (sims walk under it)
 }
 FIXED_POINT = False
+# Beds: which end of the GameCube bed's long axis (model x) the head goes to (+1: -x)
+BED_SIGN = int(os.environ.get('PCOBJ_BED_SIGN', '1'))
 SORT_KEY = {8: '1', 2: '2', 1: '3', 0x10: '4', 4: '5', 0x20: '6', 0x40: '7', 0x80: '7', 0: '7'}
 
 T_TXTR, T_TXMT = rcol.T_TXTR, rcol.T_TXMT
@@ -183,7 +186,7 @@ def make_modl(name, parts):
             body += np.concatenate([P, np.zeros((len(P), 1))], 1).astype('>f4').tobytes()
             body += U.astype('>f4').tobytes()
         n = N / np.maximum(np.linalg.norm(N, axis=1, keepdims=True), 1e-6)
-        nn = np.clip(np.round(n * 127), -127, 127).astype(np.int8)
+        nn = np.clip(np.round(np.nan_to_num(n) * 127), -127, 127).astype(np.int8)
         body += np.concatenate([nn, np.full((len(N), 1), 127, np.int8)], 1).tobytes()
         idx = T.reshape(-1).astype(np.uint16)
         dl = bytearray([0x96 if fixed else 0x97]) + struct.pack('>H', len(idx))  # GX_TRIANGLES | GX_VTXFMT6/7
@@ -323,7 +326,7 @@ class Session:
             self.gco = gcdata.GcObjects(self._gc)
             q = self.gco.qd
             self.templates = {}
-            for f in list(BASES.values()) + list(pcsurf.SURF_BASES.values()):
+            for f in list(BASES.values()) + list(pcsurf.SURF_BASES.values()) + list(pcseat.SEAT_BASES.values()):
                 defs = self.gco.files.get(f)
                 if not defs:
                     raise SystemExit(f'GameCube object {f} not found on the disc')
@@ -372,6 +375,7 @@ class Item:
         self.surface = None
         self.variants = []
         self.model_used = ''
+        self.seat = {}
 
     def footprint(self):
         if not self.tiles:
@@ -379,6 +383,8 @@ class Item:
         return max(x for (x, y), g in self.tiles) + 1, max(y for (x, y), g in self.tiles) + 1
 
     def subsort_name(self):
+        if self.category == 'seating':
+            return pcseat.SEAT_SUBSORTS.get(self.subsort, f'0x{self.subsort:x}')
         if self.category == 'surfaces':
             return pcsurf.SURF_SUBSORTS.get(self.subsort, f'0x{self.subsort:x}')
         return SUBSORTS.get(self.subsort, f'0x{self.subsort:x}')
@@ -533,8 +539,17 @@ def convert(s, it, base_override=None, write=True):
     if it.recolours:
         materials = dict(it.recolours[0][1])
     surface = it.category == 'surfaces'
+    seating = it.category == 'seating'
     picks = {}
-    if surface:
+    if seating:
+        kind, why = pcseat.seat_kind(it)
+        it.kind = kind
+        if why:
+            it.status, it.reason = 'skipped', why
+            return it
+        main = pcseat.pick_model(it, kind)
+        meshes, used, errors = _load(inst, it, [main] + [m for m in it.models if m != main and 'broken' not in m.lower()], materials)
+    elif surface:
         kind = pcsurf.surface_kind(it)
         picks = pcsurf.pick_models(it, kind)
         order = [picks.get('main')] + [m for m in it.models if m != picks.get('main') and
@@ -550,7 +565,39 @@ def convert(s, it, base_override=None, write=True):
     P_all = np.concatenate([m[2] for m in meshes])
     it.bounds = (P_all.min(0), P_all.max(0))
     W, H = it.footprint()
-    if surface:
+    seat = {}
+    if seating:
+        if kind in ('recliner', 'lounge'):
+            # a recliner's leg rest tile is only used reclined (its mesh, folded, fits its seat's tile); a
+            # lounge chair's legs reach into it. Both are GameCube chairs, which are one tile: the chair
+            # trees do not work as a part of a group (TREEASSERT 37 in "Sit"), so the second tile is
+            # dropped (the lounge chair's mesh overhangs its front tile)
+            W, H = 1, 1
+            it.notes.append('second tile dropped (1x1 chair)')
+        comfort, energy = pcseat.ratings(it, kind)
+        tier_base, tier_rating = pcseat.seat_base(kind, comfort, energy)
+        base = base_override or tier_base
+        bed = kind.startswith('bed')
+        if bed:
+            seat['height'] = pcseat.BED_SHEET
+            seat['offset'] = pcseat.BED_SHEET - pcseat.GC_MATTRESS
+            seat['top'] = pcseat.mattress_height(meshes)
+        else:
+            centres = [(x, y) for (x, y), g in it.tiles] if (W, H) != (1, 1) else [(0, 0)]
+            hs = [h for h in (pcseat.seat_height(meshes, kind, x, y) for x, y in centres) if h]
+            if not hs:
+                it.status, it.reason = 'skipped', 'no seat found in its mesh'
+                return it
+            seat['height'] = float(np.median(hs))
+            seat['offset'] = pcseat.seat_offset(seat['height'])
+        it.surface = seat['height']
+        seat['comfort'] = comfort
+        # a bed's energy for the catalogue: the PC's 1..8 onto the GameCube beds' 4..10
+        seat['energy'] = int(round(4 + (energy - 1) * 6 / 7)) if energy > 0 else -1
+        seat['base_rating'] = tier_rating
+        seat['seats'] = {'sofa': 3, 'loveseat': 2, 'living2': 2, 'bench': 2, 'bed_double': 2}.get(kind, 1)
+        it.seat = seat
+    elif surface:
         it.kind = kind
         if kind == 'wallshelf':
             it.status, it.reason = 'skipped', 'hangs on a wall (the GameCube has no wall-mounted surfaces)'
@@ -567,7 +614,7 @@ def convert(s, it, base_override=None, write=True):
         it.kind = kind
         base = base_override or BASES[kind]
     it.base = base
-    bdefs = s.gco.files.get(base) if gc is not None else [{'master': 1 if kind in ('rug', 'ceiling') or (surface and W * H > 1) else 0}]
+    bdefs = s.gco.files.get(base) if gc is not None else [{'master': 1 if kind in ('rug', 'ceiling') or ((surface or seating) and W * H > 1) else 0}]
     if not bdefs:
         it.status, it.reason = 'failed', f'GameCube base {base} not found'
         return it
@@ -609,8 +656,30 @@ def convert(s, it, base_override=None, write=True):
     # the PC's mirrored in y (its world swaps x and y).
     cx, cy = (W - 1) / 2.0, (H - 1) / 2.0
     wall = kind in ('wall', 'mirror')
+    bed_variants = {}
+    if seating and kind.startswith('bed'):
+        # PC: head at y 0, the bed along +y over tiles y 0..2, x across. GameCube: the bed's parts run
+        # along sub x (0..2) and its sides are sub y (double: 0 left, 1 right; single: 1); its models lie
+        # along model x. Turned a quarter (the head to model -x), then the usual mirror (gc_parts).
+        sgn = BED_SIGN
+        def turn(ms):
+            out = []
+            for (mat, sub, P, N, U, T) in ms:
+                Q = P.copy(); M = N.copy()
+                Q[:, 0] = sgn * (P[:, 1] - 1.0) + 1.0
+                Q[:, 1] = -sgn * (P[:, 0] - (W - 1) / 2.0) + (2 - 1) / 2.0
+                M[:, 0] = sgn * N[:, 1]; M[:, 1] = -sgn * N[:, 0]
+                out.append((mat, sub, Q, M, U, T))
+            return out
+        made, slept = pcseat.bed_models(meshes)
+        bed_variants = {'made': turn(made), 'slept': turn(slept)}
+        meshes_pc = meshes
+        meshes = bed_variants['made']
+        W, H = 3, 2
+        cx, cy = 1.0, 0.5
     tag = re.sub(r'[^a-z0-9]+', '', (it.name or it.objname).lower())[:20] or 'object'
-    prefix = f'pcs{pcsurf.SURF_SORT.get(kind, "7")}' if surface else f'pc{SORT_KEY.get(it.subsort, "7")}'
+    prefix = (f'pcs{pcsurf.SURF_SORT.get(kind, "7")}' if surface else f'pcc{pcseat.SEAT_SORT.get(kind, "8")}' if seating
+              else f'pc{SORT_KEY.get(it.subsort, "7")}')
     folder = os.path.join(s.out or '.', f'{prefix}_{tag}_{it.guid:08x}')
     it.out = os.path.basename(folder)
     taken = set(); files = {}
@@ -653,13 +722,44 @@ def convert(s, it, base_override=None, write=True):
     if not parts:
         it.status, it.reason = 'skipped', 'model has no drawable mesh'
         return it
+    # seating: per-state models (a dining chair pulled in; a bed made / slept in, a double's two halves)
+    seat_models = {}
+    if seating and kind.startswith('bed'):
+        slept = gc_parts(bed_variants['slept'])
+        def half(ps, right):
+            out = []
+            for sid, G, GN, U, T in ps:
+                keep = (G[T].mean(1)[:, 1] >= 0) == right
+                if keep.any():
+                    out.append((sid, G, GN, U, T[keep]))
+            return out
+        if kind == 'bed_double':
+            for side, right in (('right', True), ('left', False)):
+                seat_models[f'{side}_made'] = half(parts, right)
+                seat_models[f'{side}_slept'] = half(slept, right)
+        else:
+            seat_models['slept'] = slept
+        # the thumbnail from the PC mesh as it stands (head at the back)
+        rendered = []
+        gc_parts(meshes_pc, rendered)
+    elif seating and kind in ('dining', 'barstool'):
+        # pulled in to the table (state 1): the GameCube's chair slides toward the front (model -y)
+        seat_models['in'] = [(sid, G + np.array([0.0, -pcseat.GC_PULL_IN, 0.0]), GN, U, T) for sid, G, GN, U, T in parts]
+    it.variants = list(seat_models)
     it.verts = sum(len(p[1]) for p in parts); it.tris = sum(len(p[4]) for p in parts)
     vparts = [(k, gc_parts(m)) for k, m in variants]
     vparts = [(k, p) for k, p in vparts if p]
-    it.variants = [k for k, p in vparts]
+    it.variants = it.variants + [k for k, p in vparts]
     if not write:
         it.status = 'ok (dry run)'
         return it
+    sids = {}
+    for k, p in seat_models.items():
+        if not p:
+            continue
+        sid_ = new_id(gc, 'models', f'pcmod_{it.guid:08x}_model_{k}', taken)
+        files[f'models_{sid_:08X}.res'] = make_modl(f'pc_{tag}_{k}', p)
+        sids[k] = sid_
     mid = new_id(gc, 'models', f'pcmod_{it.guid:08x}_model', taken)
     files[f'models_{mid:08X}.res'] = make_modl(f'pc_{tag}', parts)
     vids = {}
@@ -675,7 +775,21 @@ def convert(s, it, base_override=None, write=True):
     # tiles: (x, y) as the GameCube's sub index (y mirrored with the model), with GUIDs (and a
     # surface's height over the tile)
     tiles = []
-    if multi:
+    if seating and kind.startswith('bed'):
+        # the GameCube bed's parts (base_parts): single (0..2, 1), double (0..2, 0..1); the PC part at the
+        # same place along the bed (head at x 0 or 2) and side gives its GUID
+        gtaken = set()
+        pcg = dict(it.tiles)
+        rows = (1,) if kind == 'bed_single' else (0, 1)
+        for gx in range(3):
+            for gy in rows:
+                py = gx if BED_SIGN > 0 else 2 - gx
+                px = 0 if kind == 'bed_single' else ((1 - gy) if BED_SIGN > 0 else gy)
+                g = pcg.get((px, py)) or tile_guid(it.guid, gx, gy, s.gco.guids, gtaken)
+                if g in s.gco.guids or g == it.guid:
+                    g = tile_guid(it.guid, gx, gy, s.gco.guids, gtaken)
+                tiles.append((gx, gy, g, None))
+    elif multi:
         gtaken = set()
         pcg = dict(it.tiles)
         coords = list(pcg.keys()) or [(0, 0)]
@@ -702,16 +816,37 @@ def convert(s, it, base_override=None, write=True):
     with open(os.path.join(folder, 'mod.ini'), 'w', encoding='utf-8') as f:
         f.write('# PC mod: mods. Converted by tools/pcobj/pcobj_convert.py from the user\'s own The Sims 2 (PC)\n'
                 '# install. EA game data: for this machine only, never share or commit it.\n')
-        what = f'{it.subsort_name()}, placed: {kind}' if not surface else f'surface: {pcsurf.describe(kind)}'
+        what = (f'surface: {pcsurf.describe(kind)}' if surface else f'seating: {pcseat.describe(kind)}' if seating
+                else f'{it.subsort_name()}, placed: {kind}')
         f.write(f'# PC object "{it.objname}" ({it.home.name}), model {used}, {what}\n[object]\n')
         f.write(f'guid = 0x{it.guid:08X}\nbase = {base}\nname = {one(name)}\ndesc = {one(it.desc)}\n')
         f.write(f'price = {it.price}\nmodel = 0x{mid:08X}\nthumbnail = 0x{thumb_id:08X}\n')
-        f.write(f'functions = 0x{(pcsurf.F_SURFACES if surface else F_DECORATIVE):X}\nroom = {max(0, min(10, it.room))}\n')
+        f.write(f'functions = 0x{(pcsurf.F_SURFACES if surface else pcseat.F_SEATING if seating else F_DECORATIVE):X}\n'
+                f'room = {max(0, min(10, it.room))}\n')
         if surface:
             f.write(f'surface = {it.surface:.3f}\n')
+        if seating:
+            f.write(f'# {"mattress (slept in)" if kind.startswith("bed") else "seat"} {seat["height"]:.3f} against the '
+                    f'GameCube\'s {pcseat.GC_MATTRESS if kind.startswith("bed") else pcseat.GC_SEAT:.2f}\n')
+            f.write(f'seat_offset = {seat["offset"]:.3f}\n')
+            f.write(f'comfort = {seat["comfort"]}\n')
+            if seat['energy'] >= 0:
+                f.write(f'energy = {seat["energy"]}\n')
+            if 'in' in sids:
+                f.write(f'state_models = 1:0x{sids["in"]:08X}\n')
         if tiles:
             f.write('tiles = ' + ' '.join(f'{x},{y}:0x{g:08X}' + (f':{h:.3f}' if surface and h else '')
                                           for x, y, g, h in tiles) + '\n')
+        if seating and kind.startswith('bed'):
+            # made in state 0, slept in for every other (getting in/out, sleeping, relaxing, making it)
+            states = range(1, 32)
+            f.write('base_parts = 1\n')
+            if kind == 'bed_double':
+                for (x, y), side in (((1, 1), 'right'), ((1, 0), 'left')):
+                    f.write(f'tile_model = {x},{y}:0x{sids[side + "_made"]:08X} ' +
+                            ' '.join(f'{k}:0x{sids[side + "_slept"]:08X}' for k in states) + '\n')
+            else:
+                f.write(f'tile_model = 1,1:0x{mid:08X} ' + ' '.join(f'{k}:0x{sids["slept"]:08X}' for k in states) + '\n')
         if vids:
             f.write(f'connect = {"island" if kind == "island" else "counter"}\n')
             for k, vid in vids.items():
@@ -725,8 +860,9 @@ def convert(s, it, base_override=None, write=True):
 
 INV_COLUMNS = ['guid', 'name', 'object', 'pack', 'packs', 'subsort', 'footprint', 'placement', 'base',
                'price', 'room', 'bhavs', 'semiglobal', 'model', 'textures', 'recolours', 'verts', 'tris',
-               'status', 'reason', 'folder', 'notes', 'bounds', 'category', 'surface', 'pieces']
-INVENTORY = {'decorative': 'pcdeco_inventory.tsv', 'surfaces': 'pcsurf_inventory.tsv'}
+               'status', 'reason', 'folder', 'notes', 'bounds', 'category', 'surface', 'pieces', 'seat_offset',
+               'comfort', 'energy', 'seats']
+INVENTORY = {'decorative': 'pcdeco_inventory.tsv', 'surfaces': 'pcsurf_inventory.tsv', 'seating': 'pcseat_inventory.tsv'}
 
 
 def inv_row(it):
@@ -736,7 +872,10 @@ def inv_row(it):
             it.semiglobal, it.model_used or ','.join(it.models[:2]), ' '.join(it.textures), str(max(0, len(it.recolours) - 1)),
             str(it.verts), str(it.tris), it.status, it.reason, it.out, '; '.join(it.notes),
             ' '.join(f'{v:.2f}' for v in np.concatenate(it.bounds)) if it.bounds is not None else '',
-            it.category, f'{it.surface:.2f}' if it.surface else '', ' '.join(it.variants)]
+            it.category, f'{it.surface:.2f}' if it.surface else '', ' '.join(it.variants),
+            f'{it.seat["offset"]:+.3f}' if it.seat else '', str(it.seat.get('comfort', '')) if it.seat else '',
+            str(it.seat.get('energy', '')) if it.seat and it.seat.get('energy', -1) >= 0 else '',
+            str(it.seat.get('seats', '')) if it.seat else '']
 
 
 def write_inventory(path, items):
@@ -768,7 +907,7 @@ def _work(args):
     return inv_row(it)
 
 
-CATEGORIES = {'decorative': decorative_guids, 'surfaces': pcsurf.surface_guids}
+CATEGORIES = {'decorative': decorative_guids, 'surfaces': pcsurf.surface_guids, 'seating': pcseat.seating_guids}
 
 
 def main():
@@ -781,6 +920,7 @@ def main():
     ap.add_argument('--base', help='with --object: the GameCube object to copy (default: chosen by placement)')
     ap.add_argument('--all-decorative', action='store_true', help='every buy-mode Decorative object')
     ap.add_argument('--all-surfaces', action='store_true', help='every buy-mode Surfaces object')
+    ap.add_argument('--all-seating', action='store_true', help='every buy-mode Seating object and bed')
     ap.add_argument('--categories', help='comma-separated buy-mode categories: decorative, surfaces (or all)')
     ap.add_argument('--batch', help='a list of GUIDs (first column; optional second column: base)')
     ap.add_argument('--packs', help='only objects whose home pack is one of these (codes: base, ep1..ep8, sp1..sp9)')
@@ -816,10 +956,17 @@ def main():
             raise SystemExit(f'unknown categor{"y" if len(bad) == 1 else "ies"}: {", ".join(bad)} (known: {", ".join(CATEGORIES)})')
     if a.all_decorative and 'decorative' not in cats:
         cats.append('decorative')
+    if a.all_seating and 'seating' not in cats:
+        cats.append('seating')
     if a.all_surfaces and 'surfaces' not in cats:
         cats.append('surfaces')
     def category_of(o):
-        return 'surfaces' if o.w(W_FUNCSORT) & pcsurf.F_SURFACES and not o.w(W_FUNCSORT) & F_DECORATIVE else 'decorative'
+        f = o.w(W_FUNCSORT)
+        if f & F_DECORATIVE:
+            return 'decorative'
+        if f & pcsurf.F_SURFACES:
+            return 'surfaces'
+        return 'seating' if f & pcseat.F_SEATING else 'decorative'
     jobs = []
     if a.object:
         q = a.object.lower()
@@ -830,7 +977,7 @@ def main():
             raise SystemExit(f'no PC object matches {a.object}')
         jobs = [(hits[0], a.base, category_of(cat.newest(hits[0])))]
     elif a.batch:
-        known = set(BASES.values()) | set(pcsurf.SURF_BASES.values())
+        known = set(BASES.values()) | set(pcsurf.SURF_BASES.values()) | set(pcseat.SEAT_BASES.values())
         for line in open(a.batch, encoding='utf-8'):
             f = line.strip().split('\t')
             if f and re.fullmatch(r'(0x)?[0-9a-fA-F]{6,8}', f[0]):
@@ -847,7 +994,7 @@ def main():
     elif a.inventory:
         jobs = [(g, None, 'decorative') for g in decorative_guids(cat)]
     else:
-        raise SystemExit('nothing to do: --all-decorative, --all-surfaces, --categories, --object, --batch, --inventory or --list')
+        raise SystemExit('nothing to do: --all-decorative, --all-surfaces, --all-seating, --categories, --object, --batch, --inventory or --list')
     packs = set(a.packs.split(',')) if a.packs else None
     items = []
     for g, b, c in jobs:
@@ -862,6 +1009,8 @@ def main():
         it = ib[0]
         if it.category == 'surfaces':
             return ('s', pcsurf.SURF_SORT.get(pcsurf.surface_kind(it), '7'), (it.name or '').lower())
+        if it.category == 'seating':
+            return ('t', pcseat.SEAT_SORT.get(pcseat.seat_kind(it)[0], '8'), (it.name or '').lower())
         return ('d', SORT_KEY.get(it.subsort, '7'), (it.name or '').lower())
     items.sort(key=sort_key)
     todo = [(it, b) for it, b in items if not it.status]

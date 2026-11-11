@@ -1,11 +1,13 @@
 # PC mod: mods (objects from the PC game)
 
 Lets the player add objects converted from **their own** copy of The Sims 2 for PC: by default every
-buy-mode **Decorative** and **Surfaces** object of the base game and of every expansion and stuff pack
-installed (about 560 decorative objects and 170 counters, tables and desks with the Ultimate
-Collection). Surfaces work as surfaces: things go on their tops at the PC height, sims prepare food on
-the counters, eat at the tables and use computers on the desks, and counters join up in rows and
-corners. Off unless a mod folder exists; with none, nothing in the game changes
+buy-mode **Decorative**, **Surfaces** and **Seating** object and every **bed** of the base game and of
+every expansion and stuff pack installed (about 560 decorative objects, 170 counters, tables and desks,
+and 180 chairs, sofas, benches, stools and beds with the Ultimate Collection). Surfaces work as
+surfaces: things go on their tops at the PC height, sims prepare food on the counters, eat at the
+tables and use computers on the desks, and counters join up in rows and corners. Seating and beds
+work as the GameCube's: sims sit on them (at the PC seat's height), pull dining chairs up to tables and
+eat, watch TV from sofas, sleep, relax and make the bed (made / slept-in models), two to a double bed. Off unless a mod folder exists; with none, nothing in the game changes
 (no extra memory, same determinism hash).
 
 **Legal rule.** The PC game's files are EA's. Nothing converted from them goes into this repository,
@@ -19,8 +21,8 @@ Its PC install and disc paths are set at the top of the file.
 
 | | |
 |---|---|
-| `convert_pc_object.bat` | every Decorative and Surfaces object of every pack under the install, into `mods` next to simmy.exe (progress per object; about 70 s for every pack of the Ultimate Collection on two cores) |
-| `convert_pc_object.bat decorative` / `surfaces` | only that buy-mode category |
+| `convert_pc_object.bat` | every Decorative, Surfaces and Seating object (beds included) of every pack under the install, into `mods` next to simmy.exe (progress per object with the percentage and time; about 2 minutes for every pack of the Ultimate Collection on two cores) |
+| `convert_pc_object.bat decorative` / `surfaces` / `seating` | only that buy-mode category (several may be given: `decorative seating`) |
 | `convert_pc_object.bat list ficus` | PC objects whose name contains "ficus" |
 | `convert_pc_object.bat inventory` | only the inventory (`mods\pcobj_inventory.tsv`) |
 | `convert_pc_object.bat "No-Fuss Ficus"` | one object (name or GUID), base chosen automatically |
@@ -30,23 +32,24 @@ By hand (Python 3 with numpy and Pillow, nothing else):
 
 ```
 python tools/pcobj/pcobj_convert.py --pc "C:\Games\The Sims 2 Ultimate Collection" \
-    --gc D:\Games\Sims2.iso --out C:\Games\SIMMY\mods --categories decorative,surfaces
+    --gc D:\Games\Sims2.iso --out C:\Games\SIMMY\mods --categories decorative,surfaces,seating
 ```
 
 `--pc` is the install folder (every `TSData/Res` under it is a pack); `--gc` the GameCube data the port
-plays (disc image or extracted folder). `--categories decorative,surfaces` (or `all`; also
-`--all-decorative`, `--all-surfaces`) picks the buy-mode categories. Other modes: `--object <GUID|name> [--base <GameCube object>]`,
+plays (disc image or extracted folder). `--categories decorative,surfaces,seating` (or `all`; also
+`--all-decorative`, `--all-surfaces`, `--all-seating`) picks the buy-mode categories. Other modes: `--object <GUID|name> [--base <GameCube object>]`,
 `--batch list.tsv` (GUIDs in the first column, an optional base in the second), `--list <text>`,
 `--inventory <file.tsv>` (classify only, write nothing else). Options: `--packs base,ep1,sp4,...` (by
 home pack), `--jobs N` (worker processes; default CPUs - 1), `--texsize` (largest texture side, 256).
-Converting again replaces the folders it wrote; `mods/pcdeco_inventory.tsv` and
-`mods/pcsurf_inventory.tsv` keep one row per object (converted or skipped, and why).
+Converting again replaces the folders it wrote; `mods/pcdeco_inventory.tsv`,
+`mods/pcsurf_inventory.tsv` and `mods/pcseat_inventory.tsv` keep one row per object (converted or
+skipped, and why).
 
 Start the game. The mod folder is `mods=` in simmy.ini (relative to the ini), else `SIMMY_MODS`, else
 `mods` next to the exe. The log says `[mods] <dir>: n mod(s), n object(s) (n multi-tile parts), n
 resource(s); read in n ms` and `[mods] objects: n added (n multi-tile), n skipped; rows ...` (with
 `SIMMY_MODS_VERBOSE=1`, or 20 objects or fewer, a line per object; a skipped object always says why).
-The objects are in buy mode on the **Decorative** and **Surfaces** tabs with the PC name, description,
+The objects are in buy mode on the **Decorative**, **Surfaces** and **Seating & Beds** tabs with the PC name, description,
 price and room rating and a rendered thumbnail. With a mod folder the **C stick** left/right pages that catalogue
 four columns at a time (the GameCube's movie only moves a column at a time; the tab can hold 600+).
 
@@ -155,6 +158,67 @@ quarter turned for the other hand), else the sides with no counter next to them 
 counter top counts as a neighbour (the GameCube's too). A sink in a converted counter keeps the plain
 piece and no cut-out (the GameCube's table of cut-outs only knows its own counters).
 
+## Seating and beds
+
+**Inventory.** Lead OBJDs with the catalogue function Seating (word 0x28 bit 0x01; the PC keeps its
+beds there too); kind from the sub-sort (word 0x5E: 1 dining chairs, 2 living chairs, 4 sofas, 8 beds,
+0x10 recliners and lounge chairs, 0x80 misc: bar stools, benches, ...), the semi-global
+(ChairGlobals, SofaGlobals, BedGlobals) and the footprint. 187 with the Ultimate Collection: 181
+converted; left out, with the reason in the inventory: the vampires' coffin (Nightlife), the Murphy
+bed (folds out of a wall cabinet, 2x4), the two hammocks and the tent (Bon Voyage), the makeover
+station (Open for Business): the GameCube has nothing they could be. Cribs and pet beds are not
+Seating on the PC (General: Kids, Pets) and the GameCube has no babies or pets: not converted.
+
+**The GameCube's seating.** All its chairs (dining, armchairs, the office chair) run
+`seating_chair_sg`: sit, and a dining chair is pulled in to a table to eat (its state 1, "in": the chair
+slides 0.24 tiles toward the table with the sim). Sofas, loveseats and the park bench run
+`seating_sofa_sg`: a seat per tile (a 3x1 sofa seats three), sit, watch TV; its beds `bed_sg`: sleep,
+relax, make the bed; a double has a side per sim (cuddle, woohoo). A sim in a seat is in the seat's
+object slot (height kind 7, altitude 0): the GameCube's sit animation lifts the pelvis to 0.67 (its
+seats are all 0.56-0.59), its sleep animation lies at 0.55 (mattress about 0.46); its beds are a row
+of three parts (single: sub (0,1), (1,1) draws, (2,1)) or three by two (double: (1,1) draws the right
+half, (1,0) the left; each half has its own state: made, unmade, getting in, sleeping, ...). How much
+comfort sitting gives, or energy sleeping, is the base's (its trees' constants: a converted sofa rated
+6 or 10 on the 7 sofa gives the 7 sofa's), so the base is picked by footprint and the PC rating:
+
+| PC kind | GameCube base (by the PC's comfort; beds by energy 1..8) |
+|---|---|
+| dining chair, bar stool, booth | `seating_chair_dining_plain` (3; comfort <= 4), `..._dining_modern` (6; <= 7), `..._dining_expensive` (10) |
+| armchair, sectional piece, recliner, lounge chair | `seating_chair_comfy_modern` (6; <= 7), `seating_chair_comfy_expensive` (10) |
+| sofa 3x1 | `seating_sofa_worn_3x1` (5; <= 5), `seating_sofa_modern_3x1` (7; <= 8), `seating_sofa_expensive_3x1` (10) |
+| loveseat 2x1, wide armchair 2x1 | `seating_sofa_loveseat_groovy` (7; <= 8), `seating_sofa_loveseat_romantic` (10) |
+| bench 2x1 | `seating_bench_public` |
+| single bed (1x3) | `bed_single_cot` (energy <= 2), `bed_single_groovy` |
+| double bed (2x3) | `bed_double_groovy` (<= 3), `bed_double_modern` (<= 5), `bed_double_japanese` |
+
+Sectionals and the booth use their single piece (arms both sides). Recliners and lounge chairs are
+1x2 on the PC; the GameCube's chairs are one tile and their trees do not work as a part of a group
+(tried: "Sit" stops with TREEASSERT 37), so they are 1x1 chairs: a recliner's folded mesh fits its
+tile, a lounge chair's legs overhang the tile in front (nothing stops things being put there).
+mod.ini `comfort` / `energy` give the catalogue the PC's ratings.
+
+**Seat height.** The converter reads the seat off the mesh: the upward faces in the middle of the
+seat (between the arms, in front of the back), the highest level with a fair share of the area
+between 0.2 and 0.6 (a bar stool's to 1.0). PC seats are 0.42-0.51 (sofas, chairs), lounge chairs
+0.33, bar stools 0.70-0.72. mod.ini `seat_offset` = PC seat - 0.57 (the GameCube's), kept between
+-0.12 and +0.2 (feet on the floor; a stool's sitter's feet off it). `SAnimator2::positionCharacter`
+draws a sim whose container is such a seat (or a part of it) that much higher, blended by its pose
+(none standing: pelvis 0.96 over its root; all of it sitting, 0.67, or lying), so the walk up and the
+sit-down start and end on the floor; the pose's node matrices are moved with it (the controller keeps
+a frame's matrices). Beds: the slept-in sheet is at 0.47 (offset +0.01).
+
+**Models and states.** A dining chair (and a bar stool) gets a second model 0.24 tiles toward its
+front for state 1 (pulled in: mod.ini `state_models = 1:0x...`). Beds are turned a quarter onto the
+GameCube bed's long axis (PC: head at y 0, the bed along +y; GameCube: along model x) and take the
+base's parts (mod.ini `base_parts = 1`: each tile copies the base part at the same sub index: its
+slots, its side); `tile_model = x,y:0xMODEL state:0xMODEL ...` gives the drawing parts their models:
+made in state 0, slept in in every other state (getting in and out, sleeping, relaxing, making it).
+The slept-in model is the PC mesh with the blanket's head half lowered to the sheet (the PC
+animates it; the pillow stays), so a sleeping sim lies on the sheet, covered from the waist down; a
+double's two halves are split at its middle (each side its own state). A second full-length
+blanket some double beds have inside the first (the PC's turned-down sheet, showing through in the
+bind pose) is left out.
+
 ## Mod folder
 
 ```
@@ -162,9 +226,13 @@ mods/
   pcdeco_inventory.tsv      every decorative object found: GUID, name, pack, sub-sort, footprint,
                             placement, base, price, room, BHAVs, model, textures, recolours, status, ...
   pcsurf_inventory.tsv      every surface: the same, the kind as placement, the top's height, the pieces
+  pcseat_inventory.tsv      every seat and bed: the kind, base, seat height, seat offset, ratings, seats
   pc3_nofussficus_4cc4fd6c/ "pc<sort>_<name>_<GUID>" (sort: 1 plants, 2 sculptures, 3 wall art,
     mod.ini                 4 mirrors, 5 rugs, 6 curtains, 7 misc; surfaces "pcs<k>_": 1 counters,
-                            2 islands, 3 dining, 4 desks, 5 coffee, 6 end tables, 7 displays/misc)
+                            2 islands, 3 dining, 4 desks, 5 coffee, 6 end tables, 7 displays/misc;
+                            seating "pcc<k>_": 1 dining chairs, 2 bar stools, 3 armchairs, recliners
+                            and lounges, 4 sofas, loveseats, sectionals, 5 benches, 6 single beds,
+                            7 double beds)
     models_96DA08B7.res     resources in the GameCube's own formats, as an archive holds them
     shaders_1FBB3FA3.res    ("<manager>_<id>.res": models, shaders, textures, ... any manager)
     textures_3A540C0D.res
@@ -174,7 +242,9 @@ mods/
 mod.ini `[object]` keys: `guid`, `base` (object file) or `base_guid`, `name`, `desc`, `price`, `model`,
 `thumbnail`, `functions` (catalogue function flags: the tab), `room` (catalogue room rating), `tiles`
 (`x,y:GUID[:height] ...`: a multi-tile object), `surface` (a surface's top, tiles), `connect`,
-`model_corner`, `model_end_px`, `model_end_nx`, `model_ends` (counter pieces), `pack` (informational). Mods are read in folder-name order; a GUID
+`model_corner`, `model_end_px`, `model_end_nx`, `model_ends` (counter pieces), `seat_offset`,
+`state_models`, `base_parts`, `tile_model` (repeatable, after `tiles`), `comfort`,
+`energy` (seating and beds), `pack` (informational). Mods are read in folder-name order; a GUID
 or resource id given twice keeps the first. A resource id the disc has is never taken from a mod.
 
 ## How it works
@@ -187,6 +257,7 @@ or resource id given twice keeps the first. A resource id the disc has is never 
 | Multi-tile groups | the same | A lead (sub index -1, the catalogue entry; never in the world) and one part per tile (sub index x << 8 \| y), all with a master id of their own (from 0x100 up, per object file) so `GetNthSubSelector` / `GetMasterSelector` find them. From a single-tile base every part is a copy of the base (as the GameCube's two-tile paintings are copies of one-tile ones); from a group base (a rug) the lead is its lead and the parts its parts. The first tile draws the model (room rating on it only); the others have no ResData. Placement, the group's offsets and the drawing at the group's middle are the GameCube's own (`MakeNewOutOfWorldObject`, `PlacementGroup`, `MultiTileGroupCenter`) |
 | Catalogue | `ObjSelector::GetCatalogName/Description/ShortName` (objselector_catalog.cpp), `PCTTarget::PageWithCStick` (pcttarget.cpp) | A mod object's own text (`m_modNameSlot`, `m_modDescSlot`); the cell list is a vector (no limit); the C stick pages four columns |
 | Surfaces | `ObjectSlotDescriptor` / `ObjectSlotHeight` (xrouting.cpp), `ModCounterPiece` / `ISimsCounterTopObject::SetObjOrient` (isimsobjectmodel.cpp) | The selector's `m_modSurface` (per part) and `m_modObject`: object slots at the mod's top; counter pieces by neighbours (`SIMMY_COUNTER_TRACE=1` logs the choice) |
+| Seating, beds | `SAnimator2::positionCharacter` / `ModSeatOffset` (sanimator2.cpp), `CopyDef` / `BasePart` (modobjects.cpp) | A sim in a converted seat or bed drawn at its seat's height (`SIMMY_SEAT_TRACE=1` logs container, state, root, pelvis and offset every 30 frames); per-state and per-part models, base parts by tile, ratings |
 | Fire code | `EIObjectMan::CountObjects` (iobjectman.cpp) | A mod object's model counts at 5/7 of its size: what it would weigh with the disc's fixed-point vertices (16 bytes a vertex against 28) |
 | Saves | unchanged | `objt` names types by GUID; a mod object (and each part) saves and loads like any other |
 
@@ -200,7 +271,7 @@ next save no longer has it. Things that stood on a removed surface are on the fl
 nothing placed), `try:<guid>@...` (placed there), `info#<guid>` (an object's placement data),
 `sell#<id>` (an object sold, e.g. to put a converted table where the lot's own stood; note that an object
 file name in a place action may name a mod object, which copies the file: use GUIDs);
-`SIMMY_COUNTER_TRACE=1` (counter pieces); `SIMMY_SLOT_TRACE=1` (slot heights);
+`SIMMY_COUNTER_TRACE=1` (counter pieces); `SIMMY_SLOT_TRACE=1` (slot heights); `SIMMY_SEAT_TRACE=1` (sims in seats and beds: offsets);
 `SIMMY_CAM_LOOK=x,y,distance,yaw,pitch[,height]` (the camera looks at a tile: screenshots).
 
 ## The converter (tools/pcobj/)
@@ -215,6 +286,7 @@ file name in a place action may name a mod object, which copies the file: use GU
 | `gctex.py` | CMPR (DXT1 encoder, DXT1 -> CMPR transcode), RGB5A3, RGBA8, mips, TXFL |
 | `gcdata.py` | GameCube data (folder or GCM image), the SimsObjects quickdata, EDataHeader |
 | `pcsurf.py` | Surfaces: kinds, bases by footprint, counter pieces, the top's height from the mesh |
+| `pcseat.py` | Seating and beds: kinds, bases by footprint and rating, the seat's height, the beds' made / slept-in models and halves |
 | `pcobj_convert.py` | Inventory, placement, base choice, materials, MODL/shaders, thumbnail, mod.ini; batch with worker processes |
 
 ## Limits
@@ -222,6 +294,14 @@ file name in a place action may name a mod object, which copies the file: use GU
 - The copy behaves like its GameCube base (room score from the PC room rating, price, the base's
   interactions); PC behaviour (BHAVs: aquariums' fish, fountains' water, clocks, shrines) is not
   converted. Animated objects show their mesh in its bind pose; no particles, no animated water.
+- Seating and beds behave as their GameCube base: no PC-only actions (recliners do not recline, no
+  bar stool use at counters: the GameCube's sims eat only at tables and have no bars; a stool pulled up
+  to a table works); comfort / energy gained are the base tier's. The sit and sleep animations are the
+  GameCube's (a lounge chair is sat on upright; a sim on a PC chair leans its arms at the GameCube's
+  table height). "Nap" on a sofa is the GameCube's own: its check refused it in our runs on the
+  GameCube's sofa too. Beds have two static models (made, slept in) instead of the animated blanket.
+  The coffin, Murphy bed, hammocks, tent and makeover station are left out; recolours are not
+  converted.
 - Surfaces behave as the GameCube's (eat, prepare food, things on them); PC extras are not
   converted (vanities' make-up, the food-judging table, displays' shop use, the tea table's ceremony).
   The GameCube's eat and computer animations are made for its 1.0 tables: at a PC table (0.8) plates

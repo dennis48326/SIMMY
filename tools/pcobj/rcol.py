@@ -173,7 +173,10 @@ def gmdc_group_mesh(g, gi):
             verts = [verts[a] if a < len(verts) else verts[-1] for a in alias]
         out[nm] = verts
     tris = [tuple(gr['faces'][i:i + 3]) for i in range(0, len(gr['faces']) - 2, 3)]
-    n = min((len(v) for v in out.values()), default=0)
+    # the vertex count: the positions' (and normals'/uvs'); morph elements (deltas, target maps) can be
+    # shorter and are not per-vertex
+    core = [v for k, v in out.items() if k in ('Vertices', 'Normals', 'UV')] or list(out.values())
+    n = min((len(v) for v in core), default=0)
     tris = [t for t in tris if max(t) < n]
     return out, tris
 

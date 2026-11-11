@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <string>
 #include <vector>
+#include <utility>
 
 struct ERC;
 
@@ -228,6 +229,10 @@ struct ModTile {
   int x = 0, y = 0;              // the tile's offset from the group's first tile (sub index x << 8 | y)
   unsigned int guid = 0;         // its own GUID (saves name every part by GUID)
   float surface = -1.0f;         // a surface's top over this tile (tiles), -1: the object's
+  // base_parts: the model this tile's part draws (tile_model; 0: the object's for the base's drawing
+  // part) and per-state models (state, model)
+  unsigned int model = 0;
+  std::vector<std::pair<int, unsigned int>> states;
 };
 struct ModObject {
   std::string mod;               // the mod's folder name
@@ -251,6 +256,18 @@ struct ModObject {
   // 3 both ends; 0: none.
   int connect = 0;               // 0 none, 1 counter, 2 island
   unsigned int pieces[4] = {};
+  // Seating and beds: the height the PC object's seat or mattress has against the one the base's
+  // animations sit or lie at (seat_offset, tiles): a person in its slots is drawn that much higher
+  // (blended in as the pose goes from standing to sitting or lying: SAnimator2::positionCharacter).
+  float seatOffset = 0.0f;
+  // Per-state models (state_models = state:model ...): a state shows this model instead of `model`
+  // (a dining chair pulled in, a bed made or slept in).
+  std::vector<std::pair<int, unsigned int>> states;
+  // base_parts: a group base's parts are matched by tile (sub index x << 8 | y): each tile copies the
+  // base part at the same place (its slots and model role; beds' sides), not the drawing / plain part.
+  bool baseParts = false;
+  // The catalogue's motive ratings (comfort, energy): written where the base has one (-1: the base's).
+  int comfort = -1, energy = -1;
 };
 void mods_init();                // once at start-up (main thread), after settings_load
 bool mods_enabled();             // a mod folder was found (also when it holds no mods)

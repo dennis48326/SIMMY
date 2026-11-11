@@ -18,6 +18,11 @@
 //   connect = counter          counter pieces drawn by neighbours (counter or island), with
 //   model_corner = 0x..., model_end_px, model_end_nx, model_ends   their models
 //   pack = ...                 where the object came from (informational)
+//   seat_offset = -0.09        seating / beds: a person in its slots is drawn this much higher (tiles)
+//   state_models = 1:0x... 2:0x...   per-state models (state 1 shows this model)
+//   base_parts = 1             a group base's parts are matched by tile (x << 8 | y sub index)
+//   tile_model = 1,0:0xMODEL 1:0x... 2:0x...   (repeatable) the model a tile's part draws, its states
+//   comfort = 7, energy = 2    motive ratings, where the base has one
 // Resource files next to it: "<manager>_<8 hex digits>.res", e.g. "models_9A3F0C12.res". Only their
 // names are read at start-up; a resource is read from its file each time the game loads it.
 #include "pc_settings.hpp"
@@ -119,6 +124,32 @@ bool ParseTiles(const std::string& v, std::vector<ModTile>& out) {
   return !out.empty();
 }
 
+// "s:0xMODEL s:0xMODEL ...": per-state models.
+bool ParseStates(const std::string& v, std::vector<std::pair<int, unsigned int>>& out) {
+  size_t pos = 0;
+  while (pos < v.size()) {
+    while (pos < v.size() && std::isspace(static_cast<unsigned char>(v[pos]))) ++pos;
+    if (pos >= v.size()) break;
+    size_t end = pos;
+    while (end < v.size() && !std::isspace(static_cast<unsigned char>(v[end]))) ++end;
+    const std::string item = v.substr(pos, end - pos);
+    pos = end;
+    const size_t colon = item.find(':');
+    unsigned int model = 0;
+    if (colon == std::string::npos || !ParseU32(item.substr(colon + 1), model)) return false;
+    const int state = std::atoi(item.c_str());
+    if (state < 0 || state > 255) return false;
+    out.emplace_back(state, model);
+  }
+  return true;
+}
+
+ModTile* FindTile(ModObject& o, int x, int y) {
+  for (ModTile& t : o.tiles)
+    if (t.x == x && t.y == y) return &t;
+  return nullptr;
+}
+
 void LoadModIni(const std::string& mod, const std::string& path) {
   std::vector<unsigned char> raw;
   if (!LoadFile(path, raw)) return;
@@ -174,6 +205,21 @@ void LoadModIni(const std::string& mod, const std::string& path) {
     else if (key == "model_end_px") ok = ParseU32(v, cur->pieces[1]);
     else if (key == "model_end_nx") ok = ParseU32(v, cur->pieces[2]);
     else if (key == "model_ends") ok = ParseU32(v, cur->pieces[3]);
+    else if (key == "seat_offset") {
+      cur->seatOffset = static_cast<float>(std::atof(v.c_str()));
+      ok = cur->seatOffset > -1.0f && cur->seatOffset < 1.0f;
+    } else if (key == "state_models") ok = ParseStates(v, cur->states);
+    else if (key == "base_parts") cur->baseParts = std::atoi(v.c_str()) != 0;
+    else if (key == "comfort") cur->comfort = std::atoi(v.c_str());
+    else if (key == "energy") cur->energy = std::atoi(v.c_str());
+    else if (key == "tile_model") {
+      // (after "tiles") "x,y:0xMODEL [state:0xMODEL ...]"
+      int x = 0, y = 0, n = 0;
+      ModTile* t = std::sscanf(v.c_str(), "%d,%d:%n", &x, &y, &n) == 2 ? FindTile(*cur, x, y) : nullptr;
+      const size_t sp = t ? v.find_first_of(" \t", static_cast<size_t>(n)) : std::string::npos;
+      ok = t && ParseU32(v.substr(static_cast<size_t>(n), sp == std::string::npos ? std::string::npos : sp - n), t->model) &&
+           (sp == std::string::npos || ParseStates(v.substr(sp), t->states));
+    }
     if (!ok) std::fprintf(stderr, "[mods] %s:%d: bad value \"%s\"\n", path.c_str(), lineNo, v.c_str());
   }
   for (ModObject& o : objects) {
@@ -261,7 +307,7 @@ unsigned int mods_tail_bytes() {
   for (const ModObject& o : g_modObjects) {
     const unsigned long long res = 0x38 + 4 + 32 * 0x20;
     bytes += 0xc4 + res;
-    if (!o.tiles.empty()) bytes += o.tiles.size() * 0xc4 + res;
+    if (!o.tiles.empty()) bytes += o.tiles.size() * 0xc4 + (o.baseParts ? o.tiles.size() : 1) * res;
   }
   bytes = (bytes + 0x1000 + 0xfff) & ~0xfffull;
   return bytes > 0x4000000ull ? 0x4000000u : static_cast<unsigned int>(bytes);

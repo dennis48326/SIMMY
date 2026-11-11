@@ -11,9 +11,12 @@
 #include "simmy/roomresolve.hpp"
 #include "simmy/classes/placement.hpp"
 #include "simmy/detmath.hpp"
+#include "simmy/platform.hpp"
 
 #include <cmath>
 #include <cstdlib>
+#include <map>
+#include <string>
 
 namespace {
 const float kWalkRunBlendTime = 0.1f;      // 804FDAD8
@@ -694,6 +697,42 @@ void SAnimator2::positionCharacter(EMat4* orient) {
   EAnimController& anim = m_sim->m_anim;
   anim.Update(nullptr, nullptr, EVec3{1.0f, 1.0f, 1.0f});
   anim.Compute(*orient, _framecount);
+  // PC mod: mods. In a converted seat or bed whose seat / mattress is higher or lower than the one the
+  // GameCube's animations sit or lie at (mod.ini seat_offset), the sim is drawn that much higher,
+  // blended in by the pose: none standing (pelvis 0.96 over the floor), all of it once sitting (0.67)
+  // or lying (0.55), so getting in and out starts and ends on the floor.
+  EMat4 seated;
+  const float seatOffset = ModSeatOffset();
+  float seatShift = 0.0f;
+  // (a second call in the same frame finds its pose computed and raised already: the same shift)
+  static std::map<const SAnimator2*, std::pair<int, float>> shifted;
+  auto done = seatOffset != 0.0f ? shifted.find(this) : shifted.end();
+  if (done != shifted.end() && done->second.first == _framecount) {
+    seated = *orient;
+    seatShift = done->second.second;
+    seated.m[3][2] += seatShift;
+    orient = &seated;
+  } else if (seatOffset != 0.0f && m_boneIndex[2] >= 0 && m_boneIndex[2] < anim.NodeCount() && anim.m_matrices) {
+    EMat4 pelvis;
+    anim.CalcNodeOrient(m_boneIndex[2], pelvis);
+    const float h = pelvis.m[3][2] - orient->m[3][2];
+    float f = (0.96f - h) / (0.96f - 0.67f);
+    f = f < 0.0f ? 0.0f : (f > 1.0f ? 1.0f : f);
+    if (f > 0.0f) {
+      seated = *orient;
+      seatShift = seatOffset * f;
+      seated.m[3][2] += seatShift;
+      orient = &seated;
+      // every node's world matrix moves with the root (translation row): the computed pose raised
+      for (int i = 0; i < anim.NodeCount(); ++i) {
+        anim.m_matrices[i].m[3][2] += seatShift;
+        anim.m_states[i].m_trans.z += seatShift;
+      }
+    }
+    shifted[this] = std::make_pair(static_cast<int>(_framecount), seatShift);
+  } else if (done != shifted.end()) {
+    shifted.erase(done);
+  }
   anim.CalcVisibilitySphere(*orient, *reinterpret_cast<EBoundSphere*>(m_sim->m_sphere));
   {
     const float* c = m_sim->m_sphere;
@@ -718,6 +757,18 @@ void SAnimator2::positionCharacter(EMat4* orient) {
     anim.CalcNodeOrient(index, n);
     m_bonePos[b] = EVec3{n.m[3][0], n.m[3][1], n.m[3][2]};
   }
+  static const bool seatTrace = std::getenv("SIMMY_SEAT_TRACE") != nullptr;
+  if (seatTrace && (_framecount % 30) == 0) {
+    cXPersonImpl* p = Impl(m_person);
+    cXObject* c = p ? p->GetContainer() : nullptr;
+    cXObjectImpl* ci = c ? c->GetObjectImplementation() : nullptr;
+    const std::string who = p ? p->DebugName() : "?";
+    std::printf("[seat] f%d %s in %s (state %d dir %d at %d,%d slot %d): root %.3f %.3f %.3f pelvis %.3f %.3f %.3f dir %.2f "
+                "offset %.3f of %.3f\n",
+                static_cast<int>(_framecount), who.c_str(), ci ? ci->DebugName() : "-", ci ? ci->GetData(0) : -1, ci ? ci->GetData(1) : -1,
+                ci ? ci->m_location[1] : 0, ci ? ci->m_location[0] : 0, p ? p->GetData(3) : -1, orient->m[3][0], orient->m[3][1],
+                orient->m[3][2], m_bonePos[2].x, m_bonePos[2].y, m_bonePos[2].z, m_dir, seatShift, seatOffset);
+  }
   // The carry direction: the z axis of the last bone posed (the pelvis), flattened.
   int last = -1;
   for (int b = 0; b < 3; ++b)
@@ -730,6 +781,17 @@ void SAnimator2::positionCharacter(EMat4* orient) {
     const float len = std::sqrt(m_carryDir.x * m_carryDir.x + m_carryDir.y * m_carryDir.y);
     if (len != 0.0f) m_carryDir.x /= len, m_carryDir.y /= len;
   }
+}
+
+// PC mod: mods. The seat offset (ModObject::seatOffset) of the converted seat or bed the person is in
+// (its container, a part of a sofa or bed included); 0 for anything else.
+float SAnimator2::ModSeatOffset() {
+  if (!simmy::mods_enabled()) return 0.0f;
+  cXPersonImpl* p = Impl(m_person);
+  cXObject* c = p ? p->GetContainer() : nullptr;
+  cXObjectImpl* ci = c ? c->GetObjectImplementation() : nullptr;
+  const simmy::ModObject* m = ci && ci->m_selector ? ci->m_selector->m_modObject : nullptr;
+  return m ? m->seatOffset : 0.0f;
 }
 
 // 8005F4E0

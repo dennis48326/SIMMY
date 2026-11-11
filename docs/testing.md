@@ -171,6 +171,7 @@ Development only: the launcher removes all of them except `SIMMY_INI` from the g
 | `SIMMY_SPRITE_TRACE=1`, `SIMMY_SPRITE_HOLD=1` | Balloons: trace; keep up for shots |
 | `SIMMY_SLOT_TRACE=1`, `SIMMY_SLOT_OFFSET_OFF=1` | Slot offsets: trace; disable |
 | `SIMMY_COUNTER_TRACE=1` | PC mod: mods: the piece (plain, corner, ends) each converted counter shows and its neighbours |
+| `SIMMY_SEAT_TRACE=1` | PC mod: mods: every 30 frames, each sim's container (seat, bed), its state, the sim's root and pelvis and the seat offset drawn ([mods.md](mods.md) "Seating and beds") |
 | `SIMMY_PORTRAIT_DUMP=<prefix>` | Write each finished portrait as BMP |
 | `SIMMY_UI3D_TRACE=1` | UI3D displays every 60 frames |
 | `SIMMY_GREEN_TEST=1` | Light player 1's sim as a green person (`ESim::Draw`'s ghost-green ambient) |
@@ -220,7 +221,7 @@ Development only: the launcher removes all of them except `SIMMY_INI` from the g
 | `SIMMY_NPC_TRACE=1` | Each service NPC record as the object folder loads it (gender, kind, name, model id: `ESim::initModel` poses that model for the NPC) |
 | `SIMMY_FUNDS=<n>`, `SIMMY_BUY_FUNDS=<n>` | Family funds on the lot / when the catalogue opens |
 | `SIMMY_SIM_START=x,y` | Put the sims on a tile at each house load |
-| `SIMMY_INTERACT_PICK=<name>`, `SIMMY_INTERACT_PICK_PLAYER=1\|2`, `SIMMY_INTERACT_NEAR=x,y;...\|#id`, `SIMMY_MENU_ITEM=<n>` | A starts the nearest object's named interaction at once (instead of the menu); limit to a player; objects near a place; which menu item a check tree gives |
+| `SIMMY_INTERACT_PICK=<name>`, `SIMMY_INTERACT_PICK_PLAYER=1\|2`, `SIMMY_INTERACT_NEAR=x,y;...\|#id`, `SIMMY_MENU_ITEM=<n>` | A starts the nearest object's named interaction at once (instead of the menu; `a,b` any of them; with `SIMMY_INTERACT_NEAR`, `a;b;...` the n-th A press takes the n-th part); limit to a player; objects near a place; which menu item a check tree gives |
 | `SIMMY_SOCIAL_PICK=<text>\|a,b\|@a,b`, `SIMMY_SOCIAL_ROUNDS=<n>` | Pick socials automatically; leave after n |
 | `SIMMY_SIM_COLLIDE=0` | Turn off the PC people-vs-people collision for steered sims |
 | `SIMMY_SAVED_STACKS=0` | Start every loaded object at its main tree |

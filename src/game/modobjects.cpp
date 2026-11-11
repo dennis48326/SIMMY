@@ -106,6 +106,20 @@ Base FindBase(ObjectFolderImpl* folder, const simmy::ModObject& m) {
   return b;
 }
 
+const std::vector<std::pair<int, unsigned int>>& NoStates() {
+  static const std::vector<std::pair<int, unsigned int>> none;
+  return none;
+}
+
+// A group base's part at tile (x, y) (sub index x << 8 | y), or null.
+const ObjDefinition* BasePart(ObjectFolderImpl* folder, ObjSelector* lead, int x, int y) {
+  for (int n = 0;; ++n) {
+    auto* part = reinterpret_cast<ObjSelector*>(folder->GetNthSubSelector(lead, n));
+    if (!part) return nullptr;
+    if ((objdef::SubIndex(part->m_def) & 0xffff) == (x << 8 | y)) return part->m_def;
+  }
+}
+
 // Mod rows in the tail, one after another.
 struct Tail {
   unsigned char* base = nullptr;
@@ -122,7 +136,8 @@ struct Tail {
 // A copy of `from` with the mod's GUID, price, functions and room rating, and (withRes) a ResData copy
 // with the mod's thumbnail and model in every state; without: no ResData (a part that draws nothing).
 unsigned char* CopyDef(Tail& tail, const ObjDefinition* from, const simmy::ModObject& m, unsigned int guid,
-                       bool withRes, int room) {
+                       bool withRes, int room, unsigned int model,
+                       const std::vector<std::pair<int, unsigned int>>& states) {
   const unsigned char* baseRes = objdef::ResData(from);
   const unsigned char* baseAnims = baseRes ? objdef::AnimDefs(baseRes) : nullptr;
   unsigned int anims = objdef::AnimDefCount(baseAnims);
@@ -135,6 +150,13 @@ unsigned char* CopyDef(Tail& tail, const ObjDefinition* from, const simmy::ModOb
   if (m.price >= 0) PutBE16(def + 0x24, static_cast<unsigned int>(m.price > 0x7fff ? 0x7fff : m.price));
   if (m.functions >= 0) PutBE16(def + 0x50, static_cast<unsigned int>(m.functions));
   if (room >= 0) PutBE16(def + 0xb0, static_cast<unsigned int>(room));
+  // Motive ratings (+0xA4: hunger, comfort, hygiene, bladder, energy, fun): the PC object's comfort and
+  // energy where the base row has one (a sofa's lead its comfort, its parts their energy).
+  auto rating = [&](unsigned int off, int v) {
+    if (v >= 0 && ERQuickdata::S16(def, off) != 0) PutBE16(def + off, static_cast<unsigned int>(v > 10 ? 10 : v));
+  };
+  rating(0xa6, m.comfort);
+  rating(0xac, m.energy);
   if (!withRes) {
     PutPtr(def + 0xc0, nullptr);
     return def;
@@ -148,7 +170,7 @@ unsigned char* CopyDef(Tail& tail, const ObjDefinition* from, const simmy::ModOb
   else std::memset(res, 0, kResDataSize);
   PutPtr(res, animDefs);
   if (m.thumbnail) PutBE32(res + 0x1c, m.thumbnail);
-  if (m.model) PutBE32(res + 0x20, 0);
+  if (model) PutBE32(res + 0x20, 0);
   // The state table: every state shows the mod's model, without the base's animation, effects and
   // shader swaps (they name the base model's parts).
   PutBE32(animCount, n);
@@ -156,8 +178,11 @@ unsigned char* CopyDef(Tail& tail, const ObjDefinition* from, const simmy::ModOb
     unsigned char* d = animDefs + i * kAnimDefSize;
     if (anims) std::memcpy(d, baseAnims + i * kAnimDefSize, kAnimDefSize);
     else std::memset(d, 0, kAnimDefSize), PutBE32(d + 0x18, 0xffffffffu);
-    if (!m.model) continue;
-    PutBE32(d + 0x00, m.model);
+    if (!model) continue;
+    unsigned int shown = model;
+    for (const auto& st : states)
+      if (st.first == static_cast<int>(i)) shown = st.second;
+    PutBE32(d + 0x00, shown);
     PutBE32(d + 0x04, 0);
     PutBE32(d + 0x08, 0);
     PutBE32(d + 0x0c, 0);
@@ -215,22 +240,45 @@ void ObjectFolderImpl::AddModObjects() {
     char* file = const_cast<char*>(base.selector->m_fileName);
     auto* resFile = reinterpret_cast<ResFile*>(const_cast<void*>(base.selector->m_resFile));
     const unsigned int mark = tail.used;
-    unsigned char* lead = CopyDef(tail, multi ? base.lead : base.drawing, m, m.guid, true, m.room);
+    unsigned char* lead = CopyDef(tail, multi ? base.lead : base.drawing, m, m.guid, true, m.room, m.model, multi ? NoStates() : m.states);
     std::vector<unsigned char*> parts;
     short master = 0;
+    bool partsOk = true;
     if (lead && multi) {
       master = masterFor(base.selector);
       PutBE16(lead + 0x14, static_cast<unsigned int>(master));
       PutBE16(lead + 0x16, 0xffff);
       bool first = true;
       for (const simmy::ModTile& t : m.tiles) {
-        unsigned char* d = CopyDef(tail, first ? base.drawing : base.plain, m, t.guid, first, first ? m.room : 0);
+        const ObjDefinition* from = first ? base.drawing : base.plain;
+        bool withRes = first;
+        unsigned int model = m.model;
+        const std::vector<std::pair<int, unsigned int>>* states = &m.states;
+        if (m.baseParts && base.group) {
+          // the base's part at this tile (a bed's sides, a sofa's seats): its slots, its model role
+          from = BasePart(this, base.selector, t.x, t.y);
+          if (!from) {
+            partsOk = false;
+            break;
+          }
+          withRes = objdef::ResData(from) != nullptr;
+          model = t.model ? t.model : m.model;
+          states = t.model ? &t.states : &m.states;
+        }
+        unsigned char* d = CopyDef(tail, from, m, t.guid, withRes, first ? m.room : 0, model, *states);
         if (!d) break;
         PutBE16(d + 0x14, static_cast<unsigned int>(master));
         PutBE16(d + 0x16, static_cast<unsigned int>(t.x << 8 | t.y));
         parts.push_back(d);
         first = false;
       }
+    }
+    if (!partsOk) {
+      tail.used = mark;
+      std::fprintf(stderr, "[mods] %s: a tile has no part of base \"%s\" at its place (base_parts); skipped\n", what.c_str(),
+                   base.selector->m_fileName);
+      ++skipped;
+      continue;
     }
     if (!lead || (multi && (parts.size() != m.tiles.size() || !master))) {
       tail.used = mark;
