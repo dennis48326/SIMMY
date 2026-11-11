@@ -436,6 +436,7 @@ struct cXObjectImpl : public cXObject {
   cXObjectImpl(int, ObjSelector* selector, ObjectModule* module);  // 800D962C
   virtual void Initialize();  // 800DA3D8
   virtual void Reset(bool);  // 800DA848
+  void ApplyModInitData();  // PC mod: mods (modobjects.cpp): a mod object's init_data after its init tree
   void JustBorn();  // 800DAC94
   virtual void PostLoad(int, bool);  // 800DADBC
   virtual void PreSave();  // 800DB168

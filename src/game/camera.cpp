@@ -428,6 +428,24 @@ RET_UNKNOWN ESimsCam::CursorMoved(int, EVec3&) { return 0; }
 // motion system's camera is (plus noise) along its forward direction. (GC: animation modes 1-4 follow
 // objects; SetAnimationMode is never called.)
 void ESimsCam::SetWinPos(E3DWindow& win) {
+  // PC development aid (screenshots): SIMMY_CAM_LOOK="x,y,distance,yaw,pitch[,height]" looks at tile (also during the lot intro's director shots)
+  // x,y (as SIMMY_PLACE_TEST's) from `distance` tiles, turned `yaw` degrees about it and `pitch` degrees
+  // down, at `height` (default 1) above the floor.
+  static const char* camLook = std::getenv("SIMMY_CAM_LOOK");
+  if (camLook && _globals.m_house && m_player == 0) {
+    float tx = 0, ty = 0, dist = 6, yaw = 0, pitch = 30, height = 1;
+    if (std::sscanf(camLook, "%f,%f,%f,%f,%f,%f", &tx, &ty, &dist, &yaw, &pitch, &height) >= 2) {
+      EHouse* house = _globals.m_house;
+      const EVec3 target{ty + house->m_posY, tx + house->m_posX, height};
+      const float a = yaw * 3.1415927f / 180.0f, p = pitch * 3.1415927f / 180.0f;
+      EVec3 eye{target.x + std::cos(a) * std::cos(p) * dist, target.y + std::sin(a) * std::cos(p) * dist,
+                target.z + std::sin(p) * dist};
+      EVec3 up{0.0f, 0.0f, 1.0f};
+      m_eye = eye;
+      win.SetLookAt(eye, const_cast<EVec3&>(target), up);
+      return;
+    }
+  }
   auto* director = static_cast<CameraDirector*>(_globals.CameraDirectorOf(m_player));
   if (director && director->IsActive()) {
     SnapActualCameraParamsToTarget();
@@ -464,24 +482,6 @@ void ESimsCam::SetWinPos(E3DWindow& win) {
   EVec3 at{m_eye.x + fwd.x, m_eye.y + fwd.y, m_eye.z + fwd.z};
   EVec3 noisy = ApplyNoise(m_eye, at, m_motion->m_up);
   EVec3 look{noisy.x + fwd.x, noisy.y + fwd.y, noisy.z + fwd.z};
-  // PC development aid (screenshots): SIMMY_CAM_LOOK="x,y,distance,yaw,pitch[,height]" looks at tile
-  // x,y (as SIMMY_PLACE_TEST's) from `distance` tiles, turned `yaw` degrees about it and `pitch` degrees
-  // down, at `height` (default 1) above the floor.
-  static const char* camLook = std::getenv("SIMMY_CAM_LOOK");
-  if (camLook && _globals.m_house && m_player == 0) {
-    float tx = 0, ty = 0, dist = 6, yaw = 0, pitch = 30, height = 1;
-    if (std::sscanf(camLook, "%f,%f,%f,%f,%f,%f", &tx, &ty, &dist, &yaw, &pitch, &height) >= 2) {
-      EHouse* house = _globals.m_house;
-      const EVec3 target{ty + house->m_posY, tx + house->m_posX, height};
-      const float a = yaw * 3.1415927f / 180.0f, p = pitch * 3.1415927f / 180.0f;
-      EVec3 eye{target.x + std::cos(a) * std::cos(p) * dist, target.y + std::sin(a) * std::cos(p) * dist,
-                target.z + std::sin(p) * dist};
-      EVec3 up{0.0f, 0.0f, 1.0f};
-      m_eye = eye;
-      win.SetLookAt(eye, const_cast<EVec3&>(target), up);
-      return;
-    }
-  }
   win.SetLookAt(noisy, look, m_motion->m_up);
 }
 

@@ -137,9 +137,10 @@ struct Tail {
 // with the mod's thumbnail and model in every state; without: no ResData (a part that draws nothing).
 unsigned char* CopyDef(Tail& tail, const ObjDefinition* from, const simmy::ModObject& m, unsigned int guid,
                        bool withRes, int room, unsigned int model,
-                       const std::vector<std::pair<int, unsigned int>>& states) {
+                       const std::vector<std::pair<int, unsigned int>>& states, const unsigned char* animRes = nullptr) {
   const unsigned char* baseRes = objdef::ResData(from);
-  const unsigned char* baseAnims = baseRes ? objdef::AnimDefs(baseRes) : nullptr;
+  // An animated appliance keeps a character and its state table (animations, effects) from animRes.
+  const unsigned char* baseAnims = animRes ? objdef::AnimDefs(animRes) : baseRes ? objdef::AnimDefs(baseRes) : nullptr;
   unsigned int anims = objdef::AnimDefCount(baseAnims);
   if (anims > kMaxStates) anims = kMaxStates;
   const unsigned int n = anims ? anims : 1;
@@ -170,9 +171,10 @@ unsigned char* CopyDef(Tail& tail, const ObjDefinition* from, const simmy::ModOb
   else std::memset(res, 0, kResDataSize);
   PutPtr(res, animDefs);
   if (m.thumbnail) PutBE32(res + 0x1c, m.thumbnail);
-  if (model) PutBE32(res + 0x20, 0);
+  if (model) PutBE32(res + 0x20, animRes ? ERQuickdata::U32(animRes, 0x20) : 0);
   // The state table: every state shows the mod's model, without the base's animation, effects and
-  // shader swaps (they name the base model's parts).
+  // shader swaps (they name the base model's parts); an animated appliance keeps animRes's animations
+  // and effects attachments (its model's strips are bound to that character's nodes).
   PutBE32(animCount, n);
   for (unsigned int i = 0; i < n; ++i) {
     unsigned char* d = animDefs + i * kAnimDefSize;
@@ -183,8 +185,10 @@ unsigned char* CopyDef(Tail& tail, const ObjDefinition* from, const simmy::ModOb
     for (const auto& st : states)
       if (st.first == static_cast<int>(i)) shown = st.second;
     PutBE32(d + 0x00, shown);
-    PutBE32(d + 0x04, 0);
-    PutBE32(d + 0x08, 0);
+    if (!animRes) {
+      PutBE32(d + 0x04, 0);
+      PutBE32(d + 0x08, 0);
+    }
     PutBE32(d + 0x0c, 0);
     PutBE32(d + 0x10, 0);
   }
@@ -237,10 +241,29 @@ void ObjectFolderImpl::AddModObjects() {
       ++skipped;
       continue;
     }
+    // Animated appliances: the character and state table of the base's drawing part, or anim_base's.
+    const unsigned char* animBaseRes = nullptr;
+    if (m.animated && !m.animBase.empty()) {
+      for (ObjSelector* s = GetNextSelector(nullptr); s && !animBaseRes; s = GetNextSelector(s))
+        if (!s->m_mod && s->m_def && s->m_fileName && m.animBase == s->m_fileName && objdef::ResData(s->m_def) &&
+            ERQuickdata::U32(objdef::ResData(s->m_def), 0x20))
+          animBaseRes = objdef::ResData(s->m_def);
+      if (!animBaseRes)
+        std::fprintf(stderr, "[mods] %s: anim_base \"%s\" has no animated character; still model\n", what.c_str(),
+                     m.animBase.c_str());
+    }
+    auto animOf = [&](const ObjDefinition* from) -> const unsigned char* {
+      if (!m.animated) return nullptr;
+      if (animBaseRes) return animBaseRes;
+      const unsigned char* r = objdef::ResData(from);
+      return r && ERQuickdata::U32(r, 0x20) ? r : nullptr;
+    };
+    const unsigned int stateModel = m.animated && m.animModel ? m.animModel : m.model;
     char* file = const_cast<char*>(base.selector->m_fileName);
     auto* resFile = reinterpret_cast<ResFile*>(const_cast<void*>(base.selector->m_resFile));
     const unsigned int mark = tail.used;
-    unsigned char* lead = CopyDef(tail, multi ? base.lead : base.drawing, m, m.guid, true, m.room, m.model, multi ? NoStates() : m.states);
+    unsigned char* lead = multi ? CopyDef(tail, base.lead, m, m.guid, true, m.room, m.model, NoStates())
+                                : CopyDef(tail, base.drawing, m, m.guid, true, m.room, stateModel, m.states, animOf(base.drawing));
     std::vector<unsigned char*> parts;
     short master = 0;
     bool partsOk = true;
@@ -252,7 +275,7 @@ void ObjectFolderImpl::AddModObjects() {
       for (const simmy::ModTile& t : m.tiles) {
         const ObjDefinition* from = first ? base.drawing : base.plain;
         bool withRes = first;
-        unsigned int model = m.model;
+        unsigned int model = stateModel;
         const std::vector<std::pair<int, unsigned int>>* states = &m.states;
         if (m.baseParts && base.group) {
           // the base's part at this tile (a bed's sides, a sofa's seats): its slots, its model role
@@ -262,10 +285,10 @@ void ObjectFolderImpl::AddModObjects() {
             break;
           }
           withRes = objdef::ResData(from) != nullptr;
-          model = t.model ? t.model : m.model;
+          model = t.model ? t.model : stateModel;
           states = t.model ? &t.states : &m.states;
         }
-        unsigned char* d = CopyDef(tail, from, m, t.guid, withRes, first ? m.room : 0, model, *states);
+        unsigned char* d = CopyDef(tail, from, m, t.guid, withRes, first ? m.room : 0, model, *states, withRes ? animOf(from) : nullptr);
         if (!d) break;
         PutBE16(d + 0x14, static_cast<unsigned int>(master));
         PutBE16(d + 0x16, static_cast<unsigned int>(t.x << 8 | t.y));
@@ -316,4 +339,12 @@ void ObjectFolderImpl::AddModObjects() {
   const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
   std::fprintf(stderr, "[mods] objects: %d added (%d multi-tile), %d skipped; rows %u of %u bytes; %.1f ms\n", added, groups,
                skipped, tail.used, tail.size, ms);
+}
+
+// PC mod: mods. After an object's init tree (cXObjectImpl::Reset, cXMTObjectImpl::Reset): a mod
+// object's init_data (data index := value), e.g. the heights it may stand at (data 4).
+void cXObjectImpl::ApplyModInitData() {
+  const simmy::ModObject* m = m_selector ? m_selector->m_modObject : nullptr;
+  if (!m) return;
+  for (const auto& d : m->initData) m_data.WriteVar(d.first, static_cast<short>(d.second));
 }

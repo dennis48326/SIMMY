@@ -25,6 +25,12 @@
 //   comfort = 7, energy = 2    motive ratings, where the base has one
 //   counter_seat = 1           a bar stool: sims sit on it to eat at the counter it faces (0: never;
 //                              no key: a chair with seat_offset 0.08 or more)
+//   init_data = 4:0x1          object data set after each init tree (4: the heights it may be placed at)
+//   animated = 1               an appliance: keeps the base's skeleton, state animations and effects
+//   anim_base = <object file>  ... taken from this GameCube object instead
+//   anim_model = 0x...         the model the states show (strips bound to the skeleton's nodes)
+//   node = 1:0.42,-0.17,0:m    node 1 turns about this point (model space); m: mirrored in x; +x .. -z:
+//                              by its angle about that model axis
 // Resource files next to it: "<manager>_<8 hex digits>.res", e.g. "models_9A3F0C12.res". Only their
 // names are read at start-up; a resource is read from its file each time the game loads it.
 #include "pc_settings.hpp"
@@ -217,6 +223,41 @@ void LoadModIni(const std::string& mod, const std::string& path) {
     else if (key == "counter_seat") {
       cur->counterSeat = std::atoi(v.c_str()) != 0 ? 1 : 0;
       ok = v == "0" || v == "1";
+    }
+    else if (key == "animated") cur->animated = std::atoi(v.c_str()) != 0;
+    else if (key == "init_data") {
+      // "index:value ..." (values decimal or 0x hex)
+      size_t at = 0;
+      while (ok && at < v.size()) {
+        while (at < v.size() && (v[at] == ' ' || v[at] == '\t')) ++at;
+        if (at >= v.size()) break;
+        const size_t end = v.find_first_of(" \t", at);
+        const std::string item = v.substr(at, end == std::string::npos ? std::string::npos : end - at);
+        const size_t colon = item.find(':');
+        if (colon == std::string::npos) {
+          ok = false;
+          break;
+        }
+        const int index = std::atoi(item.substr(0, colon).c_str());
+        const long value = std::strtol(item.substr(colon + 1).c_str(), nullptr, 0);
+        ok = index >= 0 && index < 0x80;
+        if (ok) cur->initData.emplace_back(index, static_cast<int>(value));
+        at = end == std::string::npos ? v.size() : end;
+      }
+    }
+    else if (key == "anim_base") cur->animBase = v;
+    else if (key == "anim_model") ok = ParseU32(v, cur->animModel);
+    else if (key == "node") {
+      // "N:x,y,z[:m]" (a node's pivot in model space; m: its turn mirrored in x)
+      ModObject::Node n;
+      char spec[8] = {};
+      const int got = std::sscanf(v.c_str(), "%d:%f,%f,%f:%7s", &n.node, &n.pivot[0], &n.pivot[1], &n.pivot[2], spec);
+      const std::string sp = Lower(spec);
+      n.mirror = sp == "m";
+      if (sp.size() == 2 && (sp[0] == '+' || sp[0] == '-') && sp[1] >= 'x' && sp[1] <= 'z')
+        n.axis = (sp[0] == '-' ? -1 : 1) * (sp[1] - 'x' + 1);
+      ok = got >= 4 && n.node >= 0 && n.node < 256 && (got == 4 || n.mirror || n.axis);
+      if (ok) cur->nodes.push_back(n);
     }
     else if (key == "tile_model") {
       // (after "tiles") "x,y:0xMODEL [state:0xMODEL ...]"

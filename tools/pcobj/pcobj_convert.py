@@ -27,7 +27,7 @@ import argparse, os, re, shutil, struct, sys, time, zlib
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import rcol, sg, gcdata, gctex, pcmesh, pcinstall, pcsurf, pcseat  # noqa: E402
+import rcol, sg, gcdata, gctex, pcmesh, pcinstall, pcsurf, pcseat, pcappl  # noqa: E402
 from pcinstall import (W_PRICE, W_ROOMSORT, W_FUNCSORT, W_SUBSORT, W_RATINGS, SUBSORTS, F_DECORATIVE)  # noqa: E402
 
 # ---------------------------------------------------------------------------------------------------
@@ -155,12 +155,15 @@ def make_modl(name, parts):
     (vertex format 6: s16 positions in model units times the model's scale, s16 4.12 uvs) when
     FIXED_POINT and the uvs fit; else float (vertex format 7)."""
     split = []
-    for sid, P, N, U, T in parts:
+    for sid, P, N, U, T, *node in parts:
         for k in range(0, len(T), 21000):
             t = T[k:k + 21000]
             used = np.unique(t)
             remap = np.full(len(P), -1, np.int64); remap[used] = np.arange(len(used))
-            split.append((sid, P[used], N[used], U[used], remap[t]))
+            split.append((sid, P[used], N[used], U[used], remap[t], node[0] if node else None))
+    # an animated appliance's model: every strip bound to a node of the base's character (a matrix record
+    # before it: matrix `node` in skinning slot 0; the sub-model has no node of its own)
+    bound = any(p[5] is not None for p in split)
     allP = np.concatenate([p[1] for p in split])
     allU = np.concatenate([p[3] for p in split])
     # Fixed point (vertex format 6, as most disc models) needs the model's scale, which the game applies
@@ -173,10 +176,12 @@ def make_modl(name, parts):
     body += struct.pack('>I', 0) + b'\0' * 48 + b'\0'
     body += struct.pack('>5I', 0, 0, 0, 0, 0)
     body += b'\0' + struct.pack('>f', scale) + struct.pack('>I', 1)
-    body += struct.pack('>II', 0, len(split))
-    for sid, P, N, U, T in split:
+    body += struct.pack('>II', 0xFFFFFFFF if bound else 0, len(split))
+    for sid, P, N, U, T, node in split:
         flags = 0x2A | (0x10 if fixed else 0)  # uvs | normals | indexed (| fixed point)
         body += struct.pack('>III', flags, sid, 1) + b'\0' + struct.pack('>f', 1.0)
+        if bound:
+            body += bytes([1, 0, node or 0, 0])
         body += b'\0' + struct.pack('>I', len(P))
         if fixed:
             q = np.clip(np.round(P / scale), -32767, 32767).astype('>i2')
@@ -326,7 +331,8 @@ class Session:
             self.gco = gcdata.GcObjects(self._gc)
             q = self.gco.qd
             self.templates = {}
-            for f in list(BASES.values()) + list(pcsurf.SURF_BASES.values()) + list(pcseat.SEAT_BASES.values()):
+            for f in (list(BASES.values()) + list(pcsurf.SURF_BASES.values()) + list(pcseat.SEAT_BASES.values()) +
+                      list(pcappl.APPL_BASES.values())):
                 defs = self.gco.files.get(f)
                 if not defs:
                     raise SystemExit(f'GameCube object {f} not found on the disc')
@@ -378,6 +384,8 @@ class Item:
         self.seat = {}
 
     def footprint(self):
+        if getattr(self, 'fp', None):
+            return self.fp
         if not self.tiles:
             return 1, 1
         return max(x for (x, y), g in self.tiles) + 1, max(y for (x, y), g in self.tiles) + 1
@@ -387,6 +395,8 @@ class Item:
             return pcseat.SEAT_SUBSORTS.get(self.subsort, f'0x{self.subsort:x}')
         if self.category == 'surfaces':
             return pcsurf.SURF_SUBSORTS.get(self.subsort, f'0x{self.subsort:x}')
+        if self.category == 'appliances':
+            return pcappl.APPL_SUBSORTS.get(self.subsort, f'0x{self.subsort:x}')
         return SUBSORTS.get(self.subsort, f'0x{self.subsort:x}')
 
 
@@ -511,14 +521,18 @@ def material_of(inst, mat, maxdim):
 
 # ---------------------------------------------------------------------------------------------------
 
-def _load(inst, it, names, materials):
-    """The meshes of the first of `names` that loads, and that name; ([], None, errors) if none."""
+def _load(inst, it, names, materials, joints=None):
+    """The meshes of the first of `names` that loads, and that name; ([], None, errors) if none. With
+    `joints` (a dict) the meshes carry their vertices' joints (pcmesh.load_meshes)."""
     errors = []
     for mname in names:
         if not mname:
             continue
+        if joints is not None:
+            joints.clear()
         try:
-            meshes = pcmesh.load_meshes(inst, mname, materials, log=lambda m: it.notes.append(m) if m not in it.notes else None)
+            meshes = pcmesh.load_meshes(inst, mname, materials, log=lambda m: it.notes.append(m) if m not in it.notes else None,
+                                        joints=joints)
         except LookupError as e:
             errors.append(str(e)); continue
         except Exception as e:
@@ -540,8 +554,21 @@ def convert(s, it, base_override=None, write=True):
         materials = dict(it.recolours[0][1])
     surface = it.category == 'surfaces'
     seating = it.category == 'seating'
+    appl = it.category == 'appliances'
     picks = {}
-    if seating:
+    joints = {}
+    meshes_j = None
+    if appl:
+        kind = pcappl.appl_kind(it)
+        it.kind = kind
+        if not kind:
+            it.status, it.reason = 'skipped', f'unknown appliance family ({it.semiglobal or "no semi-global"})'
+            return it
+        # the stocked / working model (not "...Empty", "...UnderCounter" variants)
+        order = it.models[:1] + [m for m in it.models[1:] if not any(k in m.lower() for k in ('empty', 'broken', 'dirty', 'burnt'))]
+        meshes_j, used, errors = _load(inst, it, order, materials, joints)
+        meshes = [m[:6] for m in meshes_j]
+    elif seating:
         kind, why = pcseat.seat_kind(it)
         it.kind = kind
         if why:
@@ -556,7 +583,7 @@ def convert(s, it, base_override=None, write=True):
                                        not any(k in pcsurf._norm(m) for k in ('corner', 'east', 'west'))]
         meshes, used, errors = _load(inst, it, order, materials)
         picks['main'] = used
-    else:
+    if not (seating or surface or appl):
         meshes, used, errors = _load(inst, it, it.models[:1], materials)
     if not meshes:
         it.status, it.reason = 'skipped', errors[0] if errors else 'model has no drawable mesh'
@@ -606,6 +633,18 @@ def convert(s, it, base_override=None, write=True):
             it.status, it.reason = 'skipped', 'a tray that goes on a counter (the GameCube cannot put a surface on another)'
             return it
         base = base_override or pcsurf.surface_base(kind, W, H)
+    elif appl:
+        base = base_override or pcappl.appl_base(it, kind)[0]
+        hi = it.bounds[1]
+        # the tiles its mesh covers (PC tile (x, y) has its middle at (x, y)); its OBJD parts can list more
+        # (a stove's second part, a food stand's front row)
+        W = max(1, int(np.floor(hi[0] + 0.4)) + 1)
+        H = max(1, int(np.floor(hi[1] + 0.4)) + 1)
+        it.fp = (W, H)
+        if kind == 'dishwasher':
+            W, H = 1, 2      # the GameCube dishwasher: the machine and the tile in front its door opens over
+        elif W * H > 1:
+            it.notes.append(f'{W}x{H}: a group of {W * H} copies of the base (each tile works)')
     else:
         kind = classify(it, P_all)
         if kind == 'roof':
@@ -614,7 +653,7 @@ def convert(s, it, base_override=None, write=True):
         it.kind = kind
         base = base_override or BASES[kind]
     it.base = base
-    bdefs = s.gco.files.get(base) if gc is not None else [{'master': 1 if kind in ('rug', 'ceiling') or ((surface or seating) and W * H > 1) else 0}]
+    bdefs = s.gco.files.get(base) if gc is not None else [{'master': 1 if kind in ('rug', 'ceiling') or ((surface or seating or appl) and W * H > 1) else 0}]
     if not bdefs:
         it.status, it.reason = 'failed', f'GameCube base {base} not found'
         return it
@@ -679,7 +718,7 @@ def convert(s, it, base_override=None, write=True):
         cx, cy = 1.0, 0.5
     tag = re.sub(r'[^a-z0-9]+', '', (it.name or it.objname).lower())[:20] or 'object'
     prefix = (f'pcs{pcsurf.SURF_SORT.get(kind, "7")}' if surface else f'pcc{pcseat.SEAT_SORT.get(kind, "8")}' if seating
-              else f'pc{SORT_KEY.get(it.subsort, "7")}')
+              else f'pca{pcappl.APPL_SORT.get(kind, "6")}' if appl else f'pc{SORT_KEY.get(it.subsort, "7")}')
     folder = os.path.join(s.out or '.', f'{prefix}_{tag}_{it.guid:08x}')
     it.out = os.path.basename(folder)
     taken = set(); files = {}
@@ -746,6 +785,23 @@ def convert(s, it, base_override=None, write=True):
         # pulled in to the table (state 1): the GameCube's chair slides toward the front (model -y)
         seat_models['in'] = [(sid, G + np.array([0.0, -pcseat.GC_PULL_IN, 0.0]), GN, U, T) for sid, G, GN, U, T in parts]
     it.variants = list(seat_models)
+    # an appliance: the model its states show, each PC part on its node of the base's skeleton (doors,
+    # racks), and the nodes' pivots (the PC hinges) in model space
+    anim_parts, node_pivots = None, {}
+    if appl:
+        bound, pivots = pcappl.bind_parts(meshes_j, joints, base)
+        anim_parts = []
+        for m6, node in bound:
+            for p in gc_parts([m6]):
+                anim_parts.append(p + (node,))
+        for node, (pv, spec, j) in sorted(pivots.items()):
+            node_pivots[node] = ((pv[0] - cx, -(pv[1] - cy), pv[2]), spec)
+            it.variants.append(f'{j}>node{node}{"(" + spec + ")" if spec else ""}')
+        moving = sorted({j for j in joints if pcappl.part_role(j) and not any(j == p[2] for p in pivots.values())})
+        if moving:
+            it.notes.append('moves on the PC, still here: ' + ','.join(moving))
+        if kind == 'dishwasher':
+            it.surface = pcsurf.surface_height(meshes, 0, 0, kind='counter') or 0.95
     it.verts = sum(len(p[1]) for p in parts); it.tris = sum(len(p[4]) for p in parts)
     vparts = [(k, gc_parts(m)) for k, m in variants]
     vparts = [(k, p) for k, p in vparts if p]
@@ -762,6 +818,10 @@ def convert(s, it, base_override=None, write=True):
         sids[k] = sid_
     mid = new_id(gc, 'models', f'pcmod_{it.guid:08x}_model', taken)
     files[f'models_{mid:08X}.res'] = make_modl(f'pc_{tag}', parts)
+    aid = None
+    if anim_parts:
+        aid = new_id(gc, 'models', f'pcmod_{it.guid:08x}_model_anim', taken)
+        files[f'models_{aid:08X}.res'] = make_modl(f'pc_{tag}_anim', anim_parts)
     vids = {}
     for k, p in vparts:
         vid = new_id(gc, 'models', f'pcmod_{it.guid:08x}_model_{k}', taken)
@@ -793,11 +853,27 @@ def convert(s, it, base_override=None, write=True):
         gtaken = set()
         pcg = dict(it.tiles)
         coords = list(pcg.keys()) or [(0, 0)]
+        if appl:
+            coords = [(x, y) for x in range(W) for y in range(H)]
         for (x, y) in sorted(coords):
             g = pcg.get((x, y)) or tile_guid(it.guid, x, y, s.gco.guids, gtaken)
             if g in s.gco.guids or g == it.guid:
                 g = tile_guid(it.guid, x, y, s.gco.guids, gtaken)
             tiles.append((x, H - 1 - y, g, heights.get((x, y))))
+        if appl and kind == 'dishwasher':
+            # its parts in the base group's order: the machine (sub 0,1) first, where it is placed, then
+            # the tile in front (the first part is the one placed on the tile the player picks)
+            tiles.sort(key=lambda t: (t[0], -t[1]))
+            # the game makes a group's parts in the order its selector table lists them (by the GUID's low
+            # byte; GameCube/folder.cpp m_selectors[guid & 0xFF]) and places the first one made on the tile
+            # picked: as the base's, the machine's GUID must come first (its tiles' GUIDs are the
+            # converter's own: swapped when they would not)
+            (x0, y0, g0, h0), (x1, y1, g1, h1) = tiles
+            if (g0 & 0xFF) > (g1 & 0xFF) or (g0 & 0xFF) == (g1 & 0xFF):
+                if (g0 & 0xFF) == (g1 & 0xFF):
+                    g1 = tile_guid(it.guid ^ 0x5A5A5A5A, x1, y1, s.gco.guids, gtaken)
+                g0, g1 = (g0, g1) if (g0 & 0xFF) < (g1 & 0xFF) else (g1, g0)
+                tiles = [(x0, y0, g0, h0), (x1, y1, g1, h1)]
     if os.path.isdir(folder):
         shutil.rmtree(folder)
     os.makedirs(folder, exist_ok=True)
@@ -817,12 +893,26 @@ def convert(s, it, base_override=None, write=True):
         f.write('# PC mod: mods. Converted by tools/pcobj/pcobj_convert.py from the user\'s own The Sims 2 (PC)\n'
                 '# install. EA game data: for this machine only, never share or commit it.\n')
         what = (f'surface: {pcsurf.describe(kind)}' if surface else f'seating: {pcseat.describe(kind)}' if seating
-                else f'{it.subsort_name()}, placed: {kind}')
+                else f'appliance: {pcappl.describe(kind)}' if appl else f'{it.subsort_name()}, placed: {kind}')
         f.write(f'# PC object "{it.objname}" ({it.home.name}), model {used}, {what}\n[object]\n')
         f.write(f'guid = 0x{it.guid:08X}\nbase = {base}\nname = {one(name)}\ndesc = {one(it.desc)}\n')
         f.write(f'price = {it.price}\nmodel = 0x{mid:08X}\nthumbnail = 0x{thumb_id:08X}\n')
-        f.write(f'functions = 0x{(pcsurf.F_SURFACES if surface else pcseat.F_SEATING if seating else F_DECORATIVE):X}\n'
+        f.write(f'functions = 0x{(pcsurf.F_SURFACES if surface else pcseat.F_SEATING if seating else pcappl.F_APPLIANCES if appl else F_DECORATIVE):X}\n'
                 f'room = {max(0, min(10, it.room))}\n')
+        if appl:
+            # the base's skeleton, state animations and effects; the states show the bound model, the
+            # catalogue's preview the still one (`model`)
+            f.write('animated = 1\n')
+            if aid:
+                f.write(f'anim_model = 0x{aid:08X}\n')
+            for node, (pv, spec) in sorted(node_pivots.items()):
+                f.write(f'node = {node}:{pv[0]:.4f},{pv[1]:.4f},{pv[2]:.4f}{":" + spec if spec else ""}\n')
+            if kind == 'dishwasher':
+                f.write(f'base_parts = 1\nsurface = {it.surface:.3f}\n')
+            if kind in pcappl.COUNTERTOP and W * H > 1:
+                # a cart standing on the floor (the espresso cart) made from a counter-top base: data 4,
+                # the heights it may be placed at, the floor's
+                f.write('init_data = 4:0x1\n')
         if surface:
             f.write(f'surface = {it.surface:.3f}\n')
         if seating:
@@ -865,7 +955,8 @@ INV_COLUMNS = ['guid', 'name', 'object', 'pack', 'packs', 'subsort', 'footprint'
                'price', 'room', 'bhavs', 'semiglobal', 'model', 'textures', 'recolours', 'verts', 'tris',
                'status', 'reason', 'folder', 'notes', 'bounds', 'category', 'surface', 'pieces', 'seat_offset',
                'comfort', 'energy', 'seats']
-INVENTORY = {'decorative': 'pcdeco_inventory.tsv', 'surfaces': 'pcsurf_inventory.tsv', 'seating': 'pcseat_inventory.tsv'}
+INVENTORY = {'decorative': 'pcdeco_inventory.tsv', 'surfaces': 'pcsurf_inventory.tsv', 'seating': 'pcseat_inventory.tsv',
+             'appliances': 'pcappl_inventory.tsv'}
 
 
 def inv_row(it):
@@ -910,7 +1001,8 @@ def _work(args):
     return inv_row(it)
 
 
-CATEGORIES = {'decorative': decorative_guids, 'surfaces': pcsurf.surface_guids, 'seating': pcseat.seating_guids}
+CATEGORIES = {'decorative': decorative_guids, 'surfaces': pcsurf.surface_guids, 'seating': pcseat.seating_guids,
+              'appliances': pcappl.appliance_guids}
 
 
 def main():
@@ -924,6 +1016,7 @@ def main():
     ap.add_argument('--all-decorative', action='store_true', help='every buy-mode Decorative object')
     ap.add_argument('--all-surfaces', action='store_true', help='every buy-mode Surfaces object')
     ap.add_argument('--all-seating', action='store_true', help='every buy-mode Seating object and bed')
+    ap.add_argument('--all-appliances', action='store_true', help='every buy-mode Appliances object')
     ap.add_argument('--categories', help='comma-separated buy-mode categories: decorative, surfaces (or all)')
     ap.add_argument('--batch', help='a list of GUIDs (first column; optional second column: base)')
     ap.add_argument('--packs', help='only objects whose home pack is one of these (codes: base, ep1..ep8, sp1..sp9)')
@@ -963,12 +1056,16 @@ def main():
         cats.append('seating')
     if a.all_surfaces and 'surfaces' not in cats:
         cats.append('surfaces')
+    if a.all_appliances and 'appliances' not in cats:
+        cats.append('appliances')
     def category_of(o):
         f = o.w(W_FUNCSORT)
         if f & F_DECORATIVE:
             return 'decorative'
         if f & pcsurf.F_SURFACES:
             return 'surfaces'
+        if f & pcappl.F_APPLIANCES:
+            return 'appliances'
         return 'seating' if f & pcseat.F_SEATING else 'decorative'
     jobs = []
     if a.object:
@@ -980,7 +1077,8 @@ def main():
             raise SystemExit(f'no PC object matches {a.object}')
         jobs = [(hits[0], a.base, category_of(cat.newest(hits[0])))]
     elif a.batch:
-        known = set(BASES.values()) | set(pcsurf.SURF_BASES.values()) | set(pcseat.SEAT_BASES.values())
+        known = (set(BASES.values()) | set(pcsurf.SURF_BASES.values()) | set(pcseat.SEAT_BASES.values()) |
+                 set(pcappl.APPL_BASES.values()))
         for line in open(a.batch, encoding='utf-8'):
             f = line.strip().split('\t')
             if f and re.fullmatch(r'(0x)?[0-9a-fA-F]{6,8}', f[0]):
@@ -997,7 +1095,8 @@ def main():
     elif a.inventory:
         jobs = [(g, None, 'decorative') for g in decorative_guids(cat)]
     else:
-        raise SystemExit('nothing to do: --all-decorative, --all-surfaces, --all-seating, --categories, --object, --batch, --inventory or --list')
+        raise SystemExit('nothing to do: --all-decorative, --all-surfaces, --all-seating, --all-appliances, --categories, '
+                         '--object, --batch, --inventory or --list')
     packs = set(a.packs.split(',')) if a.packs else None
     items = []
     for g, b, c in jobs:
@@ -1014,6 +1113,8 @@ def main():
             return ('s', pcsurf.SURF_SORT.get(pcsurf.surface_kind(it), '7'), (it.name or '').lower())
         if it.category == 'seating':
             return ('t', pcseat.SEAT_SORT.get(pcseat.seat_kind(it)[0], '8'), (it.name or '').lower())
+        if it.category == 'appliances':
+            return ('u', pcappl.APPL_SORT.get(pcappl.appl_kind(it), '6'), (it.name or '').lower())
         return ('d', SORT_KEY.get(it.subsort, '7'), (it.name or '').lower())
     items.sort(key=sort_key)
     todo = [(it, b) for it, b in items if not it.status]

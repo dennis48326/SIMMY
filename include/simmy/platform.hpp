@@ -271,6 +271,30 @@ struct ModObject {
   // A bar stool (counter_seat = 1): a person sits on it to eat at the counter it faces (countereat.cpp);
   // -1 (no key): a chair seated 0.08 tiles or more above the GameCube's seats (a bar stool's height).
   int counterSeat = -1;
+  // Appliances (animated = 1): the object keeps its base's animated character (ResData +0x20, the
+  // skeleton), its per-state animations and effects attachments (a fridge's doors, an oven's door, a
+  // dishwasher's door and rack, a stove's flames), instead of a still model; anim_base names another
+  // GameCube object file to take them from. `animModel` (anim_model) is the model every state shows,
+  // its strips bound to the character's nodes (matrix records); `model` stays a still copy for the
+  // catalogue's preview. `nodes` (node = N:x,y,z[:m], repeatable) move a node's pivot to the PC
+  // part's own hinge (model space): the node turns (and slides) as the base's animation turns it, from
+  // its rest pose (state 0), about that point; m mirrors the turn in model x (a door hinged on the
+  // other side); +x, -x, +y, -y, +z, -z instead: by the node's angle about that model axis (a door hinged
+  // another way than the base's). See isimsobjectmodel.cpp ModNodes.
+  struct Node {
+    int node = 0;
+    float pivot[3] = {};
+    bool mirror = false;
+    int axis = 0;  // +-1, 2, 3 (node = N:x,y,z:+x ...): the node's turn applied about this model axis
+  };
+  // init_data = 4:0x1 ...: object data set after its init tree (each reset), e.g. data 4, the heights it
+  // may be placed at (1 the floor, 4/8 tables and counters): a floor espresso cart made from the
+  // GameCube's counter-top espresso machine.
+  std::vector<std::pair<int, int>> initData;
+  bool animated = false;
+  std::string animBase;
+  unsigned int animModel = 0;
+  std::vector<Node> nodes;
 };
 void mods_init();                // once at start-up (main thread), after settings_load
 bool mods_enabled();             // a mod folder was found (also when it holds no mods)

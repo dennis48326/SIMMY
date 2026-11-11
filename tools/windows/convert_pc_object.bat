@@ -4,10 +4,12 @@ rem and every expansion and stuff pack installed under it - into the mods folder
 rem Needs Python 3 (python.org; tick "Add to PATH") - the first run installs numpy and Pillow for it.
 rem Nothing is downloaded from EA or anywhere else; see docs\mods.md.
 rem
-rem   convert_pc_object.bat                     every Decorative, Surfaces, Seating and Beds object of every pack found (default)
+rem   convert_pc_object.bat                     every Decorative, Surfaces, Seating and Beds and Appliances object of
+rem                                             every pack found (default)
 rem   convert_pc_object.bat decorative          only the Decorative objects
 rem   convert_pc_object.bat surfaces            only the Surfaces objects (counters, tables, desks, ...)
 rem   convert_pc_object.bat seating             only the Seating objects and Beds (chairs, sofas, stools, beds, ...)
+rem   convert_pc_object.bat appliances          only the Appliances (fridges, stoves, microwaves, dishwashers, ...)
 rem   convert_pc_object.bat decorative seating  several categories
 rem   convert_pc_object.bat list ficus          list PC objects whose name contains "ficus"
 rem   convert_pc_object.bat inventory           write the inventory (mods\pcobj_inventory.tsv) only
@@ -18,8 +20,10 @@ rem Each object behaves like its GameCube base (decorative: chosen by where it g
 rem table top, ceiling, rug; surfaces: a GameCube counter or table of the same footprint, with things
 rem put on it at the PC top's height, counters joining up in rows and corners; seating and beds: a
 rem GameCube chair, sofa, bench or bed of the same footprint and comfort, sims sitting and lying at the
-rem PC seat's height). Delete its folder in mods to remove it (saves stay loadable). Converting again
-rem replaces the folders it wrote. Takes about two minutes for all packs on two cores (progress per
+rem PC seat's height; appliances: the GameCube fridge, stove, microwave, dishwasher, espresso machine,
+rem food processor, blender or trash can that does the same, with the PC doors opening as the
+rem GameCube's do). Delete its folder in mods to remove it (saves stay loadable). Converting again
+rem replaces the folders it wrote. Takes about two and a half minutes for all packs on two cores (progress per
 rem object, with the percentage and the time so far).
 setlocal EnableDelayedExpansion
 set "PC=Q:\Claude\SIMMY\The Sims 2 Ultimate Collection"
@@ -42,20 +46,21 @@ if /i "%~1"=="inventory" (
   pause
   exit /b
 )
-rem category arguments: decorative, surfaces, seating (any of them, in any order)
+rem category arguments: decorative, surfaces, seating, appliances (any of them, in any order)
 set "CATS="
 for %%C in (%*) do (
   if /i "%%~C"=="decorative" set "CATS=!CATS!,decorative"
   if /i "%%~C"=="surfaces" set "CATS=!CATS!,surfaces"
   if /i "%%~C"=="seating" set "CATS=!CATS!,seating"
   if /i "%%~C"=="beds" set "CATS=!CATS!,seating"
+  if /i "%%~C"=="appliances" set "CATS=!CATS!,appliances"
 )
 if defined CATS (
   echo Converting every %CATS:~1% object of every pack under "%PC%" ...
   python "%TOOL%" --pc "%PC%" --gc "%ISO%" --categories %CATS:~1% --out "%BIN%\mods"
 ) else if "%~1"=="" (
-  echo Converting every Decorative, Surfaces, Seating and Beds object of every pack under "%PC%" ...
-  python "%TOOL%" --pc "%PC%" --gc "%ISO%" --categories decorative,surfaces,seating --out "%BIN%\mods"
+  echo Converting every Decorative, Surfaces, Seating and Beds and Appliances object of every pack under "%PC%" ...
+  python "%TOOL%" --pc "%PC%" --gc "%ISO%" --categories decorative,surfaces,seating,appliances --out "%BIN%\mods"
 ) else if "%~2"=="" (
   python "%TOOL%" --pc "%PC%" --gc "%ISO%" --object "%~1" --out "%BIN%\mods"
 ) else (
@@ -63,6 +68,7 @@ if defined CATS (
 )
 echo.
 echo Done (exit code %ERRORLEVEL%). Start the game: the objects are in buy mode, Decorative,
-echo Surfaces and Seating ^& Beds tabs (the C stick pages four columns). The lists are
-echo mods\pcdeco_inventory.tsv, mods\pcsurf_inventory.tsv and mods\pcseat_inventory.tsv.
+echo Surfaces, Seating ^& Beds and Appliances tabs (the C stick pages four columns). The lists are
+echo mods\pcdeco_inventory.tsv, mods\pcsurf_inventory.tsv, mods\pcseat_inventory.tsv and
+echo mods\pcappl_inventory.tsv.
 pause

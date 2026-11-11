@@ -250,6 +250,7 @@ void cXObjectImpl::Reset(bool run) {
     influence->RemoveObjectFromMap(this);
   if (!IsMultiTile()) {
     RunTree(0, 0, nullptr);
+    ApplyModInitData();  // PC mod: mods (init_data)
     if (run && _gd.m_fieldF0 == 0 && m_treeSim->HasMainTreeSim()) Simulate(0);  // DAT_80475C74: author mode
     UpdateSimFlags();
   }

@@ -339,14 +339,14 @@ def _transform(r):
 
 
 def parse_cres(data):
-    """The CRES's blocks: [{'type', 'name', 'children', 't', 'q', 'shapes'}] (shapes: indices into the
-    RCOL links, for cShapeRefNode blocks). Blocks that are not decoded keep only their type."""
+    """The CRES's blocks: [{'type', 'name', 'children', 't', 'q', 'shapes', 'joint'}] (shapes: indices into
+    the RCOL links, for cShapeRefNode blocks; joint: a transform node's bone index in the GMDCs, or -1). Blocks that are not decoded keep only their type."""
     links, ids, r = rcol_header(data)
     blocks = []
     for k, bid in enumerate(ids):
         start = r.p
         b = {'type': CRES_BLOCKS.get(bid, f'{bid:08X}'), 'name': '', 'children': [], 't': (0.0, 0.0, 0.0),
-             'q': (0.0, 0.0, 0.0, 1.0), 'shapes': []}
+             'q': (0.0, 0.0, 0.0, 1.0), 'shapes': [], 'joint': -1}
         try:
             tname = r.s(); r.u32()
             if tname == 'cResourceNode':
@@ -359,7 +359,7 @@ def parse_cres(data):
                 b['name'] = _ogn(r)
                 b['children'] = _children(r)
             elif tname == 'cTransformNode':
-                b['name'], b['children'], b['t'], b['q'], _ = _transform(r)
+                b['name'], b['children'], b['t'], b['q'], b['joint'] = _transform(r)
             elif tname == 'cShapeRefNode':
                 r.u32()
                 _tag(r, 'cRenderableNode'); r.u32()
@@ -438,4 +438,43 @@ def cres_shape_transforms(data):
         for s in b['shapes']:
             R, t = world(i)
             out.setdefault(s, (R, t, rooted(i)))
+    return out
+
+
+def cres_shape_joints(data):
+    """{RCOL link index of a SHPE: (node name (lower case), its origin)}: the shape node a shape hangs
+    from and where it is in the model. Newer objects give each moving part (a door, a lid) a shape of
+    its own on a node of the part's name, which the PC's animations move; the rest hangs from the
+    object's own node (its name, at the origin)."""
+    blocks = parse_cres(data)
+    parent = {}
+    for i, b in enumerate(blocks):
+        for c in b['children']:
+            if 0 <= c < len(blocks) and c != i:
+                parent.setdefault(c, i)
+
+    def world_t(i, depth=0):
+        b = blocks[i]
+        t = list(b['t'])
+        if i in parent and depth < 64:
+            PR, Pt = world_r(parent[i], depth + 1)
+            return [sum(PR[a][k] * t[k] for k in range(3)) + Pt[a] for a in range(3)]
+        return t
+
+    def world_r(i, depth=0):
+        b = blocks[i]
+        R = quat_matrix(b['q'])
+        t = world_t(i, depth)
+        if i in parent and depth < 64:
+            PR, _ = world_r(parent[i], depth + 1)
+            R = [[sum(PR[a][k] * R[k][c] for k in range(3)) for c in range(3)] for a in range(3)]
+        return R, t
+
+    out = {}
+    for i, b in enumerate(blocks):
+        for s in b['shapes']:
+            # the shape's own node (newer objects hang each moving part's shape from a node of the
+            # part's name: "l_door"); its name and place
+            if b['name']:
+                out.setdefault(s, (b['name'].lower(), world_t(i)))
     return out

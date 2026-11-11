@@ -137,6 +137,7 @@ void cXMTObjectImpl::Reset(bool run) {
   AssignOffsets();
   for (cXMTObjectImpl* p = this; p; p = p->m_nextPart) {
     p->RunTree(0, 0, nullptr);
+    p->ApplyModInitData();  // PC mod: mods (init_data)
     if (run && _gd.m_fieldF0 == 0) p->Simulate(0);  // DAT_80475C74: author mode
     p->UpdateSimFlags();
   }

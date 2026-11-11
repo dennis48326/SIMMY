@@ -27,9 +27,13 @@ def shape_info(sh):
     return gmnds, pairs
 
 
-def load_meshes(inst, cres_name, materials=None, log=lambda *a: None):
+def load_meshes(inst, cres_name, materials=None, log=lambda *a: None, joints=None):
     """[(material name, subset, P, N, UV, T)] of the model; `materials` {subset: material} overrides the
-    shapes' own (the object's default MMATs). Raises LookupError when the model is not found."""
+    shapes' own (the object's default MMATs). Raises LookupError when the model is not found.
+
+    With `joints` (a dict): each mesh gets a 7th element, its vertices' joint (CRES transform node name,
+    lower case; '' unbound): the bone a rigid part (a fridge's door) hangs from in the PC's animations;
+    `joints` is filled with {name: its origin in the model's space (the bind pose)}."""
     d, e = inst.find(rcol.T_CRES, cres_name)
     if d is None:
         raise LookupError(f'{cres_name}: model (CRES) not found')
@@ -38,6 +42,19 @@ def load_meshes(inst, cres_name, materials=None, log=lambda *a: None):
         xforms = rcol.cres_shape_transforms(d)
     except Exception:
         xforms = {}
+    names = {}
+    shape_joints = {}
+    if joints is not None:
+        try:
+            shape_joints = rcol.cres_shape_joints(d)
+        except Exception:
+            shape_joints = {}
+        try:
+            for b in rcol.parse_cres(d):
+                if 0 <= b.get('joint', -1) < 0x7FFFFFFF and b['name']:
+                    names.setdefault(b['joint'], b['name'].lower())
+        except Exception:
+            pass
     out = []
     seen_gmdc = set()
     for li, (t, g, i, ih) in enumerate(links):
@@ -83,6 +100,23 @@ def load_meshes(inst, cres_name, materials=None, log=lambda *a: None):
                 N = np.array(m['Normals'], np.float64)[:n, :3] if len(m.get('Normals', [])) >= n else np.zeros_like(P)
                 U = np.array(m['UV'], np.float64)[:n, :2] if len(m.get('UV', [])) >= n else np.zeros((n, 2))
                 T = np.array(tris, np.int64)
+                J = None
+                if joints is not None:
+                    sj = shape_joints.get(li)
+                    J = np.array([sj[0] if sj else ''] * n, dtype=object)
+                    if sj and sj[0] not in joints:
+                        joints[sj[0]] = np.asarray(sj[1], np.float64)
+                    ba = m.get('BoneAssign?') or m.get('BlendIndices')
+                    if ba and grp['joints']:
+                        for v in range(min(n, len(ba))):
+                            raw = ba[v][0]
+                            k = int(raw) & 0xFF if not isinstance(raw, float) else int(raw)
+                            if k < len(grp['joints']):
+                                j = grp['joints'][k]
+                                J[v] = names.get(j, f'bone{j}')
+                                if J[v] not in joints and j < len(bones):
+                                    Rb, tb = bones[j]
+                                    joints[J[v]] = (-Rb.T @ tb) @ R.T + tr
                 # rigid parts bound to one joint (GMDC bone transforms): into the model's space
                 bi = m.get('BlendIndices')
                 if bones and bi and grp['joints']:
@@ -93,11 +127,12 @@ def load_meshes(inst, cres_name, materials=None, log=lambda *a: None):
                 used = np.unique(T)
                 remap = np.full(n, -1, np.int64)
                 remap[used] = np.arange(len(used))
-                out.append((mat or subset, subset, P[used], N[used], U[used], remap[T], rooted))
-    return _place_orphans(out, log)
+                out.append((mat or subset, subset, P[used], N[used], U[used], remap[T], rooted) +
+                           ((J[used],) if J is not None else ()))
+    return _place_orphans(out, log, joints is not None)
 
 
-def _place_orphans(meshes, log):
+def _place_orphans(meshes, log, keep_joints=False):
     """Mirrors whose frame hangs from a node the CRES leaves unplaced (its place is in the object's
     animation): the frame is moved onto the reflection (same middle across and up; its front at the
     glass). Returns [(material, subset, P, N, UV, T)]."""
@@ -112,10 +147,10 @@ def _place_orphans(meshes, log):
     if gc is not None and np.linalg.norm((gc - oc)[[0, 2]]) > 0.25:
         d = np.array([gc[0] - oc[0], G.max(0)[1] + 0.035 - O.max(0)[1], gc[2] - oc[2]])
         log('mirror frame moved onto its glass')
-        meshes = [(m[0], m[1], m[2] + d, m[3], m[4], m[5], True) if not m[6] else m for m in meshes]
+        meshes = [(m[0], m[1], m[2] + d, m[3], m[4], m[5], True) + tuple(m[7:]) if not m[6] else m for m in meshes]
     elif orphans and gc is None:
         log(f'{len(orphans)} part(s) placed by animation (kept where the mesh puts them)')
-    return [m[:6] for m in meshes]
+    return [m[:6] + (tuple(m[7:8]) if keep_joints else ()) for m in meshes]
 
 
 def _bone(q, t):

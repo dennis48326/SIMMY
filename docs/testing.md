@@ -173,6 +173,9 @@ Development only: the launcher removes all of them except `SIMMY_INI` from the g
 | `SIMMY_COUNTER_TRACE=1` | PC mod: mods: the piece (plain, corner, ends) each converted counter shows and its neighbours |
 | `SIMMY_COUNTER_EAT_TRACE=1` | PC mod: mods: each bar-stool search at a counter (who, which counter, the stool and eating slot found or none) and each check before the plate goes down ([mods.md](mods.md) "Bar stools at counters") |
 | `SIMMY_SEAT_TRACE=1` | PC mod: mods: every 30 frames, each sim's container (seat, bed), its state, the sim's root and pelvis and the seat offset drawn ([mods.md](mods.md) "Seating and beds") |
+| `SIMMY_OBJ_STATE_TRACE=1` | Every object's state change as drawn (`ISimsObjectModel::Update`): frame, object, old and new state, the state's model and animation |
+| `SIMMY_OBJ_STATE_FORCE="<id>:<state>:<from>-<to>;..."` | Draw an object in that state between those frames (its animation, model, effects; the simulation's state untouched): appliance doors open for screenshots |
+| `SIMMY_OBJ_NODE_TRACE=<text>[,<text>...]` | Objects whose file name contains one of the texts log their character nodes' object-space poses (translation, turn and axis) every 20 frames; PC mod: mods: an animated appliance's rest pose ([mods.md](mods.md) "Appliances") |
 | `SIMMY_PORTRAIT_DUMP=<prefix>` | Write each finished portrait as BMP |
 | `SIMMY_UI3D_TRACE=1` | UI3D displays every 60 frames |
 | `SIMMY_GREEN_TEST=1` | Light player 1's sim as a green person (`ESim::Draw`'s ghost-green ambient) |
@@ -234,8 +237,8 @@ Development only: the launcher removes all of them except `SIMMY_INI` from the g
 | `SIMMY_PLACE_TRACE=1` | Placement event trees run (placed, picked up, user placed / picked up, wall adjacency) |
 | `SIMMY_MODS=<dir>` | PC mod: mods: the mod folder when simmy.ini has no `mods=` ([mods.md](mods.md)); place a mod object with `SIMMY_PLACE_TEST=<tick>:<its GUID>@x,y` |
 | `SIMMY_MODS_VERBOSE=1` | PC mod: mods: a log line per mod object even with more than 20 ([mods.md](mods.md)) |
-| `SIMMY_PLACE_TEST` mod actions | `probe:<guid>@x,y,dir\|x,y,dir...` first legal spot (nothing placed), `try:<guid>@...` place at the first legal spot, `info#<guid>` an object's placement data (heights, flags, wall flags, footprint) ([`placemanipulator.cpp`](../src/game/placemanipulator.cpp)) |
-| `SIMMY_CAM_LOOK=x,y,distance,yaw,pitch[,height]` | The house camera looks at a tile (screenshots; [`camera.cpp`](../src/game/camera.cpp)) |
+| `SIMMY_PLACE_TEST` mod actions | `probe:<guid>@x,y,dir\|x,y,dir...` first legal spot (nothing placed), `try:<guid>@...` place at the first legal spot, `info#<guid>` an object's placement data (heights, flags, wall flags, footprint; a group's parts each) ([`placemanipulator.cpp`](../src/game/placemanipulator.cpp)) |
+| `SIMMY_CAM_LOOK=x,y,distance,yaw,pitch[,height]` | The house camera looks at a tile (screenshots; also during the lot intro's camera shots; [`camera.cpp`](../src/game/camera.cpp)) |
 | `SIMMY_PLACE_TEST="<tick>:<action>;..."` | At sim ticks: `<guid hex or object file name>@x,y[,dir]` buy-place a new object, `model#<hex>` list the object files drawing that model, `grab#<id>` grab and put back, `sell#<id>` grab and destroy (sell), `create:<object file>@x,y` make an object and put it there as CreateObject does (dynamic ones such as `efx_flood` merge), `wall@x,y,seg` delete a wall segment, `chain@x,y` print a tile's object chain, `paperroom@x,y,i[,sell]` paper (strip) the room with WallSet entry i ([`placemanipulator.cpp`](../src/game/placemanipulator.cpp)) |
 | `SIMMY_CTL_TRACE=1`, `SIMMY_COOP_TRACE=1`, `SIMMY_SWITCH_TRACE=1`, `SIMMY_CAM_TRACE=1` | Classic cursor (and its Go Here tile); both players; sim switching; the lot intro camera's steps |
 | `SIMMY_HL_TRACE=1` | Direct control's highlights every 60 frames: the objects the influence map lists at the sim's tile, the lit ones, the sim's location and facing |

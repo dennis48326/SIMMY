@@ -1167,6 +1167,12 @@ void PlacementTestTick(int ticks) {
         std::printf("[place] info 0x%08x %s: heights 0x%x flags 0x%x wall 0x%x d17 %d multi %d\n", guid, o->DebugName(),
                     static_cast<unsigned short>(o->GetData(4)), static_cast<unsigned short>(o->GetData(8)),
                     static_cast<unsigned short>(o->GetData(0xd)), o->GetData(0x17), o->IsMultiTile() ? 1 : 0);
+        if (o->IsMultiTile())  // each part: its sub index and placement data
+          for (cXMTObjectImpl* p = static_cast<cXMTObjectImpl*>(o); p; p = p->m_nextPart)
+            std::printf("[place]   part #%d sub 0x%x guid 0x%08x: heights 0x%x flags 0x%x wall 0x%x\n", p->m_id,
+                        static_cast<unsigned short>(objdef::SubIndex(p->m_def)), objdef::GUID(p->m_def),
+                        static_cast<unsigned short>(p->GetData(4)), static_cast<unsigned short>(p->GetData(8)),
+                        static_cast<unsigned short>(p->GetData(0xd)));
         po.Destroy();
       }
     } else {

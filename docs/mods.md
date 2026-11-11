@@ -1,13 +1,18 @@
 # PC mod: mods (objects from the PC game)
 
 Lets the player add objects converted from **their own** copy of The Sims 2 for PC: by default every
-buy-mode **Decorative**, **Surfaces** and **Seating** object and every **bed** of the base game and of
-every expansion and stuff pack installed (about 560 decorative objects, 170 counters, tables and desks,
-and 180 chairs, sofas, benches, stools and beds with the Ultimate Collection). Surfaces work as
+buy-mode **Decorative**, **Surfaces**, **Seating** and **Appliances** object and every **bed** of the base
+game and of every expansion and stuff pack installed (about 560 decorative objects, 170 counters,
+tables and desks, 180 chairs, sofas, benches, stools and beds, and 54 fridges, stoves, grills,
+microwaves, toaster ovens, coffee makers, food processors, juicers, dishwashers, trash compactors,
+food displays and food stands with the Ultimate Collection). Surfaces work as
 surfaces: things go on their tops at the PC height, sims prepare food on the counters, eat at the
 tables and use computers on the desks, and counters join up in rows and corners. Seating and beds
 work as the GameCube's: sims sit on them (at the PC seat's height), pull dining chairs up to tables and
-eat, watch TV from sofas, sleep, relax and make the bed (made / slept-in models), two to a double bed. Off unless a mod folder exists; with none, nothing in the game changes
+eat, watch TV from sofas, sleep, relax and make the bed (made / slept-in models), two to a double bed.
+Appliances work as the GameCube's fridges, stoves, microwave, dishwasher, espresso machine, food
+processor, blender and trash can (snacks, cooking, prep steps, drinks, washing up, fire), with the PC
+model's own doors opening (fridge doors, oven doors, the dishwasher's door and rack). Off unless a mod folder exists; with none, nothing in the game changes
 (no extra memory, same determinism hash).
 
 **Legal rule.** The PC game's files are EA's. Nothing converted from them goes into this repository,
@@ -21,8 +26,8 @@ Its PC install and disc paths are set at the top of the file.
 
 | | |
 |---|---|
-| `convert_pc_object.bat` | every Decorative, Surfaces and Seating object (beds included) of every pack under the install, into `mods` next to simmy.exe (progress per object with the percentage and time; about 2 minutes for every pack of the Ultimate Collection on two cores) |
-| `convert_pc_object.bat decorative` / `surfaces` / `seating` | only that buy-mode category (several may be given: `decorative seating`) |
+| `convert_pc_object.bat` | every Decorative, Surfaces, Seating (beds included) and Appliances object of every pack under the install, into `mods` next to simmy.exe (progress per object with the percentage and time; about two and a half minutes for every pack of the Ultimate Collection on two cores) |
+| `convert_pc_object.bat decorative` / `surfaces` / `seating` / `appliances` | only that buy-mode category (several may be given: `decorative seating`) |
 | `convert_pc_object.bat list ficus` | PC objects whose name contains "ficus" |
 | `convert_pc_object.bat inventory` | only the inventory (`mods\pcobj_inventory.tsv`) |
 | `convert_pc_object.bat "No-Fuss Ficus"` | one object (name or GUID), base chosen automatically |
@@ -32,24 +37,25 @@ By hand (Python 3 with numpy and Pillow, nothing else):
 
 ```
 python tools/pcobj/pcobj_convert.py --pc "C:\Games\The Sims 2 Ultimate Collection" \
-    --gc D:\Games\Sims2.iso --out C:\Games\SIMMY\mods --categories decorative,surfaces,seating
+    --gc D:\Games\Sims2.iso --out C:\Games\SIMMY\mods --categories decorative,surfaces,seating,appliances
 ```
 
 `--pc` is the install folder (every `TSData/Res` under it is a pack); `--gc` the GameCube data the port
-plays (disc image or extracted folder). `--categories decorative,surfaces,seating` (or `all`; also
-`--all-decorative`, `--all-surfaces`, `--all-seating`) picks the buy-mode categories. Other modes: `--object <GUID|name> [--base <GameCube object>]`,
+plays (disc image or extracted folder). `--categories decorative,surfaces,seating,appliances` (or `all`;
+also `--all-decorative`, `--all-surfaces`, `--all-seating`, `--all-appliances`) picks the buy-mode
+categories. Other modes: `--object <GUID|name> [--base <GameCube object>]`,
 `--batch list.tsv` (GUIDs in the first column, an optional base in the second), `--list <text>`,
 `--inventory <file.tsv>` (classify only, write nothing else). Options: `--packs base,ep1,sp4,...` (by
 home pack), `--jobs N` (worker processes; default CPUs - 1), `--texsize` (largest texture side, 256).
 Converting again replaces the folders it wrote; `mods/pcdeco_inventory.tsv`,
-`mods/pcsurf_inventory.tsv` and `mods/pcseat_inventory.tsv` keep one row per object (converted or
+`mods/pcsurf_inventory.tsv`, `mods/pcseat_inventory.tsv` and `mods/pcappl_inventory.tsv` keep one row per object (converted or
 skipped, and why).
 
 Start the game. The mod folder is `mods=` in simmy.ini (relative to the ini), else `SIMMY_MODS`, else
 `mods` next to the exe. The log says `[mods] <dir>: n mod(s), n object(s) (n multi-tile parts), n
 resource(s); read in n ms` and `[mods] objects: n added (n multi-tile), n skipped; rows ...` (with
 `SIMMY_MODS_VERBOSE=1`, or 20 objects or fewer, a line per object; a skipped object always says why).
-The objects are in buy mode on the **Decorative**, **Surfaces** and **Seating & Beds** tabs with the PC name, description,
+The objects are in buy mode on the **Decorative**, **Surfaces**, **Seating & Beds** and **Appliances** tabs with the PC name, description,
 price and room rating and a rendered thumbnail. With a mod folder the **C stick** left/right pages that catalogue
 four columns at a time (the GameCube's movie only moves a column at a time; the tab can hold 600+).
 
@@ -265,6 +271,67 @@ up where it was and starts afresh (PC fix: before, it kept its sitting state and
 until its behaviour was switched off); a plate left in a GameCube counter's eating slot stays there
 and is cleared from the front. `SIMMY_COUNTER_EAT_TRACE=1` logs each stool search and check.
 
+## Appliances
+
+**Inventory.** Lead OBJDs with the catalogue function Appliances (word 0x28 bit 0x04); kind from the
+semi-global (FridgeGlobals, Stove_Globals, StoveGrill_Globals, MicrowaveGlobals, ToasterOvenGlobals,
+CoffeeMachineGlobals, FoodProcessor_Globals, juicerglobals, DishwasherGlobals, TrashGlobals,
+ShoppingRackGlobals, FoodStandGlobals): fridge, stove, grill, microwave, toaster, coffee, processor,
+juicer, dishwasher, compactor, display (the shops' freezers and produce bins), food stand. 54 with the
+Ultimate Collection, all converted (the PC has no washers or dryers: those are later games').
+
+**The GameCube's appliances.** Its fridges (`refrigerator_cheap` / `_modern` / `_expensive`, semi-global
+`food_refrigerator_sg`: snack, get ingredients, cook a meal, serve), stoves (`stove_cheap` / `_modern` /
+`_expensive` / `_alien`), the grill (`stove_bbq`), the microwave (`microwave_expensive`: a stove on a
+counter) and the food processor share `food_stove_sg` (cook; the cheap stove and a poor cook start
+fires; repair); the blenders `food_blender_sg` (a prep step: blenderize), the espresso machine its own
+trees (a drink), the kitchen trash can `trash_sg` (throw away, empty), and the dishwasher
+`counter_dishwasher` is a two-tile counter group: the machine (a counter: prepare food, things on it;
+wash dishes) and the tile in front its door opens over. They are animated: a character whose nodes the
+state animations move (measured with `SIMMY_OBJ_NODE_TRACE`): the fridges' doors (node 1 hinged at model
+-x, node 2 at +x, both swing about 87 degrees out in state 1 and back in state 3), the oven door (node 1,
+about 90 degrees down in states 1 and 2: putting the pot in and taking it out), the microwave's door
+(node 3, hinged at +x, state 3), the dishwasher's door (node 1) and lower rack (node 4, sliding out 0.7
+tiles; states 1 and 3); effects (flames, smoke, steam) hang on the states.
+
+**What each PC appliance becomes** (the base: behaviour, interactions, placement; tiers where the
+GameCube differentiates: a fridge's food and a stove's cooking and fire risk are its base's):
+
+| PC kind | GameCube base | |
+|---|---|---|
+| fridge, mini fridge | `refrigerator_cheap` (price < 1000), `_modern` (< 1600), `_expensive` | snack, ingredients, cook, serve; both doors open |
+| stove, range, cooktop | `stove_cheap` (PC hunger 1), `stove_modern` (2-5), `stove_expensive` (6-10) | cook, fire, repair; the oven door opens |
+| grill | `stove_bbq` | cook outdoors (the lid stays: the GameCube grill has none) |
+| microwave | `microwave_expensive` | cook on a counter; the door opens |
+| toaster oven | `microwave_expensive` | cooks as the microwave; its foot-hinged door opens down (node turn re-axised) |
+| coffee maker, espresso machine, hot chocolate maker | `food_espresso_machine` | a drink (energy, fun) |
+| food processor | `food_processor` | the prep step while cooking |
+| juicer | `food_blender_expensive` | the blender's prep step |
+| dishwasher | `counter_dishwasher` (group: machine + front tile) | washes dishes; a counter at the PC top (0.95); door and rack move |
+| trash compactor | `trashcan_interior_stainless` | throw away, empty |
+| food display (freezer, produce bin) | `refrigerator_cheap` | a food source (snacks, ingredients); the freezer's door opens |
+| food stand (4x4) | `refrigerator_modern` | a food source on every tile |
+
+Two- and more-tile appliances (grills 2x1, the restaurant cooktop, the freezer bin, the espresso cart,
+the food stands) are groups whose every tile is a copy of the base (each tile works; the first draws
+the model at the group's middle). The espresso cart stands on the floor (`init_data = 4:0x1`: the
+heights its base, a counter-top machine, may be placed at, after its init tree).
+
+**Moving parts.** The converter reads which bone each PC vertex hangs from (the GMDC's bone
+assignments; newer objects hang each moving part's shape from a node of its own: `l_door`,
+`door_rot`, `rack_trans`) and where the bone is (the hinge), and binds each part to the base's node
+of the same role and side: a fridge's door hinged at -x to node 1, at +x to node 2, an oven door to the
+stove's door node, the dishwasher's door and rack to nodes 1 and 4, a microwave's door to node 3. The
+model the states show (`anim_model`) has a matrix record before each strip (the strip drawn with that
+node's matrix); its vertices stay in the model's own space. `ISimsObjectModel::ModNodes` (after the
+controller's Compute) draws each node by how far the base's animation has moved it from its rest pose
+(state 0, seen for half a second: the closed doors), turned about the PC part's own hinge (`node =
+N:x,y,z`), its slide kept. `:m` mirrors the turn (a door hinged on the other side than any of the
+base's), `:+x` etc. applies the node's angle about another axis (a toaster oven's door hinged at its
+foot on the microwave's side-hinged door node). Parts with no node on the base (grill lids, carafes,
+an oven's rack, a compactor's drawer) stay in place. The catalogue's 3D preview shows the still model
+(`model`). The base's state effects are kept (the base's skeleton is there to carry them).
+
 ## Mod folder
 
 ```
@@ -273,12 +340,16 @@ mods/
                             placement, base, price, room, BHAVs, model, textures, recolours, status, ...
   pcsurf_inventory.tsv      every surface: the same, the kind as placement, the top's height, the pieces
   pcseat_inventory.tsv      every seat and bed: the kind, base, seat height, seat offset, ratings, seats
+  pcappl_inventory.tsv      every appliance: the kind, base, footprint, moving parts and their nodes
+                            ("pieces": l_door>node2 ...), parts left still (notes)
   pc3_nofussficus_4cc4fd6c/ "pc<sort>_<name>_<GUID>" (sort: 1 plants, 2 sculptures, 3 wall art,
     mod.ini                 4 mirrors, 5 rugs, 6 curtains, 7 misc; surfaces "pcs<k>_": 1 counters,
                             2 islands, 3 dining, 4 desks, 5 coffee, 6 end tables, 7 displays/misc;
                             seating "pcc<k>_": 1 dining chairs, 2 bar stools, 3 armchairs, recliners
                             and lounges, 4 sofas, loveseats, sectionals, 5 benches, 6 single beds,
-                            7 double beds)
+                            7 double beds; appliances "pca<k>_": 1 fridges and food displays,
+                            2 stoves, grills, food stands, 3 microwaves and toaster ovens,
+                            4 coffee makers, processors, juicers, 5 dishwashers, compactors)
     models_96DA08B7.res     resources in the GameCube's own formats, as an archive holds them
     shaders_1FBB3FA3.res    ("<manager>_<id>.res": models, shaders, textures, ... any manager)
     textures_3A540C0D.res
@@ -290,7 +361,8 @@ mod.ini `[object]` keys: `guid`, `base` (object file) or `base_guid`, `name`, `d
 (`x,y:GUID[:height] ...`: a multi-tile object), `surface` (a surface's top, tiles), `connect`,
 `model_corner`, `model_end_px`, `model_end_nx`, `model_ends` (counter pieces), `seat_offset`,
 `state_models`, `base_parts`, `tile_model` (repeatable, after `tiles`), `comfort`,
-`energy`, `counter_seat` (seating and beds), `pack` (informational). Mods are read in folder-name order; a GUID
+`energy`, `counter_seat` (seating and beds), `animated`, `anim_base`, `anim_model`, `node` (repeatable),
+`init_data` (appliances), `pack` (informational). Mods are read in folder-name order; a GUID
 or resource id given twice keeps the first. A resource id the disc has is never taken from a mod.
 
 ## How it works
@@ -305,6 +377,7 @@ or resource id given twice keeps the first. A resource id the disc has is never 
 | Surfaces | `ObjectSlotDescriptor` / `ObjectSlotHeight` (xrouting.cpp), `ModCounterPiece` / `ISimsCounterTopObject::SetObjOrient` (isimsobjectmodel.cpp) | The selector's `m_modSurface` (per part) and `m_modObject`: object slots at the mod's top; counter pieces by neighbours (`SIMMY_COUNTER_TRACE=1` logs the choice) |
 | Seating, beds | `SAnimator2::positionCharacter` / `ModSeatOffset` (sanimator2.cpp), `CopyDef` / `BasePart` (modobjects.cpp) | A sim in a converted seat or bed drawn at its seat's height (`SIMMY_SEAT_TRACE=1` logs container, state, root, pelvis and offset every 30 frames); per-state and per-part models, base parts by tile, ratings |
 | Bar stools at counters | `src/game/countereat.cpp` (`simmy::countereat`), hooks in `TryFindFunctionalObject` / `TryCallFunctionalTree` / `TryCallNamedTree` / `TryElement` 0x60 (objectsim.cpp), `Behavior::GetTree` (treesim.cpp), `ObjectSlotDescriptor` (xrouting.cpp) | A counter with a counter seat facing it offers eating surface entry 0x19 through PC trees (SimAntics bytecode built in code, ids 0x1F00-0x1F03), its eating slots 0x60-0x63 and the pickup from them; nothing runs unless a loaded mod object is a counter seat |
+| Appliances | `CopyDef` (modobjects.cpp: the character and state table kept), `ISimsObjectModel::ModNodes` (isimsobjectmodel.cpp), `GetObjSelector3dDisplayInfo` (pcttarget.cpp), `cXObjectImpl::ApplyModInitData` (modobjects.cpp, from `Reset` / `cXMTObjectImpl::Reset`) | The base's skeleton, animations and effects; the bound model's nodes drawn by their turn from rest about the PC hinges; the still model in the catalogue preview; `init_data` after each init tree. `SIMMY_OBJ_NODE_TRACE`, `SIMMY_OBJ_STATE_TRACE`, `SIMMY_OBJ_STATE_FORCE` (testing.md) |
 | Fire code | `EIObjectMan::CountObjects` (iobjectman.cpp) | A mod object's model counts at 5/7 of its size: what it would weigh with the disc's fixed-point vertices (16 bytes a vertex against 28) |
 | Saves | unchanged | `objt` names types by GUID; a mod object (and each part) saves and loads like any other |
 
@@ -318,7 +391,7 @@ next save no longer has it. Things that stood on a removed surface are on the fl
 nothing placed), `try:<guid>@...` (placed there), `info#<guid>` (an object's placement data),
 `sell#<id>` (an object sold, e.g. to put a converted table where the lot's own stood; note that an object
 file name in a place action may name a mod object, which copies the file: use GUIDs);
-`SIMMY_COUNTER_TRACE=1` (counter pieces); `SIMMY_COUNTER_EAT_TRACE=1` (bar stools at counters); `SIMMY_SLOT_TRACE=1` (slot heights); `SIMMY_SEAT_TRACE=1` (sims in seats and beds: offsets);
+`SIMMY_COUNTER_TRACE=1` (counter pieces); `SIMMY_OBJ_NODE_TRACE=<file text>` (an object's skeleton poses: appliances' rest pose and turns), `SIMMY_OBJ_STATE_TRACE=1` (state changes as drawn), `SIMMY_OBJ_STATE_FORCE=<id>:<state>:<from>-<to>` (an appliance drawn with its doors open); `SIMMY_COUNTER_EAT_TRACE=1` (bar stools at counters); `SIMMY_SLOT_TRACE=1` (slot heights); `SIMMY_SEAT_TRACE=1` (sims in seats and beds: offsets);
 `SIMMY_CAM_LOOK=x,y,distance,yaw,pitch[,height]` (the camera looks at a tile: screenshots).
 
 ## The converter (tools/pcobj/)
@@ -329,10 +402,11 @@ file name in a place action may name a mod object, which copies the file: use GU
 | `rcol.py` | Scenegraph resources: CRES (blocks and the transform hierarchy), SHPE, GMND (names, links), GMDC v4 (elements, links with alias lists, groups), TXMT, TXTR (v9), LIFO |
 | `sg.py` | Name -> instance: CRC-24 (poly 0x864CFB, init 0xB704CE) of the lower-cased name \| 0xFF000000, instance-high CRC-32 (MSB first); packages searched newest pack first |
 | `pcinstall.py` | Packs (order, `Objects` / `StuffPack/Objects` / `Catalog/Materials` / `Sims3D` or `3D` packages), the OBJD catalogue across packs (newest wins, home pack), CTSS text, STR# 0x85 models, parts, MMAT recolours (CPF) |
-| `pcmesh.py` | CRES -> SHPE -> GMND -> GMDC meshes in object space (node transforms, shadows/bounding boxes left out, orphan mirror frames) |
+| `pcmesh.py` | CRES -> SHPE -> GMND -> GMDC meshes in object space (node transforms, shadows/bounding boxes left out, orphan mirror frames); optionally each vertex's bone or part node and the bones' places |
 | `gctex.py` | CMPR (DXT1 encoder, DXT1 -> CMPR transcode), RGB5A3, RGBA8, mips, TXFL |
 | `gcdata.py` | GameCube data (folder or GCM image), the SimsObjects quickdata, EDataHeader |
 | `pcsurf.py` | Surfaces: kinds, bases by footprint, counter pieces, the top's height from the mesh |
+| `pcappl.py` | Appliances: kinds, bases by tier, the base skeletons' moving nodes, binding the PC parts (bones / part nodes) to them |
 | `pcseat.py` | Seating and beds: kinds, bases by footprint and rating, the seat's height, the beds' made / slept-in models and halves |
 | `pcobj_convert.py` | Inventory, placement, base choice, materials, MODL/shaders, thumbnail, mod.ini; batch with worker processes |
 
@@ -349,6 +423,18 @@ file name in a place action may name a mod object, which copies the file: use GU
   GameCube's sofa too. Beds have two static models (made, slept in) instead of the animated blanket.
   The coffin, Murphy bed, hammocks, tent and makeover station are left out; recolours are not
   converted.
+- Appliances behave as their GameCube base: the PC's own extras are not converted (no espresso
+  cart vendor, no food-stand vendor NPC, no juice drink, no hot chocolate, no compactor bag; the
+  toaster oven cooks as the microwave, a juicer is a blender step, the food stands and shop displays
+  are food sources); a fridge's food, a stove's cooking and fire risk are the base tier's. Parts with
+  no node on the base stay still (grill lids, carafes, an oven's rack, compactor drawers, a food stand's
+  pans); a door is turned by the base's animation (its timing and angle) about the PC hinge. The rest
+  pose is taken the first time the object is seen in state 0 (half a second): an appliance loaded from a
+  save in another state shows its parts closed until then. Every tile of a 2x1 grill or a food stand is
+  a copy of the base (each tile offers the base's interactions; a food stand's back tiles cannot be
+  reached). The dishwasher keeps the GameCube's two tiles (the PC's is one): the tile in front stays
+  free for its door. Converted appliance models are 2-4 times the size of the disc's (the fire-code
+  meter fills sooner).
 - Surfaces behave as the GameCube's (eat, prepare food, things on them); PC extras are not
   converted (vanities' make-up, the food-judging table, displays' shop use, the tea table's ceremony).
   The GameCube's eat and computer animations are made for its 1.0 tables: at a PC table (0.8) plates

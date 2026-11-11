@@ -120,6 +120,13 @@ bool GetObjSelector3dDisplayInfo(ObjSelector* selector, ObjectDefinition& def) {
   def.m_character = ERQuickdata::U32(res, 0x20);
   def.m_anim = ERQuickdata::U32(defs, 8);
   def.m_field0C = 0;
+  // PC mod: mods: an animated appliance's states show a model bound to its character's nodes; the
+  // preview shows its still copy (no character: nothing poses the nodes).
+  if (selector->m_modObject && selector->m_modObject->animated && selector->m_modObject->model) {
+    def.m_model = selector->m_modObject->model;
+    def.m_character = 0;
+    def.m_anim = 0;
+  }
   return def.m_model != 0;
 }
 

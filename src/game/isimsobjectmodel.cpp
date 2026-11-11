@@ -18,6 +18,12 @@
 #include <cstring>
 #include <string>
 
+namespace {
+// SIMMY_OBJ_NODE_TRACE=<text>: objects whose file name contains the text log their nodes' object-space
+// poses (translation, turn about an axis) every 20 frames and at state changes.
+const char* const g_nodeTrace = std::getenv("SIMMY_OBJ_NODE_TRACE");
+}  // namespace
+
 // 800568AC ISimInstance::GetTypeInfo
 // 800568B8 ISimInstance::GetTypeName
 // 800568C4 ISimInstance::GetTypeKey
@@ -447,7 +453,22 @@ void ISimsObjectModel::Update() {
   if (vehicle && m_shadow) shadowPrev = m_shadow->m_orient;
   if (m_xob->GetContainer())
     SIMMY_STUB("ISimsObjectModel::Update: carried objects (the holder's hand position)", 0x8004CBDC);
-  const int state = m_xob->GetData(0);
+  int state = m_xob->GetData(0);
+  // SIMMY_OBJ_STATE_FORCE="<id>:<state>:<from>-<to>;...": the object is drawn in that state between those
+  // frames (its animation, model and effects; the simulation's own state is untouched). Screenshots of
+  // appliance doors and the like (development aid).
+  static const char* const forceState = std::getenv("SIMMY_OBJ_STATE_FORCE");
+  if (forceState) {
+    cXObjectImpl* self = m_xob->GetObjectImplementation();
+    for (const char* p = forceState; p && *p;) {
+      int id = 0, st = 0, from = 0, to = 0;
+      if (std::sscanf(p, "%d:%d:%d-%d", &id, &st, &from, &to) == 4 && self && self->m_id == id &&
+          _framecount >= from && _framecount <= to)
+        state = st;
+      p = std::strchr(p, ';');
+      if (p) ++p;
+    }
+  }
   ObjAnimDef* def;
   if (m_state == state) {
     def = GetAnimDef(m_state, true);
@@ -456,6 +477,13 @@ void ISimsObjectModel::Update() {
   } else {
     m_paused = 0;
     def = GetAnimDef(state, true);
+    static const bool stateTrace = std::getenv("SIMMY_OBJ_STATE_TRACE") != nullptr;
+    if (stateTrace) {
+      cXObjectImpl* self = m_xob->GetObjectImplementation();
+      std::fprintf(stderr, "[objstate] frame %d #%d %s: state %d -> %d (model %08X anim %08X)\n", _framecount,
+                   self ? self->m_id : -1, self && self->m_selector ? self->m_selector->m_fileName : "?", m_state, state,
+                   def->m_model, def->m_anim);
+    }
     UpdateModel(def);
     UpdateParticle(def);
     UpdateAnimTrack(def, false);
@@ -684,6 +712,7 @@ void ISimsObjectModel::DoAnimation() {
     return;
   }
   m_anim.Compute(m_orient, _framecount);
+  if (simmy::mods_enabled() || g_nodeTrace) ModNodes();
   if (!(m_anim.m_nodeFlags & EACNodeState::kHidden)) {
     for (DigestGeomShaderPtr& d : m_digests) d.m_nodeFlags &= 0xfff7;
   } else {
@@ -696,7 +725,158 @@ void ISimsObjectModel::DoAnimation() {
   if (!m_animLights.empty()) AnimateLights();
 }
 
-// 80050288
+namespace {
+// Rigid transforms in the engine's row-vector form (v' = v R + t; EMat4 m[0..2] the rows of R, m[3] t).
+struct Rigid {
+  float r[3][3];
+  float t[3];
+};
+Rigid RigidOf(const EMat4& m) {
+  Rigid x;
+  for (int i = 0; i < 3; ++i) {
+    for (int j = 0; j < 3; ++j) x.r[i][j] = m.m[i][j];
+    x.t[i] = m.m[3][i];
+  }
+  return x;
+}
+// a * b (apply a, then b)
+Rigid Mul(const Rigid& a, const Rigid& b) {
+  Rigid x;
+  for (int i = 0; i < 3; ++i) {
+    for (int j = 0; j < 3; ++j) x.r[i][j] = a.r[i][0] * b.r[0][j] + a.r[i][1] * b.r[1][j] + a.r[i][2] * b.r[2][j];
+    x.t[i] = a.t[0] * b.r[0][i] + a.t[1] * b.r[1][i] + a.t[2] * b.r[2][i] + b.t[i];
+  }
+  return x;
+}
+// The inverse of a rotation (normalised axes, as the controller's poses) and translation.
+Rigid Inverse(const Rigid& a) {
+  Rigid x;
+  for (int i = 0; i < 3; ++i)
+    for (int j = 0; j < 3; ++j) x.r[i][j] = a.r[j][i];
+  for (int i = 0; i < 3; ++i) x.t[i] = -(a.t[0] * x.r[0][i] + a.t[1] * x.r[1][i] + a.t[2] * x.r[2][i]);
+  return x;
+}
+void Store(const Rigid& a, EMat4& m) {
+  for (int i = 0; i < 3; ++i) {
+    for (int j = 0; j < 3; ++j) m.m[i][j] = a.r[i][j];
+    m.m[i][3] = 0.0f;
+    m.m[3][i] = a.t[i];
+  }
+  m.m[3][3] = 1.0f;
+}
+}  // namespace
+
+// PC mod: mods. An animated appliance (mod.ini animated = 1) shows a model whose strips are bound to its
+// base's character nodes, in the object's own (model) space: the parts of the PC mesh (a fridge's doors,
+// an oven's door) where the PC model has them, not where the base's model has its own. So each node is
+// drawn by how far the base's animation has moved it from its rest pose (state 0: closed), not by its
+// pose: L' = rest^-1 * L (object space). A node with a pivot (mod.ini node = N:x,y,z[:m]) turns about
+// that point (the PC part's hinge) instead of the base node's; with m the turn is mirrored in model x
+// (a door hinged on the other side); its slide (translation) is kept. Before a rest pose has been seen
+// every node stays at rest. Runs after each Compute (the controller keeps a frame's matrices: a second
+// call in the same frame is skipped).
+void ISimsObjectModel::ModNodes() {
+  cXObjectImpl* self = m_xob ? m_xob->GetObjectImplementation() : nullptr;
+  const simmy::ModObject* mo = self && self->m_selector ? self->m_selector->m_modObject : nullptr;
+  const int n = m_anim.NodeCount();
+  EMat4* mats = m_anim.m_matrices;
+  if (!mats || n <= 0) return;
+  if (m_modAdjustedFrame == _framecount && m_modAdjustedMats == mats) return;
+  bool trace = false;
+  if (g_nodeTrace && self && self->m_selector && self->m_selector->m_fileName && (_framecount % 20 == 0 || m_modAdjustedFrame < 0)) {
+    // comma-separated texts
+    std::string list = g_nodeTrace;
+    for (size_t a = 0; a <= list.size() && !trace;) {
+      size_t b = list.find(',', a);
+      if (b == std::string::npos) b = list.size();
+      const std::string word = list.substr(a, b - a);
+      trace = !word.empty() && std::strstr(self->m_selector->m_fileName, word.c_str());
+      a = b + 1;
+    }
+  }
+  if ((!mo || !mo->animated) && !trace) return;
+  m_modAdjustedFrame = _framecount;
+  m_modAdjustedMats = mats;
+  const Rigid rootInv = Inverse(RigidOf(m_orient));
+  // the controller's matrices carry the model's scale (PreScale: the rows); taken out, put back
+  std::vector<Rigid> local(static_cast<size_t>(n));
+  std::vector<float> scale(static_cast<size_t>(n), 1.0f);
+  for (int i = 0; i < n; ++i) {
+    Rigid m = RigidOf(mats[i]);
+    const float s = std::sqrt(m.r[0][0] * m.r[0][0] + m.r[0][1] * m.r[0][1] + m.r[0][2] * m.r[0][2]);
+    if (s > 1e-12f)
+      for (int a = 0; a < 3; ++a)
+        for (int b = 0; b < 3; ++b) m.r[a][b] /= s;
+    scale[static_cast<size_t>(i)] = s > 1e-12f ? s : 1.0f;
+    local[static_cast<size_t>(i)] = Mul(m, rootInv);
+  }
+  if (trace) {
+    for (int i = 0; i < n; ++i) {
+      const Rigid& l = local[static_cast<size_t>(i)];
+      const float c = (l.r[0][0] + l.r[1][1] + l.r[2][2] - 1.0f) * 0.5f;
+      const float angle = std::acos(c < -1.0f ? -1.0f : c > 1.0f ? 1.0f : c) * 57.29578f;
+      // the axis (row form: R^T's antisymmetric part)
+      std::fprintf(stderr, "[objnode] frame %d #%d %s state %d node %d: t %.3f %.3f %.3f turn %.1f axis %.2f %.2f %.2f\n",
+                   _framecount, self->m_id, self->m_selector->m_fileName, m_state, i, l.t[0], l.t[1], l.t[2], angle,
+                   l.r[1][2] - l.r[2][1], l.r[2][0] - l.r[0][2], l.r[0][1] - l.r[1][0]);
+      std::fprintf(stderr, "[objnode]   rows %.3f %.3f %.3f | %.3f %.3f %.3f | %.3f %.3f %.3f\n", l.r[0][0], l.r[0][1],
+                   l.r[0][2], l.r[1][0], l.r[1][1], l.r[1][2], l.r[2][0], l.r[2][1], l.r[2][2]);
+    }
+  }
+  if (!mo || !mo->animated) return;
+  if (m_state == 0 && m_trackTime > 0.5f) {
+    m_modRest.resize(static_cast<size_t>(n));
+    for (int i = 0; i < n; ++i) Store(local[static_cast<size_t>(i)], m_modRest[static_cast<size_t>(i)]);
+  }
+  if (trace)
+    std::fprintf(stderr, "[objnode] frame %d #%d mod object: rest %s, %zu pivots, track time %.2f\n", _framecount,
+                 self->m_id, static_cast<int>(m_modRest.size()) == n ? "known" : "not yet", mo->nodes.size(), m_trackTime);
+  const Rigid root = RigidOf(m_orient);
+  for (int i = 0; i < n; ++i) {
+    Rigid delta{{{1, 0, 0}, {0, 1, 0}, {0, 0, 1}}, {0, 0, 0}};
+    if (static_cast<int>(m_modRest.size()) == n) {
+      const Rigid rest = RigidOf(m_modRest[static_cast<size_t>(i)]);
+      const Rigid& now = local[static_cast<size_t>(i)];
+      delta = Mul(Inverse(rest), now);
+      for (const simmy::ModObject::Node& nd : mo->nodes) {
+        if (nd.node != i) continue;
+        // the turn about the PC hinge h, the node's own slide: x' = (v - h) D + h + (p - p_rest)
+        float D[3][3];
+        for (int a = 0; a < 3; ++a)
+          for (int b = 0; b < 3; ++b) D[a][b] = delta.r[a][b];
+        float slide[3] = {now.t[0] - rest.t[0], now.t[1] - rest.t[1], now.t[2] - rest.t[2]};
+        if (nd.axis) {
+          // the base node's turn (its angle) about a model axis of the PC part's own (a toaster oven's
+          // door hinged at its foot, where the base's door turns about a vertical hinge); no slide
+          const float c = (D[0][0] + D[1][1] + D[2][2] - 1.0f) * 0.5f;
+          const float angle = std::acos(c < -1.0f ? -1.0f : c > 1.0f ? 1.0f : c) * (nd.axis < 0 ? -1.0f : 1.0f);
+          const int k = (nd.axis < 0 ? -nd.axis : nd.axis) - 1, u = (k + 1) % 3, w = (k + 2) % 3;
+          const float co = std::cos(angle), si = std::sin(angle);
+          // column form R (v' = R v): R[u][u] = R[w][w] = cos, R[u][w] = -sin, R[w][u] = sin; row form D = R^T
+          for (int a = 0; a < 3; ++a)
+            for (int b = 0; b < 3; ++b) D[a][b] = a == b ? 1.0f : 0.0f;
+          D[u][u] = co, D[w][w] = co, D[w][u] = -si, D[u][w] = si;
+          slide[0] = slide[1] = slide[2] = 0.0f;
+        } else if (nd.mirror) {  // S D S, S = diag(-1, 1, 1)
+          for (int a = 0; a < 3; ++a)
+            for (int b = 0; b < 3; ++b)
+              if ((a == 0) != (b == 0)) D[a][b] = -D[a][b];
+          slide[0] = -slide[0];
+        }
+        for (int a = 0; a < 3; ++a) {
+          for (int b = 0; b < 3; ++b) delta.r[a][b] = D[a][b];
+          delta.t[a] = nd.pivot[a] - (nd.pivot[0] * D[0][a] + nd.pivot[1] * D[1][a] + nd.pivot[2] * D[2][a]) + slide[a];
+        }
+      }
+    }
+    Rigid out = Mul(delta, root);
+    for (int a = 0; a < 3; ++a)
+      for (int b = 0; b < 3; ++b) out.r[a][b] *= scale[static_cast<size_t>(i)];
+    Store(out, mats[i]);
+    m_anim.m_states[i].m_trans = EVec3{mats[i].m[3][0], mats[i].m[3][1], mats[i].m[3][2]};
+  }
+}
+
 // 80050288
 // The model's lights follow their nodes: a point light at its node's position (and the falloff of
 // its scalar 1 channel), a directional light along its node's z axis; colour (vector channel) and
@@ -1738,7 +1918,17 @@ bool CounterTopAt(int x, int y, int level, cXObject* self, int& dir) {
     if (it.m_current == self) continue;
     const ObjDefinition* def = it.m_current->GetDef();
     const unsigned char* res = def ? objdef::ResData(def) : nullptr;
-    if (!res || res[6] != 1) continue;
+    // PC mod: a floor appliance in a counter run (a stove, a dishwasher's machine tile, a compactor:
+    // catalogue function Appliances, 4, on it or its group's lead) continues the run like a counter
+    bool appliance = false;
+    if (!(res && res[6] == 1) && def && it.m_current->GetContainer() == nullptr) {
+      unsigned int functions = ERQuickdata::U16(def, 0x50);
+      if (ObjSelector* sel = it.m_current->GetSelector())
+        if (auto* lead = reinterpret_cast<ObjSelector*>(sel->GetMasterSelector()); lead && lead->m_def)
+          functions |= ERQuickdata::U16(lead->m_def, 0x50);
+      appliance = (functions & 0x4) != 0;
+    }
+    if (!(res && res[6] == 1) && !appliance) continue;
     dir = it.m_current->GetData(1) & 7;
     return true;
   }

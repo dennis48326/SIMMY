@@ -180,6 +180,12 @@ struct ISimsObjectModel : public ISimInstance {
   int m_bulbState = 0;                // +0x434 the state's bulb setting (ObjAnimDef +0x14: 1 on)
   void PlaceBulb(EMat4& m);           // PC: the lamp's light at the object (ApplyMatrix, wall SetObjOrient)
   ObjAnimDef m_animDefCopy;           // PC: GetAnimDef's result (GC: a pointer into the quickdata)
+  // PC mod: mods: an animated appliance's node matrices re-pivoted to the PC parts' hinges (ModNodes):
+  // each node's object-space pose at rest (state 0), and the frame / buffer last adjusted.
+  void ModNodes();
+  std::vector<EMat4> m_modRest;
+  int m_modAdjustedFrame = -1;
+  const EMat4* m_modAdjustedMats = nullptr;
   int m_field4B8 = -1;                // +0x4B8
 };
 
