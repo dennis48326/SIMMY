@@ -170,6 +170,7 @@ Development only: the launcher removes all of them except `SIMMY_INI` from the g
 | `SIMMY_SKILL_METER_TEST=<fill>[,repair]` | Skill/repair meter over player 1's sim |
 | `SIMMY_SPRITE_TRACE=1`, `SIMMY_SPRITE_HOLD=1` | Balloons: trace; keep up for shots |
 | `SIMMY_SLOT_TRACE=1`, `SIMMY_SLOT_OFFSET_OFF=1` | Slot offsets: trace; disable |
+| `SIMMY_COUNTER_TRACE=1` | PC mod: mods: the piece (plain, corner, ends) each converted counter shows and its neighbours |
 | `SIMMY_PORTRAIT_DUMP=<prefix>` | Write each finished portrait as BMP |
 | `SIMMY_UI3D_TRACE=1` | UI3D displays every 60 frames |
 | `SIMMY_GREEN_TEST=1` | Light player 1's sim as a green person (`ESim::Draw`'s ghost-green ambient) |
@@ -233,7 +234,7 @@ Development only: the launcher removes all of them except `SIMMY_INI` from the g
 | `SIMMY_MODS_VERBOSE=1` | PC mod: mods: a log line per mod object even with more than 20 ([mods.md](mods.md)) |
 | `SIMMY_PLACE_TEST` mod actions | `probe:<guid>@x,y,dir\|x,y,dir...` first legal spot (nothing placed), `try:<guid>@...` place at the first legal spot, `info#<guid>` an object's placement data (heights, flags, wall flags, footprint) ([`placemanipulator.cpp`](../src/game/placemanipulator.cpp)) |
 | `SIMMY_CAM_LOOK=x,y,distance,yaw,pitch[,height]` | The house camera looks at a tile (screenshots; [`camera.cpp`](../src/game/camera.cpp)) |
-| `SIMMY_PLACE_TEST="<tick>:<action>;..."` | At sim ticks: `<guid hex or object file name>@x,y[,dir]` buy-place a new object, `model#<hex>` list the object files drawing that model, `grab#<id>` grab and put back, `create:<object file>@x,y` make an object and put it there as CreateObject does (dynamic ones such as `efx_flood` merge), `wall@x,y,seg` delete a wall segment, `chain@x,y` print a tile's object chain, `paperroom@x,y,i[,sell]` paper (strip) the room with WallSet entry i ([`placemanipulator.cpp`](../src/game/placemanipulator.cpp)) |
+| `SIMMY_PLACE_TEST="<tick>:<action>;..."` | At sim ticks: `<guid hex or object file name>@x,y[,dir]` buy-place a new object, `model#<hex>` list the object files drawing that model, `grab#<id>` grab and put back, `sell#<id>` grab and destroy (sell), `create:<object file>@x,y` make an object and put it there as CreateObject does (dynamic ones such as `efx_flood` merge), `wall@x,y,seg` delete a wall segment, `chain@x,y` print a tile's object chain, `paperroom@x,y,i[,sell]` paper (strip) the room with WallSet entry i ([`placemanipulator.cpp`](../src/game/placemanipulator.cpp)) |
 | `SIMMY_CTL_TRACE=1`, `SIMMY_COOP_TRACE=1`, `SIMMY_SWITCH_TRACE=1`, `SIMMY_CAM_TRACE=1` | Classic cursor (and its Go Here tile); both players; sim switching; the lot intro camera's steps |
 | `SIMMY_HL_TRACE=1` | Direct control's highlights every 60 frames: the objects the influence map lists at the sim's tile, the lit ones, the sim's location and facing |
 | `SIMMY_KBM_TRACE=1`, `SIMMY_KBM_NOPICK=1` | Keyboard/mouse input made; floor-only mouse picking |

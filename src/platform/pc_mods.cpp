@@ -12,7 +12,11 @@
 //   thumbnail = 0x12345678     catalogue thumbnail shader id (default: the base object's)
 //   functions = 0x20           catalogue function flags: the buy-mode tab (default: the base object's)
 //   room = 3                   catalogue room rating (default: the base object's)
-//   tiles = 0,0:0xGUID 1,0:0xGUID   a multi-tile object: each tile's offset (x,y) and GUID
+//   tiles = 0,0:0xGUID 1,0:0xGUID   a multi-tile object: each tile's offset (x,y) and GUID (":0.80": a
+//                              surface's top over that tile)
+//   surface = 0.80             a surface's top (tiles): where its object slots put things
+//   connect = counter          counter pieces drawn by neighbours (counter or island), with
+//   model_corner = 0x..., model_end_px, model_end_nx, model_ends   their models
 //   pack = ...                 where the object came from (informational)
 // Resource files next to it: "<manager>_<8 hex digits>.res", e.g. "models_9A3F0C12.res". Only their
 // names are read at start-up; a resource is read from its file each time the game loads it.
@@ -101,10 +105,15 @@ bool ParseTiles(const std::string& v, std::vector<ModTile>& out) {
     const std::string item = v.substr(pos, end - pos);
     pos = end;
     ModTile t;
-    char guid[32] = {};
-    if (std::sscanf(item.c_str(), "%d,%d:%31s", &t.x, &t.y, guid) != 3 || !ParseU32(guid, t.guid) || !t.guid ||
-        t.x < 0 || t.y < 0 || t.x > 127 || t.y > 127)
-      return false;
+    char guid[48] = {};
+    if (std::sscanf(item.c_str(), "%d,%d:%47s", &t.x, &t.y, guid) != 3) return false;
+    std::string g = guid;
+    const size_t colon = g.find(':');
+    if (colon != std::string::npos) {
+      t.surface = static_cast<float>(std::atof(g.c_str() + colon + 1));
+      g.resize(colon);
+    }
+    if (!ParseU32(g, t.guid) || !t.guid || t.x < 0 || t.y < 0 || t.x > 127 || t.y > 127) return false;
     out.push_back(t);
   }
   return !out.empty();
@@ -154,6 +163,17 @@ void LoadModIni(const std::string& mod, const std::string& path) {
     } else if (key == "room") cur->room = std::atoi(v.c_str());
     else if (key == "pack") cur->pack = v;
     else if (key == "tiles") ok = ParseTiles(v, cur->tiles);
+    else if (key == "surface") {
+      cur->surface = static_cast<float>(std::atof(v.c_str()));
+      ok = cur->surface > 0.0f && cur->surface < 8.0f;
+    } else if (key == "connect") {
+      const std::string c = Lower(v);
+      cur->connect = c == "counter" ? 1 : c == "island" ? 2 : 0;
+      ok = cur->connect != 0 || c == "none";
+    } else if (key == "model_corner") ok = ParseU32(v, cur->pieces[0]);
+    else if (key == "model_end_px") ok = ParseU32(v, cur->pieces[1]);
+    else if (key == "model_end_nx") ok = ParseU32(v, cur->pieces[2]);
+    else if (key == "model_ends") ok = ParseU32(v, cur->pieces[3]);
     if (!ok) std::fprintf(stderr, "[mods] %s:%d: bad value \"%s\"\n", path.c_str(), lineNo, v.c_str());
   }
   for (ModObject& o : objects) {

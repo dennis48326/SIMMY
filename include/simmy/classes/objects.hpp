@@ -27,6 +27,10 @@
 #include <string>
 #include <vector>
 
+namespace simmy {
+struct ModObject;  // platform.hpp (PC mod: mods)
+}
+
 // ObjDefinition rows ("SimsObjects" quickdata, 0xC4 bytes, big-endian; pointer fields self-relative,
 // see ERQuickdata). GC: an ObjDefinition struct read in place.
 namespace objdef {
@@ -137,6 +141,10 @@ struct ObjSelector {
   const unsigned short* m_modNameSlot = nullptr;
   const unsigned short* m_modDescSlot = nullptr;
   const char* m_mod = nullptr;
+  // A mod surface's top over this selector's tile (tiles; -1: the base's slot heights) and its mod
+  // object (counter pieces; the mod list is immutable after start-up).
+  float m_modSurface = -1.0f;
+  const simmy::ModObject* m_modObject = nullptr;
 };
 
 struct ObjectFolderImpl {

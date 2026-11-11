@@ -4,15 +4,19 @@ rem and every expansion and stuff pack installed under it - into the mods folder
 rem Needs Python 3 (python.org; tick "Add to PATH") - the first run installs numpy and Pillow for it.
 rem Nothing is downloaded from EA or anywhere else; see docs\mods.md.
 rem
-rem   convert_pc_object.bat                     every Decorative object of every pack found (default)
+rem   convert_pc_object.bat                     every Decorative and Surfaces object of every pack found (default)
+rem   convert_pc_object.bat decorative          only the Decorative objects
+rem   convert_pc_object.bat surfaces            only the Surfaces objects (counters, tables, desks, ...)
 rem   convert_pc_object.bat list ficus          list PC objects whose name contains "ficus"
-rem   convert_pc_object.bat inventory           write the decorative inventory (mods\pcdeco_inventory.tsv) only
+rem   convert_pc_object.bat inventory           write the inventory (mods\pcobj_inventory.tsv) only
 rem   convert_pc_object.bat "No-Fuss Ficus"     one object (name or GUID); the GameCube base is chosen
 rem   convert_pc_object.bat "No-Fuss Ficus" plant_floor_rubbertree     ... with this GameCube base object
 rem
-rem Each object behaves like its GameCube base (chosen by where it goes: wall, floor, table top,
-rem ceiling, rug). Delete its folder in mods to remove it (saves stay loadable). Converting again
-rem replaces the folders it wrote. Takes a few minutes for all packs.
+rem Each object behaves like its GameCube base (decorative: chosen by where it goes: wall, floor,
+rem table top, ceiling, rug; surfaces: a GameCube counter or table of the same footprint, with things
+rem put on it at the PC top's height, counters joining up in rows and corners). Delete its folder in
+rem mods to remove it (saves stay loadable). Converting again replaces the folders it wrote. Takes
+rem about a minute and a half for all packs on two cores (progress per object).
 setlocal
 set "PC=Q:\Claude\SIMMY\The Sims 2 Ultimate Collection"
 set "ISO=E:\Roms\Gamecube\Sims 2, The (USA).iso"
@@ -30,19 +34,26 @@ if /i "%~1"=="list" (
   exit /b
 )
 if /i "%~1"=="inventory" (
-  python "%TOOL%" --pc "%PC%" --gc "%ISO%" --inventory "%BIN%\mods\pcdeco_inventory.tsv"
+  python "%TOOL%" --pc "%PC%" --gc "%ISO%" --categories decorative,surfaces --inventory "%BIN%\mods\pcobj_inventory.tsv"
   pause
   exit /b
 )
-if "%~1"=="" (
+if /i "%~1"=="decorative" (
   echo Converting every Decorative object of every pack under "%PC%" ...
-  python "%TOOL%" --pc "%PC%" --gc "%ISO%" --all-decorative --out "%BIN%\mods"
+  python "%TOOL%" --pc "%PC%" --gc "%ISO%" --categories decorative --out "%BIN%\mods"
+) else if /i "%~1"=="surfaces" (
+  echo Converting every Surfaces object of every pack under "%PC%" ...
+  python "%TOOL%" --pc "%PC%" --gc "%ISO%" --categories surfaces --out "%BIN%\mods"
+) else if "%~1"=="" (
+  echo Converting every Decorative and Surfaces object of every pack under "%PC%" ...
+  python "%TOOL%" --pc "%PC%" --gc "%ISO%" --categories decorative,surfaces --out "%BIN%\mods"
 ) else if "%~2"=="" (
   python "%TOOL%" --pc "%PC%" --gc "%ISO%" --object "%~1" --out "%BIN%\mods"
 ) else (
   python "%TOOL%" --pc "%PC%" --gc "%ISO%" --object "%~1" --base "%~2" --out "%BIN%\mods"
 )
 echo.
-echo Done (exit code %ERRORLEVEL%). Start the game: the objects are in buy mode, Decorative tab
-echo (up / down past a column's end pages four columns). The list is in mods\pcdeco_inventory.tsv.
+echo Done (exit code %ERRORLEVEL%). Start the game: the objects are in buy mode, Decorative and
+echo Surfaces tabs (the C stick pages four columns). The lists are mods\pcdeco_inventory.tsv and
+echo mods\pcsurf_inventory.tsv.
 pause

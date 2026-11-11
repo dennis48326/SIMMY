@@ -173,6 +173,10 @@ void EIObjectMan::CountObjects(float& models, float& objects, float& weighted, f
     if (ERModel* model = instance->m_model) {
       ModelData& d = seen[model];
       d.size = model->m_flags >> 8;
+      // PC mod: mods. A converted model keeps float vertices (28 bytes a vertex: position, uv, normal)
+      // where the disc's are fixed point (16; modobjects.cpp, pcobj_convert.py): it counts at the size
+      // it would have in the disc's format (the index lists, the same in both, taken as a third).
+      if (selector->m_mod) d.size = static_cast<unsigned int>(static_cast<unsigned long long>(d.size) * 5 / 7);
       ++d.count;
       d.weight = static_cast<float>(weight);
     }

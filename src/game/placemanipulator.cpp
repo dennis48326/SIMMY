@@ -1057,6 +1057,7 @@ bool UpdatePlaceManipulator(int player, float dt) {
 //   <guid hex>@x,y[,dir]  a new object of that GUID (or object file name) put at the tile's middle (facing dir, eighths) through
 //                         the placement path (Place where legal, then FinalUserPlaceObject: UserPlace)
 //   grab#<id>             the object picked up by the player (UserPickup) and put back (ResetLocation)
+//   sell#<id>             the object picked up and destroyed (buy mode's sell)
 //   wall@x,y,seg          the wall segment deleted (ERoom::DeleteWallAtTile), the rooms and house redone
 //   create:<file>@x,y     an object made and put on the tile as TryCreateObject does (dynamic ones merge)
 //   chain@x,y             the tile's object chain printed (the tile map's object and its siblings)
@@ -1106,6 +1107,15 @@ void PlacementTestTick(int ticks) {
           if (defs && objdef::AnimDefCount(defs) > 0 && ERQuickdata::U32(defs, 0) == model)
             std::printf("[place] model 0x%08x: %s (guid 0x%08x)\n", model, sel->m_fileName, static_cast<unsigned int>(sel->GetGUID()));
         }
+    } else if (std::strncmp(a, "sell#", 5) == 0) {
+      // sell#<id>: the object picked up and destroyed, as buy mode's sell does (its holdings first).
+      PlacementObject po;
+      const int id = std::atoi(a + 5);
+      cXObject* x = Globs_pObjectModule->GetObjectFromID(static_cast<short>(id));
+      const std::string what = x && x->GetObjectImplementation() ? x->GetObjectImplementation()->DebugName() : "?";
+      const int ok = po.GrabExistingObjectInstanceFromId(static_cast<short>(id));
+      const int sold = ok ? po.Destroy() : 0;
+      std::printf("[place] tick %d sell #%d (%s): %d\n", ticks, id, what.c_str(), sold);
     } else if (std::strncmp(a, "grab#", 5) == 0) {
       PlacementObject po;
       const int ok = po.GrabExistingObjectInstanceFromId(static_cast<short>(std::atoi(a + 5)));

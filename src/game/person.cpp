@@ -2569,6 +2569,15 @@ cXPersonImpl* MakeNeighborPerson(Neighbor* n, ObjSelector* selector) {
 // ObjectModuleImpl::KillObject) is freed there, so it leaves the lot's list too.
 void ForgetLotPerson(cXObjectImpl* object) {
   g_lotPeople.erase(std::remove(g_lotPeople.begin(), g_lotPeople.end(), object), g_lotPeople.end());
+  // PC guard: a route that asked it to step aside forgets it (GC kept the pointer; a leaving NPC asked
+  // to move left it dangling, and the route's end then read the freed person: TryGotoRoutingSlot).
+  cXObject* gone = object;
+  for (cXPersonImpl* p : g_lotPeople)
+    for (XRoute& r : p->m_routes)
+      if (r.m_asked == gone) {
+        r.m_asked = nullptr;
+        r.m_askedAction = 0;
+      }
 }
 
 void RemoveFamilyFromLot() {

@@ -8,10 +8,13 @@
 #include "simmy/detmath.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <map>
+#include <mutex>
 
 // ---------------------------------------------------------------------------------------------------
 // RoutingSlot
@@ -168,9 +171,37 @@ int ObjectSlotFlags(cXObjectImpl* object, int index) {
 // ObjectSlot::SetHeight (80142D64): the slot's standard height (descriptor +0x18; ObjectSlot +8) and
 // altitude (+0xC; +0x1C): 1 the floor (0), 2 a low surface (1.0206), 3 / 4 / 8 a counter or table
 // (1.6330); 0: 1 when the descriptor gives no altitude, else 5 with its own; others keep theirs.
+namespace {
+// PC mod: mods. A mod surface's object slots: copies of its base's descriptors with the height of its
+// own top (altitude units: tiles x 2 sqrt 6 / 3) and a mark in the descriptor's padding (+2, the disc's
+// 0xFAFA) so ObjectSlotHeight keeps that altitude for the slot's height kind (3 / 4 / 8 would give the
+// standard 1.633). Kept for the session (a few per surface; the map's nodes do not move).
+constexpr unsigned char kModSlotMark[2] = {'M', 'S'};
+const unsigned char* ModSlotDescriptor(const unsigned char* base, float surface) {
+  static std::mutex lock;
+  static std::map<std::pair<const unsigned char*, float>, std::array<unsigned char, 0x48>> copies;
+  std::lock_guard<std::mutex> guard(lock);
+  auto it = copies.find({base, surface});
+  if (it == copies.end()) {
+    std::array<unsigned char, 0x48> d;
+    std::memcpy(d.data(), base, d.size());
+    d[2] = kModSlotMark[0];
+    d[3] = kModSlotMark[1];
+    const float alt = surface * 2.0f * std::sqrt(6.0f) / 3.0f;  // WorldToAlt
+    unsigned int bits = 0;
+    std::memcpy(&bits, &alt, 4);
+    d[0xc] = static_cast<unsigned char>(bits >> 24), d[0xd] = static_cast<unsigned char>(bits >> 16);
+    d[0xe] = static_cast<unsigned char>(bits >> 8), d[0xf] = static_cast<unsigned char>(bits);
+    it = copies.emplace(std::make_pair(base, surface), d).first;
+  }
+  return it->second.data();
+}
+}  // namespace
+
 void ObjectSlotHeight(const unsigned char* d, int& height, float& alt) {
   height = ERQuickdata::S32(d, 0x18);
   alt = ERQuickdata::F32(d, 0xc);
+  if (d[2] == kModSlotMark[0] && d[3] == kModSlotMark[1] && height != 0 && height != 1) return;  // PC mod: its own top
   switch (height) {
     case 0: height = alt == 0.0f ? 1 : 5; break;
     case 1: alt = 0.0f; break;
@@ -208,7 +239,13 @@ const unsigned char* ObjectSlotDescriptor(cXObjectImpl* object, int index) {
     for (unsigned int e = 0; e < n; ++e) {
       const unsigned char* d = entries + e * 0x48;
       if (ERQuickdata::S16(d, 0) != 0) continue;
-      if (k++ == index) return d;
+      if (k++ == index) {
+        // PC mod: a mod surface's slots at its own top (not the floor's or a low table's kind)
+        const float top = object->m_selector ? object->m_selector->m_modSurface : -1.0f;
+        const int kind = ERQuickdata::S32(d, 0x18);
+        if (top > 0.0f && kind != 1 && kind != 0) return ModSlotDescriptor(d, top);
+        return d;
+      }
     }
     break;
   }

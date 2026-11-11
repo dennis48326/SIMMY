@@ -227,6 +227,7 @@ bool settings_fire_code_limit();
 struct ModTile {
   int x = 0, y = 0;              // the tile's offset from the group's first tile (sub index x << 8 | y)
   unsigned int guid = 0;         // its own GUID (saves name every part by GUID)
+  float surface = -1.0f;         // a surface's top over this tile (tiles), -1: the object's
 };
 struct ModObject {
   std::string mod;               // the mod's folder name
@@ -242,6 +243,14 @@ struct ModObject {
   std::vector<ModTile> tiles;    // more than none: a multi-tile object of these tiles (a group made from
                                  // the base: its lead, its first tile drawing the model)
   std::string pack;              // where it came from (informational)
+  // A surface (table, counter, desk): the height of its top in tiles, where the base's object slots
+  // put things (the slots keep their kind: what may go there); -1 the base's own (1.0).
+  float surface = -1.0f;
+  // Counter pieces (connect = counter / island): the models drawn instead of `model` by its neighbours
+  // (ISimsCounterTopObject::SetObjOrient): 0 corner, 1 end closing the model's +x side, 2 its -x side,
+  // 3 both ends; 0: none.
+  int connect = 0;               // 0 none, 1 counter, 2 island
+  unsigned int pieces[4] = {};
 };
 void mods_init();                // once at start-up (main thread), after settings_load
 bool mods_enabled();             // a mod folder was found (also when it holds no mods)

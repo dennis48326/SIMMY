@@ -9,6 +9,7 @@
 #include "simmy/classes/epointlight.hpp"
 #include "simmy/classes/psystem.hpp"
 #include "simmy/roomresolve.hpp"
+#include "simmy/platform.hpp"
 #include "simmy/detmath.hpp"
 
 #include <algorithm>
@@ -1724,6 +1725,81 @@ int ISimsCounterTopObject::IsSinkId(cXObject* xob) {
 
 const void* GetCounterModelTable();  // 80041758 (sprites.cpp)
 
+namespace {
+// PC mod: mods. A counter top at (x, y) on `level` other than `self` (ResData +6, as AllocSimsObjectInstance
+// picks ISimsCounterTopObject): its direction (data 1) in `dir`.
+bool CounterTopAt(int x, int y, int level, cXObject* self, int& dir) {
+  cFixedWorldImpl* w = Globs_pFixedWorld;
+  if (!w || x < 0 || y < 0 || x > w->GetXSize() || y > w->GetYSize()) return false;
+  CTilePt tile(x, y, level);
+  ObjectIterator it;
+  it.init(tile, ObjectIterator__IterateType{0});
+  for (; it.m_current; ++it) {
+    if (it.m_current == self) continue;
+    const ObjDefinition* def = it.m_current->GetDef();
+    const unsigned char* res = def ? objdef::ResData(def) : nullptr;
+    if (!res || res[6] != 1) continue;
+    dir = it.m_current->GetData(1) & 7;
+    return true;
+  }
+  return false;
+}
+
+// The tile one step from (x, y) in direction `dir` (0 -y, 2 +x, 4 +y, 6 -x: xrouting.cpp).
+void StepTile(int dir, int& x, int& y) {
+  switch (dir & 7) {
+    case 0: --y; break;
+    case 2: ++x; break;
+    case 4: ++y; break;
+    case 6: --x; break;
+    default: break;
+  }
+}
+}  // namespace
+
+// PC mod: mods. The piece a mod counter (mod.ini connect, model_*) shows by its neighbours, as the PC's
+// counter globals pick them: facing `dir` (its front toward StepTile(dir); the model's +x side toward
+// dir + 2, its back +y toward the wall), a counter in front of it that faces along its side makes it a
+// corner (the corner model closes the back and the -x side; one whose front neighbour faces the other
+// way is the corner turned a quarter, drawn facing dir - 2); else an island or a counter with end
+// pieces closes the sides with no counter next to them. `model` and `drawDir` are left alone when the
+// object is no mod counter or shows its plain model.
+bool ModCounterPiece(cXObject* xob, unsigned int& model, int& drawDir) {
+  ObjSelector* sel = xob ? xob->GetSelector() : nullptr;
+  const simmy::ModObject* m = sel ? sel->m_modObject : nullptr;
+  if (!m || !m->connect) return false;
+  const CTilePt tile = xob->GetCTilePt();
+  const int level = tile.GetLevel(), dir = xob->GetData(1) & 7;
+  if (dir & 1) return false;  // diagonal: plain
+  static const bool trace = std::getenv("SIMMY_COUNTER_TRACE") != nullptr;
+  int fx = tile.GetX(), fy = tile.GetY(), frontDir = -1;
+  StepTile(dir, fx, fy);
+  if (m->pieces[0] && CounterTopAt(fx, fy, level, xob, frontDir)) {
+    if (frontDir == ((dir + 2) & 7) || frontDir == ((dir + 6) & 7)) {
+      model = m->pieces[0];
+      drawDir = frontDir == ((dir + 2) & 7) ? dir : (dir + 6) & 7;
+      if (trace) std::printf("[counter] #%d at %d,%d dir %d: corner (front neighbour faces %d), drawn %d\n", xob->GetID(),
+                             tile.GetX(), tile.GetY(), dir, frontDir, drawDir);
+      return true;
+    }
+  }
+  int px = tile.GetX(), py = tile.GetY(), nx = px, ny = py, unused = 0;
+  StepTile(dir + 2, px, py);
+  StepTile(dir + 6, nx, ny);
+  const bool plus = CounterTopAt(px, py, level, xob, unused), minus = CounterTopAt(nx, ny, level, xob, unused);
+  unsigned int piece = 0;
+  if (!plus && !minus) piece = m->pieces[3];
+  else if (!plus) piece = m->pieces[1];
+  else if (!minus) piece = m->pieces[2];
+  if (trace)
+    std::printf("[counter] #%d at %d,%d dir %d: neighbours +x %d -x %d: %s\n", xob->GetID(), tile.GetX(), tile.GetY(), dir,
+                plus, minus, piece ? (!plus && !minus ? "both ends" : !plus ? "end +x" : "end -x") : "plain");
+  if (!piece) return false;
+  model = piece;
+  drawDir = dir;
+  return true;
+}
+
 // 80052190
 // The sub-objects of the last time go (out of the level, deleted). The model of its state's graphic
 // (data 0; past the ObjAnimDefs: the first); the counter model table's row for its first ObjAnimDef's
@@ -1785,8 +1861,19 @@ void ISimsCounterTopObject::SetObjOrient() {
                   tile.GetY(), it.m_current->GetID(), ERQuickdata::U32(row, 4), model);
     break;
   }
+  // PC mod: a mod counter's piece by its neighbours (not with a sink in it: its own model)
+  int drawDir = -1;
+  if (m_subModels.empty()) ModCounterPiece(m_xob, model, drawDir);
   SetSOMModel(model);
-  ISimsObjectModel::SetObjOrient();
+  if (drawDir >= 0 && drawDir != (m_xob->GetData(1) & 7)) {
+    const float angle = static_cast<float>(drawDir) * 3.1415927f * 0.25f;
+    m_rot = angle;
+    EVec3 pos(static_cast<float>(tile.GetX()) + m_house->m_posY, static_cast<float>(tile.GetY()) + m_house->m_posX, 0.0f);
+    EVec3 scale(1.0f, 1.0f, 1.0f);
+    ApplyMatrix(angle, pos, scale);
+  } else {
+    ISimsObjectModel::SetObjOrient();
+  }
   Init();
 }
 

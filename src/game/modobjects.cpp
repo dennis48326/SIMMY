@@ -16,6 +16,10 @@
 // trees, as the parts of the GameCube's two-tile paintings do); from a group base (a rug) the lead is
 // the group's lead and the parts its parts.
 //
+// Surfaces (mod.ini "surface", per tile in "tiles"): the selectors keep their mod object and the height
+// of their top; the base's object slots (xrouting.cpp ObjectSlotDescriptor) put things there, and a
+// counter's pieces (corner, ends) are drawn by its neighbours (ISimsCounterTopObject::SetObjOrient).
+//
 // Saves name an object type by GUID ('objt'), so a lot keeps its mod objects while the mod is there;
 // without the mod the GUID is unknown and the object loads as the placeholder, which the load removes
 // (ObjectModuleImpl::DoStream), as the GameCube does for any missing object type.
@@ -242,7 +246,14 @@ void ObjectFolderImpl::AddModObjects() {
     };
     ObjSelector* s = add(lead);
     if (!s) continue;
-    for (unsigned char* d : parts) add(d);
+    s->m_modObject = &m;
+    s->m_modSurface = m.surface;
+    for (size_t i = 0; i < parts.size(); ++i) {
+      ObjSelector* part = add(parts[i]);
+      if (!part) continue;
+      part->m_modObject = &m;
+      part->m_modSurface = m.tiles[i].surface > 0.0f ? m.tiles[i].surface : m.surface;
+    }
     s->m_modName = m.name;
     s->m_modDesc = m.desc;
     if (!s->m_modName.empty()) s->m_modNameSlot = reinterpret_cast<const unsigned short*>(s->m_modName.c_str());

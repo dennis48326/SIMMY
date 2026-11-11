@@ -1,19 +1,22 @@
 #!/usr/bin/env python3
-"""PC mod: mods. Convert decorative objects from the user's own The Sims 2 (PC) install (base game and
-every expansion and stuff pack found) into a SIMMY mod folder.
+"""PC mod: mods. Convert buy-mode objects (Decorative and Surfaces) from the user's own The Sims 2 (PC)
+install (base game and every expansion and stuff pack found) into a SIMMY mod folder.
 
     pcobj_convert.py --pc "<The Sims 2 install>" --gc <GameCube disc image or data folder> --out <mods>
-                     --all-decorative             every buy-mode decorative object of every pack
+                     --categories decorative,surfaces   every such object of every pack (or: all,
+                                                        --all-decorative, --all-surfaces)
     pcobj_convert.py ... --object <GUID | name>  [--base <GameCube object file>]   one object
     pcobj_convert.py ... --batch list.tsv         the GUIDs in the list's first column ([2nd: base])
     pcobj_convert.py --pc "<install>" --list ficus                                 find objects
-    pcobj_convert.py --pc "<install>" --inventory inv.tsv                          list, no output
+    pcobj_convert.py --pc "<install>" --categories all --inventory inv.tsv         list, no output
 
-Each object becomes <out>/pc<k>_<name>_<guid>/: mod.ini (a copy of a GameCube object, its "base",
-chosen by where the object goes: wall, floor, table top, ceiling, rug; with the PC object's GUID, name,
-description, price, room rating and tiles) and its resources in the GameCube's own formats (models_*:
-MODL, float indexed strips per material; shaders_*; textures_*: CMPR/RGB5A3 with mips; a thumbnail).
-<out>/pcdeco_inventory.tsv lists every decorative object found, converted or skipped (and why).
+Each object becomes <out>/pc<k>_<name>_<guid>/ (surfaces: pcs<k>_...): mod.ini (a copy of a GameCube
+object, its "base": decorative objects by where they go (wall, floor, table top, ceiling, rug),
+surfaces a GameCube counter or table of the same footprint; with the PC object's GUID, name,
+description, price, room rating, tiles, a surface's top height and a counter's pieces) and its
+resources in the GameCube's own formats (models_*: MODL, float indexed strips per material; shaders_*;
+textures_*: CMPR/RGB5A3 with mips; a thumbnail). <out>/pcdeco_inventory.tsv and pcsurf_inventory.tsv
+list every object found, converted or skipped (and why).
 
 Never put the output in the source tree or share it: it is made of EA's PC game data, converted on the
 user's machine from the user's own copy. See docs/mods.md.
@@ -23,7 +26,7 @@ import argparse, os, re, shutil, struct, sys, time, zlib
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import rcol, sg, gcdata, gctex, pcmesh, pcinstall  # noqa: E402
+import rcol, sg, gcdata, gctex, pcmesh, pcinstall, pcsurf  # noqa: E402
 from pcinstall import (W_PRICE, W_ROOMSORT, W_FUNCSORT, W_SUBSORT, W_RATINGS, SUBSORTS, F_DECORATIVE)  # noqa: E402
 
 # ---------------------------------------------------------------------------------------------------
@@ -320,7 +323,7 @@ class Session:
             self.gco = gcdata.GcObjects(self._gc)
             q = self.gco.qd
             self.templates = {}
-            for kind, f in BASES.items():
+            for f in list(BASES.values()) + list(pcsurf.SURF_BASES.values()):
                 defs = self.gco.files.get(f)
                 if not defs:
                     raise SystemExit(f'GameCube object {f} not found on the disc')
@@ -337,8 +340,9 @@ class Session:
 
 class Item:
     """One decorative object (its newest definition) and what the converter makes of it."""
-    def __init__(self, cat, guid):
+    def __init__(self, cat, guid, category='decorative'):
         self.guid = guid
+        self.category = category
         self.o = cat.newest(guid)
         self.home = cat.home(guid)
         self.packs = [x.pack.code for x in cat.by_guid[guid]]
@@ -365,6 +369,9 @@ class Item:
         self.verts = self.tris = 0
         self.bounds = None
         self.notes = []
+        self.surface = None
+        self.variants = []
+        self.model_used = ''
 
     def footprint(self):
         if not self.tiles:
@@ -372,6 +379,8 @@ class Item:
         return max(x for (x, y), g in self.tiles) + 1, max(y for (x, y), g in self.tiles) + 1
 
     def subsort_name(self):
+        if self.category == 'surfaces':
+            return pcsurf.SURF_SUBSORTS.get(self.subsort, f'0x{self.subsort:x}')
         return SUBSORTS.get(self.subsort, f'0x{self.subsort:x}')
 
 
@@ -496,6 +505,23 @@ def material_of(inst, mat, maxdim):
 
 # ---------------------------------------------------------------------------------------------------
 
+def _load(inst, it, names, materials):
+    """The meshes of the first of `names` that loads, and that name; ([], None, errors) if none."""
+    errors = []
+    for mname in names:
+        if not mname:
+            continue
+        try:
+            meshes = pcmesh.load_meshes(inst, mname, materials, log=lambda m: it.notes.append(m) if m not in it.notes else None)
+        except LookupError as e:
+            errors.append(str(e)); continue
+        except Exception as e:
+            errors.append(f'{mname}: {type(e).__name__}: {e}'); continue
+        if meshes:
+            return meshes, mname, errors
+    return [], None, errors
+
+
 def convert(s, it, base_override=None, write=True):
     """Converts one Item into s.out. Sets it.status ('converted', 'skipped', 'failed') and it.reason."""
     cat, inst = s.catalog, s.inst
@@ -506,87 +532,148 @@ def convert(s, it, base_override=None, write=True):
     materials = None
     if it.recolours:
         materials = dict(it.recolours[0][1])
-    meshes = []
-    errors = []
-    for mname in it.models[:1]:
-        try:
-            meshes = pcmesh.load_meshes(inst, mname, materials, log=lambda m: it.notes.append(m) if m not in it.notes else None)
-        except LookupError as e:
-            errors.append(str(e))
-        except Exception as e:
-            errors.append(f'{mname}: {type(e).__name__}: {e}')
+    surface = it.category == 'surfaces'
+    picks = {}
+    if surface:
+        kind = pcsurf.surface_kind(it)
+        picks = pcsurf.pick_models(it, kind)
+        order = [picks.get('main')] + [m for m in it.models if m != picks.get('main') and
+                                       not any(k in pcsurf._norm(m) for k in ('corner', 'east', 'west'))]
+        meshes, used, errors = _load(inst, it, order, materials)
+        picks['main'] = used
+    else:
+        meshes, used, errors = _load(inst, it, it.models[:1], materials)
     if not meshes:
         it.status, it.reason = 'skipped', errors[0] if errors else 'model has no drawable mesh'
         return it
+    it.model_used = used
     P_all = np.concatenate([m[2] for m in meshes])
     it.bounds = (P_all.min(0), P_all.max(0))
-    kind = classify(it, P_all)
-    if kind == 'roof':
-        it.status, it.reason, it.kind = 'skipped', 'goes on roofs (no roof placement on the GameCube)', kind
-        return it
-    it.kind = kind
-    base = base_override or BASES[kind]
+    W, H = it.footprint()
+    if surface:
+        it.kind = kind
+        if kind == 'wallshelf':
+            it.status, it.reason = 'skipped', 'hangs on a wall (the GameCube has no wall-mounted surfaces)'
+            return it
+        if it.bounds[1][2] < 0.12:
+            it.status, it.reason = 'skipped', 'a tray that goes on a counter (the GameCube cannot put a surface on another)'
+            return it
+        base = base_override or pcsurf.surface_base(kind, W, H)
+    else:
+        kind = classify(it, P_all)
+        if kind == 'roof':
+            it.status, it.reason, it.kind = 'skipped', 'goes on roofs (no roof placement on the GameCube)', kind
+            return it
+        it.kind = kind
+        base = base_override or BASES[kind]
     it.base = base
-    bdefs = s.gco.files.get(base) if gc is not None else [{'master': 1 if kind in ('rug', 'ceiling') else 0}]
+    bdefs = s.gco.files.get(base) if gc is not None else [{'master': 1 if kind in ('rug', 'ceiling') or (surface and W * H > 1) else 0}]
     if not bdefs:
         it.status, it.reason = 'failed', f'GameCube base {base} not found'
         return it
-    W, H = it.footprint()
     group_base = any(d['master'] != 0 for d in bdefs)
     multi = W * H > 1 or group_base
+    # surfaces: the top's height over each tile (PC tile (x, y), its middle at (x, y))
+    heights = {}
+    if surface:
+        for (x, y) in ([xy for xy, g in it.tiles] or [(0, 0)]):
+            heights[(x, y)] = pcsurf.surface_height(meshes, x, y, kind=kind)
+        known = [v for v in heights.values() if v]
+        if not known:
+            it.status, it.reason = 'skipped', 'no top to put things on found in its mesh'
+            return it
+        top = max(known) if kind not in ('desk', 'misc') else max(set(round(v, 2) for v in known), key=lambda v: sum(1 for k in known if abs(k - v) < 0.03))
+        heights = {k: (v if v else top) for k, v in heights.items()}
+        it.surface = top
+    # counter pieces: (key, meshes); ends: which side (model x) each closes
+    variants = []
+    if surface and kind in ('counter', 'island'):
+        loaded = {}
+        for k in ('corner', 'end_e', 'end_w'):
+            if picks.get(k):
+                m, _, _ = _load(inst, it, [picks[k]], materials)
+                if m:
+                    loaded[k] = m
+        if 'corner' in loaded:
+            variants.append(('corner', loaded['corner']))
+        if 'end_e' in loaded and 'end_w' in loaded:
+            se = pcsurf.end_side(loaded['end_e'], meshes); sw = pcsurf.end_side(loaded['end_w'], meshes)
+            if not (se and sw and se != sw):
+                se, sw = 1, -1   # the counter globals' order: the first end closes +x
+            ends = {se: loaded['end_e'], sw: loaded['end_w']}
+            variants.append(('end_px', ends[1]))
+            variants.append(('end_nx', ends[-1]))
+            variants.append(('ends', ends[1] + pcsurf.mesh_minus(ends[-1], meshes)))
     # the GameCube draws a group's model at the middle of its tiles; wall objects 0.45 off the tile's
     # middle toward the wall. PC: the first tile's middle, the wall at -y; the GameCube's model space is
     # the PC's mirrored in y (its world swaps x and y).
     cx, cy = (W - 1) / 2.0, (H - 1) / 2.0
     wall = kind in ('wall', 'mirror')
     tag = re.sub(r'[^a-z0-9]+', '', (it.name or it.objname).lower())[:20] or 'object'
-    folder = os.path.join(s.out or '.', f'pc{SORT_KEY.get(it.subsort, "7")}_{tag}_{it.guid:08x}')
+    prefix = f'pcs{pcsurf.SURF_SORT.get(kind, "7")}' if surface else f'pc{SORT_KEY.get(it.subsort, "7")}'
+    folder = os.path.join(s.out or '.', f'{prefix}_{tag}_{it.guid:08x}')
     it.out = os.path.basename(folder)
     taken = set(); files = {}
-    parts = []; rendered = []; texcache = {}; skipped = set()
-    for k, (mat, subset, P, N, U, T) in enumerate(meshes):
-        if mat in skipped:
-            continue
-        if mat not in texcache:
-            img, dxt1, mode, desc = material_of(inst, mat, s.texsize)
-            if mode == 'skip':
-                skipped.add(mat)
+    texcache = {}; skipped = set()
+
+    def gc_parts(meshes, rendered=None):
+        parts = []
+        for k, (mat, subset, P, N, U, T) in enumerate(meshes):
+            if mat in skipped or not len(T):
                 continue
-            tid = new_id(gc, 'textures', f'pcmod_{it.guid:08x}_tex{len(texcache)}', taken)
-            data, fmt, size = gctex.make_txfl(f'pc_{tag}_{len(texcache)}', img,
-                                              'cutout' if mode == 'cutout' else ('blend' if mode == 'blend' else 'opaque'),
-                                              s.texsize, dxt1)
-            files[f'textures_{tid:08X}.res'] = data
-            sid = new_id(gc, 'shaders', f'pcmod_{it.guid:08x}_shader{len(texcache)}', taken)
-            if gc is not None:
-                files[f'shaders_{sid:08X}.res'] = make_shader(s.shader_template, f'pc_{tag}_{len(texcache)}', tid, mode)
-            texcache[mat] = (sid, img)
-            it.textures.append(f'{desc}:{fmt}{size[0]}x{size[1]}:{mode}')
-        sid, img = texcache[mat]
-        G = P.copy()
-        G[:, 0] -= cx
-        G[:, 1] = -(G[:, 1] - cy)
-        if wall:
-            G[:, 1] -= 0.45
-        GN = N.copy(); GN[:, 1] = -GN[:, 1]
-        UV = U.copy()
-        parts.append((sid, G, GN, UV, T[:, ::-1]))
-        rendered.append((P, N, U, T, img))
+            if mat not in texcache:
+                img, dxt1, mode, desc = material_of(inst, mat, s.texsize)
+                if mode == 'skip':
+                    skipped.add(mat)
+                    continue
+                tid = new_id(gc, 'textures', f'pcmod_{it.guid:08x}_tex{len(texcache)}', taken)
+                data, fmt, size = gctex.make_txfl(f'pc_{tag}_{len(texcache)}', img,
+                                                  'cutout' if mode == 'cutout' else ('blend' if mode == 'blend' else 'opaque'),
+                                                  s.texsize, dxt1)
+                files[f'textures_{tid:08X}.res'] = data
+                sid = new_id(gc, 'shaders', f'pcmod_{it.guid:08x}_shader{len(texcache)}', taken)
+                if gc is not None:
+                    files[f'shaders_{sid:08X}.res'] = make_shader(s.shader_template, f'pc_{tag}_{len(texcache)}', tid, mode)
+                texcache[mat] = (sid, img)
+                it.textures.append(f'{desc}:{fmt}{size[0]}x{size[1]}:{mode}')
+            sid, img = texcache[mat]
+            G = P.copy()
+            G[:, 0] -= cx
+            G[:, 1] = -(G[:, 1] - cy)
+            if wall:
+                G[:, 1] -= 0.45
+            GN = N.copy(); GN[:, 1] = -GN[:, 1]
+            parts.append((sid, G, GN, U.copy(), T[:, ::-1]))
+            if rendered is not None:
+                rendered.append((P, N, U, T, img))
+        return parts
+
+    rendered = []
+    parts = gc_parts(meshes, rendered)
     if not parts:
         it.status, it.reason = 'skipped', 'model has no drawable mesh'
         return it
     it.verts = sum(len(p[1]) for p in parts); it.tris = sum(len(p[4]) for p in parts)
+    vparts = [(k, gc_parts(m)) for k, m in variants]
+    vparts = [(k, p) for k, p in vparts if p]
+    it.variants = [k for k, p in vparts]
     if not write:
         it.status = 'ok (dry run)'
         return it
     mid = new_id(gc, 'models', f'pcmod_{it.guid:08x}_model', taken)
     files[f'models_{mid:08X}.res'] = make_modl(f'pc_{tag}', parts)
+    vids = {}
+    for k, p in vparts:
+        vid = new_id(gc, 'models', f'pcmod_{it.guid:08x}_model_{k}', taken)
+        files[f'models_{vid:08X}.res'] = make_modl(f'pc_{tag}_{k}', p)
+        vids[k] = vid
     timg = render_thumb(rendered, 64)
     ttid = new_id(gc, 'textures', f'pcmod_{it.guid:08x}_thumbtex', taken)
     files[f'textures_{ttid:08X}.res'] = gctex.make_thumb_txfl(f'pc_{tag}_thumb', timg)
     thumb_id = new_id(gc, 'shaders', f'pcmod_{it.guid:08x}_thumb', taken)
     files[f'shaders_{thumb_id:08X}.res'] = make_shader(s.thumb_template, f'pc_{tag}_thumb', ttid, 'blend')
-    # tiles: (x, y) as the GameCube's sub index (y mirrored with the model), with GUIDs
+    # tiles: (x, y) as the GameCube's sub index (y mirrored with the model), with GUIDs (and a
+    # surface's height over the tile)
     tiles = []
     if multi:
         gtaken = set()
@@ -596,7 +683,7 @@ def convert(s, it, base_override=None, write=True):
             g = pcg.get((x, y)) or tile_guid(it.guid, x, y, s.gco.guids, gtaken)
             if g in s.gco.guids or g == it.guid:
                 g = tile_guid(it.guid, x, y, s.gco.guids, gtaken)
-            tiles.append((x, H - 1 - y, g))
+            tiles.append((x, H - 1 - y, g, heights.get((x, y))))
     if os.path.isdir(folder):
         shutil.rmtree(folder)
     os.makedirs(folder, exist_ok=True)
@@ -609,16 +696,26 @@ def convert(s, it, base_override=None, write=True):
     except Exception:
         pass
     one = lambda v: (v or '').replace('\r', ' ').replace('\n', ' ').strip()
+    name = it.name
+    if surface and 'no doors' in it.objname.lower() and 'no doors' not in (name or '').lower():
+        name = f'{name} (no doors)'
     with open(os.path.join(folder, 'mod.ini'), 'w', encoding='utf-8') as f:
         f.write('# PC mod: mods. Converted by tools/pcobj/pcobj_convert.py from the user\'s own The Sims 2 (PC)\n'
                 '# install. EA game data: for this machine only, never share or commit it.\n')
-        f.write(f'# PC object "{it.objname}" ({it.home.name}), model {", ".join(it.models[:1])}, '
-                f'{it.subsort_name()}, placed: {kind}\n[object]\n')
-        f.write(f'guid = 0x{it.guid:08X}\nbase = {base}\nname = {one(it.name)}\ndesc = {one(it.desc)}\n')
+        what = f'{it.subsort_name()}, placed: {kind}' if not surface else f'surface: {pcsurf.describe(kind)}'
+        f.write(f'# PC object "{it.objname}" ({it.home.name}), model {used}, {what}\n[object]\n')
+        f.write(f'guid = 0x{it.guid:08X}\nbase = {base}\nname = {one(name)}\ndesc = {one(it.desc)}\n')
         f.write(f'price = {it.price}\nmodel = 0x{mid:08X}\nthumbnail = 0x{thumb_id:08X}\n')
-        f.write(f'functions = 0x{F_DECORATIVE:X}\nroom = {max(0, min(10, it.room))}\n')
+        f.write(f'functions = 0x{(pcsurf.F_SURFACES if surface else F_DECORATIVE):X}\nroom = {max(0, min(10, it.room))}\n')
+        if surface:
+            f.write(f'surface = {it.surface:.3f}\n')
         if tiles:
-            f.write('tiles = ' + ' '.join(f'{x},{y}:0x{g:08X}' for x, y, g in tiles) + '\n')
+            f.write('tiles = ' + ' '.join(f'{x},{y}:0x{g:08X}' + (f':{h:.3f}' if surface and h else '')
+                                          for x, y, g, h in tiles) + '\n')
+        if vids:
+            f.write(f'connect = {"island" if kind == "island" else "counter"}\n')
+            for k, vid in vids.items():
+                f.write(f'model_{k} = 0x{vid:08X}\n')
         f.write(f'pack = {it.home.name}\n')
     it.status = 'converted'
     return it
@@ -628,16 +725,18 @@ def convert(s, it, base_override=None, write=True):
 
 INV_COLUMNS = ['guid', 'name', 'object', 'pack', 'packs', 'subsort', 'footprint', 'placement', 'base',
                'price', 'room', 'bhavs', 'semiglobal', 'model', 'textures', 'recolours', 'verts', 'tris',
-               'status', 'reason', 'folder', 'notes', 'bounds']
+               'status', 'reason', 'folder', 'notes', 'bounds', 'category', 'surface', 'pieces']
+INVENTORY = {'decorative': 'pcdeco_inventory.tsv', 'surfaces': 'pcsurf_inventory.tsv'}
 
 
 def inv_row(it):
     w, h = it.footprint()
     return [f'0x{it.guid:08X}', it.name or '', it.objname, it.home.name, ','.join(dict.fromkeys(it.packs)),
             it.subsort_name(), f'{w}x{h}', it.kind, it.base, str(it.price), str(it.room), str(it.bhavs),
-            it.semiglobal, ','.join(it.models[:2]), ' '.join(it.textures), str(max(0, len(it.recolours) - 1)),
+            it.semiglobal, it.model_used or ','.join(it.models[:2]), ' '.join(it.textures), str(max(0, len(it.recolours) - 1)),
             str(it.verts), str(it.tris), it.status, it.reason, it.out, '; '.join(it.notes),
-            ' '.join(f'{v:.2f}' for v in np.concatenate(it.bounds)) if it.bounds is not None else '']
+            ' '.join(f'{v:.2f}' for v in np.concatenate(it.bounds)) if it.bounds is not None else '',
+            it.category, f'{it.surface:.2f}' if it.surface else '', ' '.join(it.variants)]
 
 
 def write_inventory(path, items):
@@ -660,13 +759,16 @@ def _work_init(pc, gc, out, texsize):
 
 
 def _work(args):
-    guid, base = args
-    it = Item(_worker.catalog, guid)
+    guid, base, category = args
+    it = Item(_worker.catalog, guid, category)
     try:
         convert(_worker, it, base)
     except Exception as e:
         it.status, it.reason = 'failed', f'{type(e).__name__}: {e}'
     return inv_row(it)
+
+
+CATEGORIES = {'decorative': decorative_guids, 'surfaces': pcsurf.surface_guids}
 
 
 def main():
@@ -677,10 +779,12 @@ def main():
     ap.add_argument('--list', help='list PC objects whose name contains this text')
     ap.add_argument('--object', help='one PC object: GUID (hex) or part of its name')
     ap.add_argument('--base', help='with --object: the GameCube object to copy (default: chosen by placement)')
-    ap.add_argument('--all-decorative', action='store_true', help='every buy-mode decorative object')
+    ap.add_argument('--all-decorative', action='store_true', help='every buy-mode Decorative object')
+    ap.add_argument('--all-surfaces', action='store_true', help='every buy-mode Surfaces object')
+    ap.add_argument('--categories', help='comma-separated buy-mode categories: decorative, surfaces (or all)')
     ap.add_argument('--batch', help='a list of GUIDs (first column; optional second column: base)')
     ap.add_argument('--packs', help='only objects whose home pack is one of these (codes: base, ep1..ep8, sp1..sp9)')
-    ap.add_argument('--inventory', help='write the decorative inventory (TSV) here and stop')
+    ap.add_argument('--inventory', help='write the inventory (TSV) of the chosen categories here and stop')
     ap.add_argument('--jobs', type=int, default=0, help='worker processes (default: CPUs - 1)')
     ap.add_argument('--texsize', type=int, default=256)
     ap.add_argument('--name', help='with --object: catalogue name')
@@ -703,6 +807,19 @@ def main():
         here = os.path.realpath(os.path.join(os.path.dirname(__file__), '..', '..'))
         if out_real == here or out_real.startswith(here + os.sep):
             raise SystemExit('refusing to write converted PC game data into the source tree')
+    cats = []
+    if a.categories:
+        cats = list(CATEGORIES) if a.categories.strip().lower() == 'all' else \
+            [c.strip().lower() for c in a.categories.split(',') if c.strip()]
+        bad = [c for c in cats if c not in CATEGORIES]
+        if bad:
+            raise SystemExit(f'unknown categor{"y" if len(bad) == 1 else "ies"}: {", ".join(bad)} (known: {", ".join(CATEGORIES)})')
+    if a.all_decorative and 'decorative' not in cats:
+        cats.append('decorative')
+    if a.all_surfaces and 'surfaces' not in cats:
+        cats.append('surfaces')
+    def category_of(o):
+        return 'surfaces' if o.w(W_FUNCSORT) & pcsurf.F_SURFACES and not o.w(W_FUNCSORT) & F_DECORATIVE else 'decorative'
     jobs = []
     if a.object:
         q = a.object.lower()
@@ -711,29 +828,45 @@ def main():
                 (g == qg or (qg is None and (q in lst[-1].name.lower() or q in (cat.catalog_text(lst[-1])[0] or '').lower())))]
         if not hits:
             raise SystemExit(f'no PC object matches {a.object}')
-        jobs = [(hits[0], a.base)]
+        jobs = [(hits[0], a.base, category_of(cat.newest(hits[0])))]
     elif a.batch:
+        known = set(BASES.values()) | set(pcsurf.SURF_BASES.values())
         for line in open(a.batch, encoding='utf-8'):
             f = line.strip().split('\t')
             if f and re.fullmatch(r'(0x)?[0-9a-fA-F]{6,8}', f[0]):
-                jobs.append((int(f[0], 16), f[1] if len(f) > 1 and f[1] in BASES.values() else None))
-    elif a.all_decorative or a.inventory:
-        jobs = [(g, None) for g in decorative_guids(cat)]
+                g = int(f[0], 16)
+                if g in cat.by_guid:
+                    jobs.append((g, f[1] if len(f) > 1 and f[1] in known else None, category_of(cat.newest(g))))
+    elif cats:
+        seen = set()
+        for c in cats:
+            for g in CATEGORIES[c](cat):
+                if g not in seen:
+                    seen.add(g)
+                    jobs.append((g, None, c))
+    elif a.inventory:
+        jobs = [(g, None, 'decorative') for g in decorative_guids(cat)]
     else:
-        raise SystemExit('nothing to do: --all-decorative, --object, --batch, --inventory or --list')
+        raise SystemExit('nothing to do: --all-decorative, --all-surfaces, --categories, --object, --batch, --inventory or --list')
     packs = set(a.packs.split(',')) if a.packs else None
     items = []
-    for g, b in jobs:
-        it = Item(cat, g)
+    for g, b, c in jobs:
+        it = Item(cat, g, c)
         if packs and it.home.code not in packs:
             continue
         r = skip_reason(it)
         if r:
             it.status, it.reason = 'skipped', r
         items.append((it, b))
-    items.sort(key=lambda ib: (SORT_KEY.get(ib[0].subsort, '7'), (ib[0].name or '').lower()))
+    def sort_key(ib):
+        it = ib[0]
+        if it.category == 'surfaces':
+            return ('s', pcsurf.SURF_SORT.get(pcsurf.surface_kind(it), '7'), (it.name or '').lower())
+        return ('d', SORT_KEY.get(it.subsort, '7'), (it.name or '').lower())
+    items.sort(key=sort_key)
     todo = [(it, b) for it, b in items if not it.status]
-    s.log(f'{len(items)} object(s), {len(todo)} to convert ({time.time() - t0:.1f} s)')
+    s.log(f'{len(items)} object(s) ({", ".join(f"{sum(1 for it, b in items if it.category == c)} {c}" for c in CATEGORIES)}), '
+          f'{len(todo)} to convert ({time.time() - t0:.1f} s)')
     if a.inventory:
         for it, b in todo:
             try:
@@ -754,12 +887,15 @@ def main():
     n = len(todo)
     workers = a.jobs or max(1, (os.cpu_count() or 2) - 1)
     rows = {}
+    def progress(k, row):
+        el = time.time() - t0
+        s.log(f'[{k + 1}/{n} {100 * (k + 1) // max(n, 1):3d}% {el:5.0f}s] {row[18]:9s} {row[1][:40]:40s} {row[3]:20.20s} {row[7]:13s} {row[19]}')
     if workers > 1 and n > 4 and not a.object:
         import multiprocessing as mp
         with mp.Pool(workers, _work_init, (a.pc, a.gc, a.out, a.texsize)) as pool:
-            for k, row in enumerate(pool.imap_unordered(_work, [(it.guid, b) for it, b in todo], chunksize=2)):
+            for k, row in enumerate(pool.imap_unordered(_work, [(it.guid, b, it.category) for it, b in todo], chunksize=2)):
                 rows[int(row[0], 16)] = row
-                s.log(f'[{k + 1}/{n}] {row[18]:9s} {row[1][:40]:40s} {row[3]:20.20s} {row[7]:13s} {row[19]}')
+                progress(k, row)
     else:
         for k, (it, b) in enumerate(todo):
             try:
@@ -768,27 +904,32 @@ def main():
                 it.status, it.reason = 'failed', f'{type(e).__name__}: {e}'
             row = inv_row(it)
             rows[it.guid] = row
-            s.log(f'[{k + 1}/{n}] {row[18]:9s} {row[1][:40]:40s} {row[3]:20.20s} {row[7]:13s} {row[19]}')
-    inv = os.path.join(a.out, 'pcdeco_inventory.tsv')
-    old = {}
-    if os.path.exists(inv) and not a.object:
-        for line in open(inv, encoding='utf-8').read().splitlines()[1:]:
-            f = line.split('\t')
-            old[f[0]] = f
-    allrows = dict(old)
-    for it, b in items:
-        allrows[f'0x{it.guid:08X}'] = rows.get(it.guid) or inv_row(it)
-    if not a.object:
+            progress(k, row)
+    written = []
+    for c, fn in INVENTORY.items():
+        mine = [(it, b) for it, b in items if it.category == c]
+        if not mine or a.object:
+            continue
+        inv = os.path.join(a.out, fn)
+        old = {}
+        if os.path.exists(inv):
+            for line in open(inv, encoding='utf-8').read().splitlines()[1:]:
+                f = line.split('\t')
+                old[f[0]] = f + [''] * (len(INV_COLUMNS) - len(f))
+        allrows = dict(old)
+        for it, b in mine:
+            allrows[f'0x{it.guid:08X}'] = rows.get(it.guid) or inv_row(it)
         with open(inv, 'w', encoding='utf-8') as f:
             f.write('\t'.join(INV_COLUMNS) + '\n')
             for r in allrows.values():
                 f.write('\t'.join(r) + '\n')
+        written.append(inv)
     stat = {}
     for it, b in items:
         st = (rows.get(it.guid) or inv_row(it))[18]
         stat[st] = stat.get(st, 0) + 1
     s.log(f'done in {time.time() - t0:.0f} s: ' + ', '.join(f'{v} {k}' for k, v in sorted(stat.items())) +
-          ('' if a.object else f'; inventory: {inv}'))
+          (f'; inventory: {", ".join(written)}' if written else ''))
 
 
 if __name__ == '__main__':
