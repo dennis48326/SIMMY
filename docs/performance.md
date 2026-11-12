@@ -153,6 +153,25 @@ screenshots of a `SIMMY_DET` replay are pixel-identical to the previous build's.
 (The mods session's "off" run happened to find most of its data still in the host's cache: 215 reads
 took 110 ms in all. The cost of a disc read depends on the disc and the cache, which is the point.)
 
+## Per-frame GPU buffers (build dv)
+
+aurora records each frame into fixed-size buffers: vertices, indices, uniforms and "storage" (the
+models' vertex arrays, copied in whenever a draw binds a different array). A lot packed with converted
+PC objects (whose models carry many more vertices than the GameCube's) overflowed the 8 MiB storage
+buffer, and aurora aborts on a full buffer (`simmy.exe exited with code 3`, `push` in recording.cpp).
+Measured: 533 converted objects in view need 25.4 MiB of vertex arrays and 16 MiB of vertices.
+
+- `cmake/aurora_patches/0005-frame-buffer-overflow.patch`: vertices 32 MiB, indices 8, storage 48
+  (uniforms 24 and texture uploads 24 as before); and a full buffer no longer aborts: the push fails,
+  the rest of that frame's draws are dropped (objects flicker for a frame) and aurora logs `frame buffer
+  full` (the 1st, 2nd, 4th, 8th, ... time).
+- The port logs each new high above half a buffer: `[gfx] frame buffers (high water, MiB): vertices
+  ... of 32, indices ... of 8, uniforms ... of 24, vertex arrays ... of 48`.
+- Copying each array once per frame (instead of once per binding) would save only about a quarter
+  (measured), and the game rewrites some arrays in place between draws, so it was not done.
+- `cmake/SimmyAuroraPatches.cmake` lists the patches it applied in `<aurora>/.simmy_patches`: 0005
+  changes lines 0002 changed, so "reverses cleanly" can no longer tell whether 0002 is in the tree.
+
 ## Not changed, and why
 
 - **The resource caches' GameCube limits** (the 800-entry free lists, the 24 MB-era ARAM budget for

@@ -1,0 +1,192 @@
+diff --git a/include/aurora/gfx.h b/include/aurora/gfx.h
+--- a/include/aurora/gfx.h
++++ b/include/aurora/gfx.h
+@@ -29,6 +29,8 @@
+ } AuroraStats;
+ 
+ const AuroraStats* aurora_get_stats();
++// SIMMY: the per-frame buffers' sizes in bytes: 0 vertices, 1 indices, 2 uniforms, 3 storage (vertex arrays).
++uint32_t aurora_frame_buffer_capacity(int which);
+ float aurora_get_fps();
+ 
+ void aurora_enable_vsync(bool enabled);
+diff --git a/lib/gfx/frame.cpp b/lib/gfx/frame.cpp
+--- a/lib/gfx/frame.cpp
++++ b/lib/gfx/frame.cpp
+@@ -750,4 +750,14 @@
+ } // namespace aurora::gfx
+ 
+ const AuroraStats* aurora_get_stats() { return &aurora::gfx::detail::resources().stats; }
++uint32_t aurora_frame_buffer_capacity(int which) {
++  using namespace aurora::gfx;
++  switch (which) {
++  case 0: return static_cast<uint32_t>(VertexBufferSize);
++  case 1: return static_cast<uint32_t>(IndexBufferSize);
++  case 2: return static_cast<uint32_t>(UniformBufferSize);
++  case 3: return static_cast<uint32_t>(StorageBufferSize);
++  default: return 0;
++  }
++}
+ float aurora_get_fps() { return aurora::gfx::calculate_fps(); }
+diff --git a/lib/gfx/resources.hpp b/lib/gfx/resources.hpp
+--- a/lib/gfx/resources.hpp
++++ b/lib/gfx/resources.hpp
+@@ -5,9 +5,9 @@
+ namespace aurora::gfx {
+ inline constexpr bool UseTextureBuffer = true;
+ inline constexpr uint64_t UniformBufferSize = 25165824; // 24 MiB
+-inline constexpr uint64_t VertexBufferSize = 12582912;  // 12 MiB (SIMMY: 5 MiB upstream; four co-op views)
+-inline constexpr uint64_t IndexBufferSize = 4194304;    // 4 MiB (SIMMY: 2 MiB upstream)
+-inline constexpr uint64_t StorageBufferSize = 8388608;  // 8 MiB
++inline constexpr uint64_t VertexBufferSize = 33554432;  // 32 MiB (SIMMY: 5 MiB upstream; four co-op views, crowded lots)
++inline constexpr uint64_t IndexBufferSize = 8388608;    // 8 MiB (SIMMY: 2 MiB upstream)
++inline constexpr uint64_t StorageBufferSize = 50331648; // 48 MiB (SIMMY: 8 MiB upstream; lots full of converted PC objects)
+ inline constexpr uint64_t TextureUploadSize = 25165824; // 24 MiB
+ 
+ namespace detail {
+diff --git a/lib/internal.hpp b/lib/internal.hpp
+--- a/lib/internal.hpp
++++ b/lib/internal.hpp
+@@ -284,6 +284,8 @@
+   [[nodiscard]] const uint8_t* data() const noexcept { return m_data; }
+   [[nodiscard]] size_t size() const noexcept { return m_length; }
+   [[nodiscard]] bool empty() const noexcept { return m_length == 0; }
++  // SIMMY: whether `extra` more bytes fit (a mapped buffer has a fixed capacity; growing it aborts).
++  [[nodiscard]] bool fits(size_t extra) const noexcept { return m_owned || m_length + extra <= m_capacity; }
+ 
+   void append(const void* data, size_t size) {
+     resize(m_length + size, false);
+diff --git a/lib/gfx/recording.cpp b/lib/gfx/recording.cpp
+--- a/lib/gfx/recording.cpp
++++ b/lib/gfx/recording.cpp
+@@ -284,7 +284,31 @@
+   pass.sealed = true;
+ }
+ 
++// SIMMY: a full per-frame buffer (a lot crowded with detailed models) no longer aborts: the push fails
++// (an empty range), the frame is marked overflowed and the rest of its draws are dropped (fifo::draw_prim);
++// logged once per buffer size reached.
++bool g_frameOverflow = false;
++uint64_t g_overflowFrames = 0;
++
++void note_overflow(const ByteBuffer& target, size_t length) {
++  if (!g_frameOverflow) {
++    ++g_overflowFrames;
++    if ((g_overflowFrames & (g_overflowFrames - 1)) == 0)  // 1st, 2nd, 4th, 8th, ... frame
++      Log.warn("frame buffer full ({} bytes used, {} more wanted): the rest of this frame's draws are dropped "
++               "({} frame(s) so far)", target.size(), length, g_overflowFrames);
++  }
++  g_frameOverflow = true;
++}
++
+ Range push(ByteBuffer& target, const uint8_t* data, size_t length, size_t alignment) {
++  {
++    const size_t begin = target.size();
++    const size_t pad = alignment != 0 ? AURORA_ALIGN(begin, alignment) - begin : 0;
++    if (!target.fits(pad + length)) {
++      note_overflow(target, pad + length);
++      return {};
++    }
++  }
+   if (alignment != 0) {
+     const size_t begin = target.size();
+     const size_t alignedBegin = AURORA_ALIGN(begin, alignment);
+@@ -709,6 +733,7 @@
+   for (auto& array : gx::g_gxState.arrays) {
+     array.cachedRange = {};
+   }
++  g_frameOverflow = false;  // SIMMY
+ #if defined(AURORA_GFX_DEBUG_GROUPS)
+   if (!g_recorder.debugGroupStack.empty()) {
+     for (auto& item : std::ranges::reverse_view(g_recorder.debugGroupStack)) {
+@@ -1426,6 +1451,8 @@
+   }
+ }
+ 
++bool frame_overflowed() { return g_frameOverflow; }  // SIMMY
++
+ Range push_verts(const uint8_t* data, size_t length, size_t alignment) {
+   ZoneScoped;
+   if (!check_recording("push_verts")) {
+diff --git a/lib/gfx/recording.hpp b/lib/gfx/recording.hpp
+--- a/lib/gfx/recording.hpp
++++ b/lib/gfx/recording.hpp
+@@ -80,6 +80,8 @@
+ void queue_palette_conv(tex_palette_conv::ConvRequest req);
+ 
+ Range push_verts(const uint8_t* data, size_t length, size_t alignment);
++// SIMMY: a per-frame buffer filled up this frame (pushes return empty ranges; draws are dropped).
++bool frame_overflowed();
+ template <typename T>
+ Range push_verts(ArrayRef<T> data, size_t alignment) {
+   return push_verts(reinterpret_cast<const uint8_t*>(data.data()), data.size() * sizeof(T), alignment);
+diff --git a/lib/gx/command_processor.cpp b/lib/gx/command_processor.cpp
+--- a/lib/gx/command_processor.cpp
++++ b/lib/gx/command_processor.cpp
+@@ -460,6 +460,15 @@
+   } else if (prim == GX_POINTS) {
+     instanceCount = vtxCount;
+   }
++  if (gfx::frame_overflowed())
++    UNLIKELY {  // SIMMY: an array, uniform or fog table did not fit: no draw; nothing cached from this frame
++      for (auto& array : state.arrays) {
++        array.cachedRange = {};
++      }
++      cache.uniformRange = {};
++      cache.hasFogRange = false;
++      return;
++    }
+   cache.lastDrawFmt = fmt;
+   gfx::push_draw_command(DrawData{
+       .pipeline = cache.pipelineRef,
+@@ -487,6 +496,8 @@
+     idxRange = gfx::push_indices(idxBuf.data(), idxBuf.size(), 4);
+     idxBuf.clear();
+   }
++  if (gfx::frame_overflowed())
++    UNLIKELY { return; }  // SIMMY
+ 
+   push_gx_draw(prim, fmt, vtxCount, vertRange, idxRange, numIndices);
+ }
+@@ -502,6 +513,12 @@
+   u32 totalVtxBytes = vtxCount * vtxSize;
+   if (totalVtxBytes > reader.remaining())
+     UNLIKELY { handle_draw_overrun(totalVtxBytes, reader); }
++  // SIMMY: after a frame buffer filled up, this frame's remaining draws are dropped.
++  if (gfx::frame_overflowed())
++    UNLIKELY {
++      reader.take(totalVtxBytes);
++      return;
++    }
+ 
+   const bool cleanState = g_gxState.dirty == 0 && fmt == sDrawCache.lastDrawFmt && sDrawCache.lineMode == 0 &&
+                           prim != GX_LINES && prim != GX_LINESTRIP && prim != GX_POINTS;
+@@ -511,6 +528,8 @@
+   // Push raw vertex data to buffer. Merged draws must remain contiguous with the previous range.
+   const auto vertexData = reader.take(totalVtxBytes);
+   gfx::Range vertRange = gfx::push_verts(vertexData.data(), vertexData.size(), canMerge ? 0 : 4);
++  if (gfx::frame_overflowed())
++    UNLIKELY { return; }  // SIMMY
+ 
+   // Try to merge with previous draw call
+   if (canMerge) {
+@@ -518,6 +537,7 @@
+     gfx::Range idxRange;
+     static ByteBuffer idxBuf;
+     const bool hadIndexRange = lastDraw->idxRange.size != 0;
++    const u32 prevIndexCount = lastDraw->indexCount;  // SIMMY: restored if the indices do not fit
+     if (lastDraw->indexCount == 0 && prim != GX_TRIANGLES) {
+       // Generate triangle index buffer for previous draw
+       lastDraw->indexCount = prepare_idx_buffer(idxBuf, GX_TRIANGLES, 0, lastDraw->vtxCount);
+@@ -527,6 +547,11 @@
+       idxRange = gfx::push_indices(idxBuf.data(), idxBuf.size(), hadIndexRange ? 0 : 4);
+       idxBuf.clear();
+     }
++    if (gfx::frame_overflowed())
++      UNLIKELY {  // SIMMY: the previous draw stays as it was; this one is dropped
++        lastDraw->indexCount = prevIndexCount;
++        return;
++      }
+     CHECK(lastDraw->vertRange.offset + lastDraw->vertRange.size == vertRange.offset,
+           "Non-consecutive vertex ranges ({} < {})", lastDraw->vertRange.offset + lastDraw->vertRange.size,
+           vertRange.offset);

@@ -43,6 +43,7 @@
 #include <aurora/aurora.h>
 #include <aurora/card.h>
 #include <aurora/event.h>
+#include <aurora/gfx.h>
 #include <aurora/gfx.hpp>
 #include <aurora/main.h>
 #include <aurora/pad.hpp>
@@ -523,6 +524,26 @@ void platform_frame_tick() {
   // between frames, e.g. the render-to-texture skin compositing, are processed by the next frame.)
   if (g_headless && aurora::gx::fifo::get_buffer_size() != 0) aurora::gx::fifo::clear_buffer();
   split_screen_end_frame();
+  // PC: aurora's per-frame buffers (vertices, indices, uniforms, the vertex arrays' storage) have fixed
+  // sizes; each new high above half of one is logged ("[gfx] frame buffers: ..."), to see how near a
+  // busy lot comes (a lot full of converted PC objects overflowed the storage buffer: build dv).
+  if (!g_headless)
+    if (const AuroraStats* a = aurora_get_stats()) {
+      static uint32_t s_hi[4] = {}, s_logged[4] = {};
+      const uint32_t now[4] = {a->lastVertSize, a->lastIndexSize, a->lastUniformSize, a->lastStorageSize};
+      uint32_t cap[4];
+      bool report = false;
+      for (int i = 0; i < 4; ++i) {
+        cap[i] = aurora_frame_buffer_capacity(i);
+        s_hi[i] = std::max(s_hi[i], now[i]);
+        if (cap[i] && s_hi[i] > cap[i] / 2 && s_hi[i] >= s_logged[i] + cap[i] / 16) report = true, s_logged[i] = s_hi[i];
+      }
+      if (report)
+        std::fprintf(stderr, "[gfx] frame buffers (high water, MiB): vertices %.1f of %.0f, indices %.1f of %.0f, "
+                     "uniforms %.1f of %.0f, vertex arrays %.1f of %.0f\n",
+                     s_hi[0] / 1048576.0, cap[0] / 1048576.0, s_hi[1] / 1048576.0, cap[1] / 1048576.0,
+                     s_hi[2] / 1048576.0, cap[2] / 1048576.0, s_hi[3] / 1048576.0, cap[3] / 1048576.0);
+    }
   static unsigned s_tickCount = 0;
   ++s_tickCount;
   if (FramesFromHouse() && !g_houseTick && _globals.m_house) {

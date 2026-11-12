@@ -19,6 +19,10 @@
 #   0004-texture-stat-totals.patch  aurora::gx::texture_stats_total (lib/gx/texture.hpp): the texture
 #     cache's per-frame counters (conversions + uploads, evictions, hits) summed over all frames, for the
 #     frame-hitch profiler (src/platform/pc_perf.cpp; texture_stats() is reset at every frame's end).
+#   0005-frame-buffer-overflow.patch  larger per-frame buffers (vertices 32, indices 8, vertex arrays
+#     48 MiB: a lot full of converted PC objects overflowed the 8 MiB vertex-array buffer, which aborted),
+#     and a full buffer no longer aborts: the rest of that frame's draws are dropped and it is logged;
+#     aurora_frame_buffer_capacity (gfx.h) for the port's "[gfx] frame buffers" high-water log.
 
 function(simmy_patch_aurora source_dir)
   file(GLOB _patches ${CMAKE_CURRENT_FUNCTION_LIST_DIR}/aurora_patches/*.patch)
@@ -30,22 +34,40 @@ function(simmy_patch_aurora source_dir)
   if (NOT GIT_FOUND)
     message(FATAL_ERROR "SIMMY: git is needed to apply the aurora patches in cmake/aurora_patches")
   endif ()
+  # The patches applied are listed in <aurora>/.simmy_patches (name and SHA1 of each): a later patch may
+  # change lines an earlier one changed (0005 the buffer sizes of 0002), after which the earlier one no
+  # longer reverses cleanly, so "reverses cleanly" is only asked of patches the list does not name (a tree
+  # patched by an older SIMMY build, before the list existed).
+  set(_stamp ${source_dir}/.simmy_patches)
+  set(_done "")
+  if (EXISTS ${_stamp})
+    file(STRINGS ${_stamp} _done)
+  endif ()
   foreach (_patch IN LISTS _patches)
     get_filename_component(_name ${_patch} NAME)
-    # Already applied?
+    file(SHA1 ${_patch} _sha)
+    if ("${_name} ${_sha}" IN_LIST _done)
+      message(STATUS "SIMMY: aurora patch ${_name} is applied")
+      continue()
+    endif ()
+    # Already applied (by a build before the list)?
     execute_process(COMMAND ${GIT_EXECUTABLE} apply --reverse --check --ignore-whitespace ${_patch}
                     WORKING_DIRECTORY ${source_dir} RESULT_VARIABLE _applied OUTPUT_QUIET ERROR_QUIET)
     if (_applied EQUAL 0)
       message(STATUS "SIMMY: aurora patch ${_name} is applied")
-      continue()
+    else ()
+      execute_process(COMMAND ${GIT_EXECUTABLE} apply --ignore-whitespace ${_patch}
+                      WORKING_DIRECTORY ${source_dir} RESULT_VARIABLE _result ERROR_VARIABLE _error)
+      if (NOT _result EQUAL 0)
+        message(FATAL_ERROR "SIMMY: cannot apply ${_patch} to ${source_dir}:\n${_error}\n"
+                            "The aurora tree must be SIMMY_AURORA_TAG (${SIMMY_AURORA_TAG}) without local changes "
+                            "to the patched files (delete the build folder's _deps\\aurora-src and "
+                            "_deps\\aurora-subbuild to download it again).")
+      endif ()
+      message(STATUS "SIMMY: applied aurora patch ${_name}")
     endif ()
-    execute_process(COMMAND ${GIT_EXECUTABLE} apply --ignore-whitespace ${_patch}
-                    WORKING_DIRECTORY ${source_dir} RESULT_VARIABLE _result ERROR_VARIABLE _error)
-    if (NOT _result EQUAL 0)
-      message(FATAL_ERROR "SIMMY: cannot apply ${_patch} to ${source_dir}:\n${_error}\n"
-                          "The aurora tree must be SIMMY_AURORA_TAG (${SIMMY_AURORA_TAG}) without local changes "
-                          "to the patched files.")
-    endif ()
-    message(STATUS "SIMMY: applied aurora patch ${_name}")
+    list(APPEND _done "${_name} ${_sha}")
+    list(JOIN _done "\n" _text)
+    file(WRITE ${_stamp} "${_text}\n")
   endforeach ()
 endfunction()
