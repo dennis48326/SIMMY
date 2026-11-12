@@ -25,7 +25,10 @@
 //   comfort = 7, energy = 2    motive ratings, where the base has one
 //   counter_seat = 1           a bar stool: sims sit on it to eat at the counter it faces (0: never;
 //                              no key: a chair with seat_offset 0.08 or more)
-//   init_data = 4:0x1          object data set after each init tree (4: the heights it may be placed at)
+//   init_data = 4:0x1          object data set after each init tree (4: the heights it may be placed at);
+//                              "8:|0x4" sets those bits, "8:&0x7" keeps only those
+//   light = x,y,z[:r,g,b[:falloff]]   a lamp: its light at this point (model space), in this colour, with
+//                              this falloff (the base's lamp light otherwise: position of its light node)
 //   animated = 1               an appliance: keeps the base's skeleton, state animations and effects
 //   anim_base = <object file>  ... taken from this GameCube object instead
 //   anim_model = 0x...         the model the states show (strips bound to the skeleton's nodes)
@@ -242,11 +245,31 @@ void LoadModIni(const std::string& mod, const std::string& path) {
           ok = false;
           break;
         }
-        const int index = std::atoi(item.substr(0, colon).c_str());
-        const long value = std::strtol(item.substr(colon + 1).c_str(), nullptr, 0);
+        const int index = static_cast<int>(std::strtol(item.substr(0, colon).c_str(), nullptr, 0));
+        std::string val = item.substr(colon + 1);
+        // "|v": set the bits; "&v": keep only these bits (ModObject::kInitOr / kInitAnd)
+        int op = 0;
+        if (!val.empty() && (val[0] == '|' || val[0] == '&')) {
+          op = val[0] == '|' ? ModObject::kInitOr : ModObject::kInitAnd;
+          val = val.substr(1);
+        }
+        const long value = std::strtol(val.c_str(), nullptr, 0);
         ok = index >= 0 && index < 0x80;
-        if (ok) cur->initData.emplace_back(index, static_cast<int>(value));
+        if (ok) cur->initData.emplace_back(index | op, static_cast<int>(value));
         at = end == std::string::npos ? v.size() : end;
+      }
+    }
+    else if (key == "light") {
+      // "x,y,z[:r,g,b[:falloff]]"
+      ModObject::Light l;
+      const int got = std::sscanf(v.c_str(), "%f,%f,%f:%f,%f,%f:%f", &l.pos[0], &l.pos[1], &l.pos[2], &l.color[0], &l.color[1],
+                                  &l.color[2], &l.falloff);
+      ok = got == 3 || got == 6 || got == 7;
+      l.hasColor = got >= 6;
+      if (got < 7) l.falloff = 0.0f;
+      if (ok) {
+        cur->light = l;
+        cur->hasLight = true;
       }
     }
     else if (key == "anim_base") cur->animBase = v;

@@ -297,7 +297,20 @@ struct ModObject {
   // init_data = 4:0x1 ...: object data set after its init tree (each reset), e.g. data 4, the heights it
   // may be placed at (1 the floor, 4/8 tables and counters): a floor espresso cart made from the
   // GameCube's counter-top espresso machine.
+  // An index with kInitOr sets the value's bits, with kInitAnd keeps only them ("8:|0x4", "8:&0x7").
+  static constexpr int kInitOr = 0x1000, kInitAnd = 0x2000;
   std::vector<std::pair<int, int>> initData;
+  // Lamps (light = x,y,z[:r,g,b[:falloff]]): the light of the base's model (its light node, switched by
+  // the base's state animations) is drawn at this point of the model (model space) instead of the base
+  // node's, in this colour and with this falloff (0: the model's own); isimsobjectmodel.cpp AnimateLights.
+  struct Light {
+    float pos[3] = {};
+    float color[3] = {1.0f, 1.0f, 1.0f};
+    float falloff = 0.0f;
+    bool hasColor = false;
+  };
+  Light light;
+  bool hasLight = false;
   bool animated = false;
   std::string animBase;
   unsigned int animModel = 0;

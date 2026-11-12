@@ -880,10 +880,14 @@ void ISimsObjectModel::ModNodes() {
 // 80050288
 // The model's lights follow their nodes: a point light at its node's position (and the falloff of
 // its scalar 1 channel), a directional light along its node's z axis; colour (vector channel) and
-// intensity (scalar 0) when animated; in the object's room, set up again.
+// intensity (scalar 0) when animated; in the object's room, set up again. PC mod: a converted lamp
+// (mod.ini light) puts its light where the PC lamp's bulb is, in its colour and falloff.
 void ISimsObjectModel::AnimateLights() {
   EACNodeState* states = m_anim.m_states;
   if (!states || !m_model) return;
+  cXObjectImpl* self = m_xob ? m_xob->GetObjectImplementation() : nullptr;
+  const simmy::ModObject* mod = self && self->m_selector ? self->m_selector->m_modObject : nullptr;
+  const simmy::ModObject* lamp = mod && mod->hasLight ? mod : nullptr;
   for (size_t i = 0; i < m_animLights.size() && i < m_model->m_lightInfo.size(); ++i) {
     EILight* light = m_animLights[i];
     const unsigned char* li = m_model->m_lightInfo[i].data();
@@ -894,8 +898,21 @@ void ISimsObjectModel::AnimateLights() {
     EACNodeState& st = states[node];
     if (type == 0) {
       auto* p = static_cast<EIPointLight*>(light);
-      p->SetPosition(st.m_trans);
-      if (st.m_flags & EACNodeState::kHasScalar1) {
+      if (lamp) {
+        // PC mod: mods. A converted lamp's light at its PC bulb (model space; the object's world
+        // orientation as the nodes'), its own colour and falloff.
+        const float* lp = lamp->light.pos;
+        EVec3 at{lp[0] * m_orient.m[0][0] + lp[1] * m_orient.m[1][0] + lp[2] * m_orient.m[2][0] + m_orient.m[3][0],
+                 lp[0] * m_orient.m[0][1] + lp[1] * m_orient.m[1][1] + lp[2] * m_orient.m[2][1] + m_orient.m[3][1],
+                 lp[0] * m_orient.m[0][2] + lp[1] * m_orient.m[1][2] + lp[2] * m_orient.m[2][2] + m_orient.m[3][2]};
+        p->SetPosition(at);
+      } else {
+        p->SetPosition(st.m_trans);
+      }
+      if (lamp && lamp->light.falloff > 0.0f) {
+        p->m_falloffStart = lamp->light.falloff;
+        p->m_falloffEnd = lamp->light.falloff + lamp->light.falloff;
+      } else if (st.m_flags & EACNodeState::kHasScalar1) {
         p->m_falloffStart = st.m_scalar1;
         p->m_falloffEnd = st.m_scalar1 + st.m_scalar1;
       }
@@ -905,7 +922,8 @@ void ISimsObjectModel::AnimateLights() {
       auto* d = static_cast<EIDirLight*>(light);
       m.GetColumn(2, d->m_dir);
     }
-    if (st.m_flags & EACNodeState::kHasVector) light->m_color = st.m_vector;
+    if (lamp && lamp->light.hasColor) light->m_color = EVec3{lamp->light.color[0], lamp->light.color[1], lamp->light.color[2]};
+    else if (st.m_flags & EACNodeState::kHasVector) light->m_color = st.m_vector;
     if (st.m_flags & EACNodeState::kHasScalar0) light->m_intensity = st.m_scalar0;
     light->m_thisSideData = static_cast<unsigned short>(m_xob->GetID());  // PC: the object's id (see ThisSide)
     light->m_thisSideFn = ThisSide;

@@ -360,6 +360,14 @@ def parse_cres(data):
                 b['children'] = _children(r)
             elif tname == 'cTransformNode':
                 b['name'], b['children'], b['t'], b['q'], b['joint'] = _transform(r)
+            elif tname == 'cLightRefNode':
+                # a light's place (its light resource: the RCOL's light links, in the same order)
+                r.u32()
+                _tag(r, 'cRenderableNode'); r.u32()
+                _tag(r, 'cBoundedNode'); r.u32()
+                _tag(r, 'cTransformNode')
+                b['name'], b['children'], b['t'], b['q'], _ = _transform(r)
+                b['light'] = True
             elif tname == 'cShapeRefNode':
                 r.u32()
                 _tag(r, 'cRenderableNode'); r.u32()
@@ -439,6 +447,47 @@ def cres_shape_transforms(data):
             R, t = world(i)
             out.setdefault(s, (R, t, rooted(i)))
     return out
+
+
+LIGHT_TYPES = {0xC9C81B9B: 'ambient', 0xC9C81BA3: 'directional', 0xC9C81BA9: 'point', 0xC9C81BAD: 'spot'}
+
+
+def cres_lights(data):
+    """[(RCOL link index of the light resource, its kind, its place in the model)]: the CRES's light
+    reference nodes (a lamp's bulbs) in order, paired with its light links in order."""
+    links, _, _ = rcol_header(data)
+    lights = [(k, LIGHT_TYPES[t]) for k, (t, g, i, ih) in enumerate(links) if t in LIGHT_TYPES]
+    blocks = parse_cres(data)
+    parent = {}
+    for i, b in enumerate(blocks):
+        for c in b['children']:
+            if 0 <= c < len(blocks) and c != i:
+                parent.setdefault(c, i)
+
+    def world_t(i, depth=0):
+        b = blocks[i]
+        t = list(b['t'])
+        j = parent.get(i)
+        if j is not None and depth < 64:
+            R = quat_matrix(blocks[j]['q'])
+            t = [sum(R[a][k] * t[k] for k in range(3)) for a in range(3)]
+            pt = world_t(j, depth + 1)
+            return [t[a] + pt[a] for a in range(3)]
+        return t
+
+    places = [world_t(i) for i, b in enumerate(blocks) if b.get('light')]
+    return [(k, kind, places[n] if n < len(places) else None) for n, (k, kind) in enumerate(lights)]
+
+
+def parse_light(data, kind='point'):
+    """A light resource's {'intensity', 'color', 'falloff', 'range'} from the floats that end it: a point
+    light's intensity, (unknown), r, g, b, falloff, range; a spot's the same with its two cone angles
+    before the range."""
+    n = 9 if kind == 'spot' else 7
+    if len(data) < 4 * n:
+        return None
+    f = struct.unpack_from(f'<{n}f', data, len(data) - 4 * n)
+    return {'intensity': f[0], 'color': (f[2], f[3], f[4]), 'falloff': f[5], 'range': f[-1]}
 
 
 def cres_shape_joints(data):

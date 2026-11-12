@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
-"""PC mod: mods. Convert buy-mode objects (Decorative, Surfaces, Seating and beds) from the user's own The Sims 2 (PC)
+"""PC mod: mods. Convert buy-mode objects (Decorative, Surfaces, Seating and beds, Appliances, Lighting) from the user's own The Sims 2 (PC)
 install (base game and every expansion and stuff pack found) into a SIMMY mod folder.
 
     pcobj_convert.py --pc "<The Sims 2 install>" --gc <GameCube disc image or data folder> --out <mods>
-                     --categories decorative,surfaces,seating   every such object of every pack (or:
-                                                        all, --all-decorative, --all-surfaces, --all-seating)
+                     --categories decorative,surfaces,seating,appliances,lighting   every such object of every
+                                                        pack (or: all, --all-decorative, ..., --all-lighting)
     pcobj_convert.py ... --object <GUID | name>  [--base <GameCube object file>]   one object
     pcobj_convert.py ... --batch list.tsv         the GUIDs in the list's first column ([2nd: base])
     pcobj_convert.py --pc "<install>" --list ficus                                 find objects
     pcobj_convert.py --pc "<install>" --categories all --inventory inv.tsv         list, no output
 
-Each object becomes <out>/pc<k>_<name>_<guid>/ (surfaces: pcs<k>_..., seating: pcc<k>_...): mod.ini (a
+Each object becomes <out>/pc<k>_<name>_<guid>/ (surfaces: pcs<k>_..., seating: pcc<k>_..., appliances: pca<k>_...,
+lighting: pcl<k>_...): mod.ini (a
 copy of a GameCube object, its "base": decorative objects by where they go (wall, floor, table top,
 ceiling, rug), surfaces a GameCube counter or table of the same footprint, seating and beds a GameCube
 chair, sofa, bench or bed of the same footprint and comfort tier (seat height, made / slept-in beds); with the PC object's GUID, name,
@@ -27,7 +28,7 @@ import argparse, os, re, shutil, struct, sys, time, zlib
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import rcol, sg, gcdata, gctex, pcmesh, pcinstall, pcsurf, pcseat, pcappl  # noqa: E402
+import rcol, sg, gcdata, gctex, pcmesh, pcinstall, pcsurf, pcseat, pcappl, pclight  # noqa: E402
 from pcinstall import (W_PRICE, W_ROOMSORT, W_FUNCSORT, W_SUBSORT, W_RATINGS, SUBSORTS, F_DECORATIVE)  # noqa: E402
 
 # ---------------------------------------------------------------------------------------------------
@@ -149,18 +150,23 @@ def load_texture(inst, name, maxdim=256):
 # ---------------------------------------------------------------------------------------------------
 # GameCube resources
 
-def make_modl(name, parts):
-    """parts: [(shader id, P, N, U, T)] in GameCube model space. One sub-model; an indexed strip
-    (GX_TRIANGLES) per part, split at 21000 triangles (16-bit counts). Fixed point as the disc's models
-    (vertex format 6: s16 positions in model units times the model's scale, s16 4.12 uvs) when
-    FIXED_POINT and the uvs fit; else float (vertex format 7)."""
+def make_modl(name, parts, lights=(), by_node=False):
+    """parts: [(shader id, P, N, U, T[, node[, colour]])] in GameCube model space. One sub-model; an
+    indexed strip (GX_TRIANGLES) per part, split at 21000 triangles (16-bit counts). Fixed point as the
+    disc's models (vertex format 6: s16 positions in model units times the model's scale, s16 4.12 uvs)
+    when FIXED_POINT and the uvs fit; else float (vertex format 7). A part with a colour (RGBA bytes) has
+    vertex colours (its shader draws them without lighting: a lamp's glowing shade). `lights`: the
+    model's SimsLightInfo records (0x1C bytes each: a lamp's light). by_node: a sub-model per node (its
+    node field set: the node's hidden flag hides it, as a GameCube lamp's on and off shades)."""
     split = []
-    for sid, P, N, U, T, *node in parts:
+    for sid, P, N, U, T, *rest in parts:
+        node = rest[0] if len(rest) > 0 else None
+        col = rest[1] if len(rest) > 1 else None
         for k in range(0, len(T), 21000):
             t = T[k:k + 21000]
             used = np.unique(t)
             remap = np.full(len(P), -1, np.int64); remap[used] = np.arange(len(used))
-            split.append((sid, P[used], N[used], U[used], remap[t], node[0] if node else None))
+            split.append((sid, P[used], N[used], U[used], remap[t], node, col))
     # an animated appliance's model: every strip bound to a node of the base's character (a matrix record
     # before it: matrix `node` in skinning slot 0; the sub-model has no node of its own)
     bound = any(p[5] is not None for p in split)
@@ -174,31 +180,40 @@ def make_modl(name, parts):
     scale = 2.0 ** np.ceil(np.log2(extent / 32000.0)) if fixed else 1.0
     body = bytearray()
     body += struct.pack('>I', 0) + b'\0' * 48 + b'\0'
-    body += struct.pack('>5I', 0, 0, 0, 0, 0)
-    body += b'\0' + struct.pack('>f', scale) + struct.pack('>I', 1)
-    body += struct.pack('>II', 0xFFFFFFFF if bound else 0, len(split))
-    for sid, P, N, U, T, node in split:
-        flags = 0x2A | (0x10 if fixed else 0)  # uvs | normals | indexed (| fixed point)
-        body += struct.pack('>III', flags, sid, 1) + b'\0' + struct.pack('>f', 1.0)
-        if bound:
-            body += bytes([1, 0, node or 0, 0])
-        body += b'\0' + struct.pack('>I', len(P))
-        if fixed:
-            q = np.clip(np.round(P / scale), -32767, 32767).astype('>i2')
-            body += np.concatenate([q, np.zeros((len(P), 1), '>i2')], 1).tobytes()
-            body += np.clip(np.round(U * 4096.0), -32767, 32767).astype('>i2').tobytes()
-        else:
-            body += np.concatenate([P, np.zeros((len(P), 1))], 1).astype('>f4').tobytes()
-            body += U.astype('>f4').tobytes()
-        n = N / np.maximum(np.linalg.norm(N, axis=1, keepdims=True), 1e-6)
-        nn = np.clip(np.round(np.nan_to_num(n) * 127), -127, 127).astype(np.int8)
-        body += np.concatenate([nn, np.full((len(N), 1), 127, np.int8)], 1).tobytes()
-        idx = T.reshape(-1).astype(np.uint16)
-        dl = bytearray([0x96 if fixed else 0x97]) + struct.pack('>H', len(idx))  # GX_TRIANGLES | GX_VTXFMT6/7
-        dl += np.repeat(idx[:, None], 3, 1).astype('>u2').tobytes()
-        dl += b'\0' * ((-len(dl)) % 32)
-        body += struct.pack('>IBII', len(idx), 3, len(dl), 3) + dl
-        body += b'\x06'
+    body += struct.pack('>4I', 0, 0, 0, 0)
+    body += struct.pack('>I', len(lights)) + b''.join(lights)
+    groups = [(0xFFFFFFFF if bound else 0, split)]
+    if by_node and bound:
+        nodes = sorted({p[5] or 0 for p in split})
+        groups = [(n, [p for p in split if (p[5] or 0) == n]) for n in nodes]
+    body += b'\0' + struct.pack('>f', scale) + struct.pack('>I', len(groups))
+    for gnode, gsplit in groups:
+        body += struct.pack('>II', gnode, len(gsplit))
+        for sid, P, N, U, T, node, col in gsplit:
+            flags = 0x2A | (0x10 if fixed else 0) | (0x04 if col is not None else 0)  # uvs | normals | indexed (| fixed point) (| colours)
+            body += struct.pack('>III', flags, sid, 1) + b'\0' + struct.pack('>f', 1.0)
+            if bound:
+                body += bytes([1, 0, node or 0, 0])
+            body += b'\0' + struct.pack('>I', len(P))
+            if fixed:
+                q = np.clip(np.round(P / scale), -32767, 32767).astype('>i2')
+                body += np.concatenate([q, np.zeros((len(P), 1), '>i2')], 1).tobytes()
+                body += np.clip(np.round(U * 4096.0), -32767, 32767).astype('>i2').tobytes()
+            else:
+                body += np.concatenate([P, np.zeros((len(P), 1))], 1).astype('>f4').tobytes()
+                body += U.astype('>f4').tobytes()
+            if col is not None:
+                body += np.tile(np.asarray(col, np.uint8)[None, :4], (len(P), 1)).tobytes()
+            n = N / np.maximum(np.linalg.norm(N, axis=1, keepdims=True), 1e-6)
+            nn = np.clip(np.round(np.nan_to_num(n) * 127), -127, 127).astype(np.int8)
+            body += np.concatenate([nn, np.full((len(N), 1), 127, np.int8)], 1).tobytes()
+            idx = T.reshape(-1).astype(np.uint16)
+            dl = bytearray([0x96 if fixed else 0x97]) + struct.pack('>H', len(idx))  # GX_TRIANGLES | GX_VTXFMT6/7
+            # an index per attribute: position, normal, (colour,) uv
+            dl += np.repeat(idx[:, None], 4 if col is not None else 3, 1).astype('>u2').tobytes()
+            dl += b'\0' * ((-len(dl)) % 32)
+            body += struct.pack('>IBII', len(idx), 3, len(dl), 3) + dl
+            body += b'\x06'
     # bounds (model units: divided by the scale)
     lo, hi = allP.min(0) / scale, allP.max(0) / scale
     c = (lo + hi) / 2; r = float(np.linalg.norm(allP / scale - c, axis=1).max())
@@ -206,12 +221,16 @@ def make_modl(name, parts):
     return gcdata.make_header(0x3A, 0x4D4F444C, 0xFFFFFFFF, name, bytes(body))
 
 
-def make_shader(template, name, texture, mode, alpha_ref=0.5):
+def make_shader(template, name, texture, mode, alpha_ref=0.5, unlit=False):
     """A copy of a disc shader (`template`: its resource bytes) with one layer: `texture`, and
-    mode 'opaque' (z test + write), 'cutout' (alpha test), 'blend' (alpha blending + a low alpha test)."""
+    mode 'opaque' (z test + write), 'cutout' (alpha test), 'blend' (alpha blending + a low alpha test).
+    unlit: drawn without lighting (geometry modes 0: the vertex colour times the texture), as the
+    GameCube's lamps draw their lit shades (its "neon_white_on")."""
     ver, sig, var, _, off, size = gcdata.data_header(template)
     d = bytearray(template[off:off + size])
     d[0] = 1
+    if unlit:
+        struct.pack_into('>I', d, 8, 0)
     L = 0x64
     struct.pack_into('>I', d, L, texture)
     blend = 0x58 if mode == 'blend' else 0x18
@@ -332,7 +351,7 @@ class Session:
             q = self.gco.qd
             self.templates = {}
             for f in (list(BASES.values()) + list(pcsurf.SURF_BASES.values()) + list(pcseat.SEAT_BASES.values()) +
-                      list(pcappl.APPL_BASES.values())):
+                      list(pcappl.APPL_BASES.values()) + list(pclight.LIGHT_BASES.values())):
                 defs = self.gco.files.get(f)
                 if not defs:
                     raise SystemExit(f'GameCube object {f} not found on the disc')
@@ -397,6 +416,8 @@ class Item:
             return pcsurf.SURF_SUBSORTS.get(self.subsort, f'0x{self.subsort:x}')
         if self.category == 'appliances':
             return pcappl.APPL_SUBSORTS.get(self.subsort, f'0x{self.subsort:x}')
+        if self.category == 'lighting':
+            return pclight.LIGHT_SUBSORTS.get(self.subsort, f'0x{self.subsort:x}')
         return SUBSORTS.get(self.subsort, f'0x{self.subsort:x}')
 
 
@@ -500,6 +521,8 @@ def material_of(inst, mat, maxdim):
         img = np.tile(px, (8, 8, 1))
         dxt1 = None
     blend = props.get('stdMatAlphaBlendMode', 'none').lower()
+    if 'additive' in mtype.lower():
+        blend = 'additive'     # an AdditiveTextureAlphaBlend material (light cones, glows)
     if blend == 'additive':
         # glows and flames: blended with the brightness as alpha (the GameCube shader blends, it
         # does not add)
@@ -555,6 +578,7 @@ def convert(s, it, base_override=None, write=True):
     surface = it.category == 'surfaces'
     seating = it.category == 'seating'
     appl = it.category == 'appliances'
+    light = it.category == 'lighting'
     picks = {}
     joints = {}
     meshes_j = None
@@ -584,6 +608,7 @@ def convert(s, it, base_override=None, write=True):
         meshes, used, errors = _load(inst, it, order, materials)
         picks['main'] = used
     if not (seating or surface or appl):
+        # (a lamp's second model is the debris it leaves when it breaks on the PC)
         meshes, used, errors = _load(inst, it, it.models[:1], materials)
     if not meshes:
         it.status, it.reason = 'skipped', errors[0] if errors else 'model has no drawable mesh'
@@ -645,6 +670,14 @@ def convert(s, it, base_override=None, write=True):
             W, H = 1, 2      # the GameCube dishwasher: the machine and the tile in front its door opens over
         elif W * H > 1:
             it.notes.append(f'{W}x{H}: a group of {W * H} copies of the base (each tile works)')
+    elif light:
+        kind = pclight.light_kind(it, P_all)
+        it.kind = kind
+        base = base_override or pclight.LIGHT_BASES[kind]
+        if W * H > 1:
+            # the GameCube's lamps are one tile (a group of lamp copies would be as many lamps, each with
+            # its own switch): the model over one tile, centred on it
+            it.notes.append(f'{W}x{H} on the PC: one tile, the model centred on it')
     else:
         kind = classify(it, P_all)
         if kind == 'roof':
@@ -658,7 +691,7 @@ def convert(s, it, base_override=None, write=True):
         it.status, it.reason = 'failed', f'GameCube base {base} not found'
         return it
     group_base = any(d['master'] != 0 for d in bdefs)
-    multi = W * H > 1 or group_base
+    multi = (W * H > 1 or group_base) and not light
     # surfaces: the top's height over each tile (PC tile (x, y), its middle at (x, y))
     heights = {}
     if surface:
@@ -695,6 +728,12 @@ def convert(s, it, base_override=None, write=True):
     # the PC's mirrored in y (its world swaps x and y).
     cx, cy = (W - 1) / 2.0, (H - 1) / 2.0
     wall = kind in ('wall', 'mirror')
+    if light and W * H > 1:
+        # a multi-tile PC lamp on one tile: its mesh's middle over the tile (a wall lamp's back stays at
+        # the wall)
+        lo, hi = it.bounds
+        cx = float(lo[0] + hi[0]) / 2
+        cy = 0.0 if wall else float(lo[1] + hi[1]) / 2
     bed_variants = {}
     if seating and kind.startswith('bed'):
         # PC: head at y 0, the bed along +y over tiles y 0..2, x across. GameCube: the bed's parts run
@@ -718,13 +757,19 @@ def convert(s, it, base_override=None, write=True):
         cx, cy = 1.0, 0.5
     tag = re.sub(r'[^a-z0-9]+', '', (it.name or it.objname).lower())[:20] or 'object'
     prefix = (f'pcs{pcsurf.SURF_SORT.get(kind, "7")}' if surface else f'pcc{pcseat.SEAT_SORT.get(kind, "8")}' if seating
-              else f'pca{pcappl.APPL_SORT.get(kind, "6")}' if appl else f'pc{SORT_KEY.get(it.subsort, "7")}')
+              else f'pca{pcappl.APPL_SORT.get(kind, "6")}' if appl else f'pcl{pclight.LIGHT_SORT.get(kind, "6")}' if light
+              else f'pc{SORT_KEY.get(it.subsort, "7")}')
     folder = os.path.join(s.out or '.', f'{prefix}_{tag}_{it.guid:08x}')
     it.out = os.path.basename(folder)
     taken = set(); files = {}
     texcache = {}; skipped = set()
 
-    def gc_parts(meshes, rendered=None):
+    shadercache = {}
+    glowing = set()
+
+    def gc_parts(meshes, rendered=None, emissive=(), dim=None):
+        """`emissive`: materials drawn without lighting (a lamp's glowing parts; their shader ids go into
+        `glowing`); `dim`: {material: alpha scale} (a lamp's additive light effects, blended here)."""
         parts = []
         for k, (mat, subset, P, N, U, T) in enumerate(meshes):
             if mat in skipped or not len(T):
@@ -734,17 +779,28 @@ def convert(s, it, base_override=None, write=True):
                 if mode == 'skip':
                     skipped.add(mat)
                     continue
+                if dim and mat in dim and mode == 'blend':
+                    img = img.copy()
+                    img[..., 3] = (img[..., 3].astype(np.float32) * dim[mat]).astype(np.uint8)
+                    dxt1 = None
                 tid = new_id(gc, 'textures', f'pcmod_{it.guid:08x}_tex{len(texcache)}', taken)
                 data, fmt, size = gctex.make_txfl(f'pc_{tag}_{len(texcache)}', img,
                                                   'cutout' if mode == 'cutout' else ('blend' if mode == 'blend' else 'opaque'),
                                                   s.texsize, dxt1)
                 files[f'textures_{tid:08X}.res'] = data
-                sid = new_id(gc, 'shaders', f'pcmod_{it.guid:08x}_shader{len(texcache)}', taken)
-                if gc is not None:
-                    files[f'shaders_{sid:08X}.res'] = make_shader(s.shader_template, f'pc_{tag}_{len(texcache)}', tid, mode)
-                texcache[mat] = (sid, img)
+                texcache[mat] = (tid, img, mode)
                 it.textures.append(f'{desc}:{fmt}{size[0]}x{size[1]}:{mode}')
-            sid, img = texcache[mat]
+            tid, img, mode = texcache[mat]
+            unlit = mat in emissive
+            if (mat, unlit) not in shadercache:
+                n = len(shadercache)
+                sid = new_id(gc, 'shaders', f'pcmod_{it.guid:08x}_shader{n}' + ('_glow' if unlit else ''), taken)
+                if gc is not None:
+                    files[f'shaders_{sid:08X}.res'] = make_shader(s.shader_template, f'pc_{tag}_{n}', tid, mode, unlit=unlit)
+                shadercache[(mat, unlit)] = sid
+                if unlit:
+                    glowing.add(sid)
+            sid = shadercache[(mat, unlit)]
             G = P.copy()
             G[:, 0] -= cx
             G[:, 1] = -(G[:, 1] - cy)
@@ -756,6 +812,53 @@ def convert(s, it, base_override=None, write=True):
                 rendered.append((P, N, U, T, img))
         return parts
 
+    # a lamp: its parts by when they show (pclight.material_role), its light
+    lamp = None
+    if light:
+        dz = 0.0
+        lo_z, hi_z = float(it.bounds[0][2]), float(it.bounds[1][2])
+        if kind == 'ceiling':
+            # hangs from the ceiling: its top at the top of the walls (3 tiles over its floor, as the
+            # GameCube's walls); a chandelier for two storeys comes down no lower than 1.9 (it reaches
+            # into the floor above)
+            dz = pclight.WALL_TOP - hi_z
+            if dz < 0 and lo_z + dz < 1.9:
+                dz = min(0.0, 1.9 - lo_z)
+            if abs(dz) > 0.01:
+                it.notes.append(f'{"raised" if dz > 0 else "lowered"} {abs(dz):.2f} to the ceiling')
+            if hi_z + dz > pclight.WALL_TOP + 0.05:
+                it.notes.append(f'reaches {hi_z + dz - pclight.WALL_TOP:.2f} above the ceiling')
+        elif kind in ('outdoor', 'floor', 'table') and lo_z < -0.05:
+            # sits on a fence post or a deck post on the PC: on the ground here
+            dz = -lo_z
+            it.notes.append(f'raised {dz:.2f} onto the ground (a post lamp: the GameCube has no fence posts)')
+        body_m, off_m, on_m, glow, dim = [], [], [], set(), {}
+        roles = {}
+        for (mat, sub, P, N, U, T) in meshes:
+            role, lit_m, unlit_m = pclight.material_role(inst, sub, mat)
+            P = P + np.array([0.0, 0.0, dz])
+            roles[role] = roles.get(role, 0) + 1
+            if role == 'body':
+                body_m.append((lit_m or unlit_m or mat, sub, P, N, U, T))
+            if role in ('switch', 'off'):
+                off_m.append((unlit_m, sub, P, N, U, T))
+            if role in ('switch', 'on'):
+                on_m.append((lit_m, sub, P, N, U, T))
+                if pclight.glows(inst, sub, lit_m):
+                    glow.add(lit_m)
+                    a = pclight.effect_alpha(inst, lit_m, sub)
+                    if a < 1.0:
+                        dim[lit_m] = a
+        if not on_m:
+            it.notes.append('nothing of it changes when lit (the PC lamp only casts light)')
+        lights = pclight.pc_lights(inst, used)
+        lp, lcol, linten, lnotes = pclight.lamp_light(lights, meshes, kind)
+        lp = lp + np.array([0.0, 0.0, dz])
+        it.notes += lnotes
+        lamp = {'body': body_m, 'off': off_m, 'on': on_m, 'glow': glow, 'dim': dim, 'pos': lp, 'col': lcol, 'intensity': linten,
+                'pcl': len(lights),
+                'roles': [f'{k}:{v}' for k, v in sorted(roles.items())] + ([f'glow:{len(glow)}'] if glow else [])}
+        meshes = body_m + off_m       # the lamp switched off: the still model (catalogue preview, thumbnail)
     rendered = []
     parts = gc_parts(meshes, rendered)
     if not parts:
@@ -802,6 +905,37 @@ def convert(s, it, base_override=None, write=True):
             it.notes.append('moves on the PC, still here: ' + ','.join(moving))
         if kind == 'dishwasher':
             it.surface = pcsurf.surface_height(meshes, 0, 0, kind='counter') or 0.95
+    light_recs = []
+    if lamp:
+        bnode = pclight.BASE_NODES.get(base) or pclight.BASE_NODES[pclight.LIGHT_BASES[kind]]
+        off_node, on_node = bnode
+        anim_parts = [p + (0,) for p in gc_parts(lamp['body'])]
+        anim_parts += [p + (off_node,) for p in gc_parts(lamp['off'])]
+        on_parts = []
+        for m6 in lamp['on']:
+            for p in gc_parts([m6], emissive=lamp['glow'], dim=lamp['dim']):
+                on_parts.append(p + (on_node, pclight.glow_color(inst, m6[0], m6[1]) if p[0] in glowing else None))
+        anim_parts += on_parts
+        # the light: the base model's (its node, flags, intensity: the base's animations switch it), at the
+        # PC light's place, colour and reach
+        P = lamp['pos']
+        lp = (float(P[0] - cx), float(-(P[1] - cy)) - (0.45 if wall else 0.0), float(P[2]))
+        base_rec, base_fo = None, 4.0
+        if gc is not None:
+            bm = [d['model'] for d in s.gco.files.get(base, []) if d.get('model')]
+            recs = gcdata.modl_lights(gc.get('models', bm[0])) if bm else []
+            if recs:
+                base_rec = recs[0]
+                base_fo = struct.unpack_from('>f', base_rec, 0x18)[0]
+        fo = pclight.falloff(base_fo, lamp['intensity'])
+        if base_rec is not None:
+            node = struct.unpack_from('>I', base_rec, 4)[0]
+            light_recs = [pclight.light_record(base_rec, node, lamp['col'], fo)]
+        lamp['mod'] = (lp, lamp['col'], fo)
+        it.surface = None
+        it.variants += lamp['roles']
+        it.variants.append(f'light {lp[0]:.2f},{lp[1]:.2f},{lp[2]:.2f} rgb {lamp["col"][0]:.2f},{lamp["col"][1]:.2f},'
+                           f'{lamp["col"][2]:.2f} falloff {fo:.2f} (PC {lamp["intensity"]:.2f}, {lamp["pcl"]} light(s))')
     it.verts = sum(len(p[1]) for p in parts); it.tris = sum(len(p[4]) for p in parts)
     vparts = [(k, gc_parts(m)) for k, m in variants]
     vparts = [(k, p) for k, p in vparts if p]
@@ -821,7 +955,7 @@ def convert(s, it, base_override=None, write=True):
     aid = None
     if anim_parts:
         aid = new_id(gc, 'models', f'pcmod_{it.guid:08x}_model_anim', taken)
-        files[f'models_{aid:08X}.res'] = make_modl(f'pc_{tag}_anim', anim_parts)
+        files[f'models_{aid:08X}.res'] = make_modl(f'pc_{tag}_anim', anim_parts, light_recs, by_node=bool(lamp))
     vids = {}
     for k, p in vparts:
         vid = new_id(gc, 'models', f'pcmod_{it.guid:08x}_model_{k}', taken)
@@ -893,11 +1027,12 @@ def convert(s, it, base_override=None, write=True):
         f.write('# PC mod: mods. Converted by tools/pcobj/pcobj_convert.py from the user\'s own The Sims 2 (PC)\n'
                 '# install. EA game data: for this machine only, never share or commit it.\n')
         what = (f'surface: {pcsurf.describe(kind)}' if surface else f'seating: {pcseat.describe(kind)}' if seating
-                else f'appliance: {pcappl.describe(kind)}' if appl else f'{it.subsort_name()}, placed: {kind}')
+                else f'appliance: {pcappl.describe(kind)}' if appl else f'lighting: {pclight.describe(kind)}' if light
+                else f'{it.subsort_name()}, placed: {kind}')
         f.write(f'# PC object "{it.objname}" ({it.home.name}), model {used}, {what}\n[object]\n')
         f.write(f'guid = 0x{it.guid:08X}\nbase = {base}\nname = {one(name)}\ndesc = {one(it.desc)}\n')
         f.write(f'price = {it.price}\nmodel = 0x{mid:08X}\nthumbnail = 0x{thumb_id:08X}\n')
-        f.write(f'functions = 0x{(pcsurf.F_SURFACES if surface else pcseat.F_SEATING if seating else pcappl.F_APPLIANCES if appl else F_DECORATIVE):X}\n'
+        f.write(f'functions = 0x{(pcsurf.F_SURFACES if surface else pcseat.F_SEATING if seating else pcappl.F_APPLIANCES if appl else pclight.F_LIGHTING if light else F_DECORATIVE):X}\n'
                 f'room = {max(0, min(10, it.room))}\n')
         if appl:
             # the base's skeleton, state animations and effects; the states show the bound model, the
@@ -915,6 +1050,16 @@ def convert(s, it, base_override=None, write=True):
                 f.write('init_data = 4:0x1\n')
         if surface:
             f.write(f'surface = {it.surface:.3f}\n')
+        if lamp:
+            # the base's skeleton, on/off state animations and light; the parts by state on its nodes
+            (lx, ly, lz), lc, lfo = lamp['mod']
+            f.write(f'animated = 1\nanim_model = 0x{aid:08X}\n')
+            f.write(f'light = {lx:.3f},{ly:.3f},{lz:.3f}:{lc[0]:.3f},{lc[1]:.3f},{lc[2]:.3f}:{lfo:.2f}\n')
+            if kind in pclight.INIT_DATA:
+                f.write(f'init_data = {pclight.INIT_DATA[kind]}\n')
+        if kind == 'ceiling' and not (surface or seating or appl or light):
+            # a decorative ceiling object (a rug of the GameCube): only inside, under a ceiling
+            f.write('init_data = 0x1E:2\n')
         if seating:
             f.write(f'# {"mattress (slept in)" if kind.startswith("bed") else "seat"} {seat["height"]:.3f} against the '
                     f'GameCube\'s {pcseat.GC_MATTRESS if kind.startswith("bed") else pcseat.GC_SEAT:.2f}\n')
@@ -954,9 +1099,21 @@ def convert(s, it, base_override=None, write=True):
 INV_COLUMNS = ['guid', 'name', 'object', 'pack', 'packs', 'subsort', 'footprint', 'placement', 'base',
                'price', 'room', 'bhavs', 'semiglobal', 'model', 'textures', 'recolours', 'verts', 'tris',
                'status', 'reason', 'folder', 'notes', 'bounds', 'category', 'surface', 'pieces', 'seat_offset',
-               'comfort', 'energy', 'seats']
+               'comfort', 'energy', 'seats', 'pc_tab', 'gc_tab']
 INVENTORY = {'decorative': 'pcdeco_inventory.tsv', 'surfaces': 'pcsurf_inventory.tsv', 'seating': 'pcseat_inventory.tsv',
-             'appliances': 'pcappl_inventory.tsv'}
+             'appliances': 'pcappl_inventory.tsv', 'lighting': 'pclight_inventory.tsv'}
+# buy-mode tabs: the PC's (OBJD function sort bits) and the GameCube's (definition function flags; the
+# tab a converted object is put on)
+PC_TABS = [(0x01, 'Comfort'), (0x02, 'Surfaces'), (0x04, 'Appliances'), (0x08, 'Electronics'), (0x10, 'Plumbing'),
+           (0x20, 'Decorations'), (0x40, 'Miscellaneous'), (0x80, 'Lighting'), (0x100, 'Hobbies'),
+           (0x400, 'Aspiration Rewards'), (0x800, 'Career Rewards')]
+GC_TABS = {'seating': 'Seating & Beds', 'appliances': 'Appliances', 'surfaces': 'Surfaces', 'decorative': 'Decorative',
+           'lighting': 'Lighting'}
+
+
+def pc_tab(it):
+    f = it.o.w(W_FUNCSORT)
+    return '+'.join(n for b, n in PC_TABS if f & b) or f'0x{f:x}'
 
 
 def inv_row(it):
@@ -969,7 +1126,8 @@ def inv_row(it):
             it.category, f'{it.surface:.2f}' if it.surface else '', ' '.join(it.variants),
             f'{it.seat["offset"]:+.3f}' if it.seat else '', str(it.seat.get('comfort', '')) if it.seat else '',
             str(it.seat.get('energy', '')) if it.seat and it.seat.get('energy', -1) >= 0 else '',
-            str(it.seat.get('seats', '')) if it.seat else '']
+            str(it.seat.get('seats', '')) if it.seat else '', pc_tab(it),
+            GC_TABS.get(it.category, '') if it.status == 'converted' or it.status.startswith('ok') else '']
 
 
 def write_inventory(path, items):
@@ -1002,7 +1160,7 @@ def _work(args):
 
 
 CATEGORIES = {'decorative': decorative_guids, 'surfaces': pcsurf.surface_guids, 'seating': pcseat.seating_guids,
-              'appliances': pcappl.appliance_guids}
+              'appliances': pcappl.appliance_guids, 'lighting': pclight.lighting_guids}
 
 
 def main():
@@ -1017,6 +1175,7 @@ def main():
     ap.add_argument('--all-surfaces', action='store_true', help='every buy-mode Surfaces object')
     ap.add_argument('--all-seating', action='store_true', help='every buy-mode Seating object and bed')
     ap.add_argument('--all-appliances', action='store_true', help='every buy-mode Appliances object')
+    ap.add_argument('--all-lighting', action='store_true', help='every buy-mode Lighting object')
     ap.add_argument('--categories', help='comma-separated buy-mode categories: decorative, surfaces (or all)')
     ap.add_argument('--batch', help='a list of GUIDs (first column; optional second column: base)')
     ap.add_argument('--packs', help='only objects whose home pack is one of these (codes: base, ep1..ep8, sp1..sp9)')
@@ -1058,6 +1217,8 @@ def main():
         cats.append('surfaces')
     if a.all_appliances and 'appliances' not in cats:
         cats.append('appliances')
+    if a.all_lighting and 'lighting' not in cats:
+        cats.append('lighting')
     def category_of(o):
         f = o.w(W_FUNCSORT)
         if f & F_DECORATIVE:
@@ -1066,6 +1227,8 @@ def main():
             return 'surfaces'
         if f & pcappl.F_APPLIANCES:
             return 'appliances'
+        if f & pclight.F_LIGHTING:
+            return 'lighting'
         return 'seating' if f & pcseat.F_SEATING else 'decorative'
     jobs = []
     if a.object:
@@ -1078,7 +1241,7 @@ def main():
         jobs = [(hits[0], a.base, category_of(cat.newest(hits[0])))]
     elif a.batch:
         known = (set(BASES.values()) | set(pcsurf.SURF_BASES.values()) | set(pcseat.SEAT_BASES.values()) |
-                 set(pcappl.APPL_BASES.values()))
+                 set(pcappl.APPL_BASES.values()) | set(pclight.LIGHT_BASES.values()))
         for line in open(a.batch, encoding='utf-8'):
             f = line.strip().split('\t')
             if f and re.fullmatch(r'(0x)?[0-9a-fA-F]{6,8}', f[0]):
@@ -1095,7 +1258,7 @@ def main():
     elif a.inventory:
         jobs = [(g, None, 'decorative') for g in decorative_guids(cat)]
     else:
-        raise SystemExit('nothing to do: --all-decorative, --all-surfaces, --all-seating, --all-appliances, --categories, '
+        raise SystemExit('nothing to do: --all-decorative, --all-surfaces, --all-seating, --all-appliances, --all-lighting, --categories, '
                          '--object, --batch, --inventory or --list')
     packs = set(a.packs.split(',')) if a.packs else None
     items = []
@@ -1115,6 +1278,8 @@ def main():
             return ('t', pcseat.SEAT_SORT.get(pcseat.seat_kind(it)[0], '8'), (it.name or '').lower())
         if it.category == 'appliances':
             return ('u', pcappl.APPL_SORT.get(pcappl.appl_kind(it), '6'), (it.name or '').lower())
+        if it.category == 'lighting':
+            return ('v', pclight.LIGHT_SORT.get(pclight.light_kind(it), '6'), (it.name or '').lower())
         return ('d', SORT_KEY.get(it.subsort, '7'), (it.name or '').lower())
     items.sort(key=sort_key)
     todo = [(it, b) for it, b in items if not it.status]

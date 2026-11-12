@@ -166,6 +166,25 @@ def rf_name(q, rf, i):
     return q.rowname(rf, i)
 
 
+def modl_lights(b):
+    """A MODL's SimsLightInfo records (0x1C bytes each, as stored: type, node, colour, intensity, falloff)."""
+    ver, sig, var, name, off, size = data_header(b)
+    d = b[off:off + size]
+    be = lambda o: struct.unpack_from('>I', d, o)[0]
+    p = 0x35
+    n = be(p); p += 4 + n * 0x40
+    n = be(p); p += 4
+    for _ in range(n):
+        if be(p) != 0: p += 4; continue
+        nx, ny, nz, cnt = struct.unpack_from('>4I', d, p + 0x88)
+        p += 0x98 + (cnt * nx * ny * nz * 12 if cnt > 1 else 0)
+    for psize in (0x50, 0x60):
+        n = be(p); p += 4
+        for _ in range(n): p += 4 if be(p) != 0 else 0x4C + be(p + 0x48) * psize
+    n = be(p); p += 4
+    return [bytes(d[p + 0x1C * k:p + 0x1C * (k + 1)]) for k in range(n)]
+
+
 def parse_modl_shaders(b):
     """The shader ids a MODL uses, in order (a light parse: header fields up to the first sub-model)."""
     ver, sig, var, name, off, size = data_header(b)

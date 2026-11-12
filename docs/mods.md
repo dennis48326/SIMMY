@@ -1,18 +1,23 @@
 # PC mod: mods (objects from the PC game)
 
 Lets the player add objects converted from **their own** copy of The Sims 2 for PC: by default every
-buy-mode **Decorative**, **Surfaces**, **Seating** and **Appliances** object and every **bed** of the base
-game and of every expansion and stuff pack installed (about 560 decorative objects, 170 counters,
-tables and desks, 180 chairs, sofas, benches, stools and beds, and 54 fridges, stoves, grills,
+buy-mode **Decorative**, **Surfaces**, **Seating**, **Appliances** and **Lighting** object and every **bed**
+of the base game and of every expansion and stuff pack installed (about 560 decorative objects, 170
+counters, tables and desks, 180 chairs, sofas, benches, stools and beds, 54 fridges, stoves, grills,
 microwaves, toaster ovens, coffee makers, food processors, juicers, dishwashers, trash compactors,
-food displays and food stands with the Ultimate Collection). Surfaces work as
+food displays and food stands, and 145 table, floor, wall and ceiling lamps, outdoor lights and
+streetlamps with the Ultimate Collection). Surfaces work as
 surfaces: things go on their tops at the PC height, sims prepare food on the counters, eat at the
 tables and use computers on the desks, and counters join up in rows and corners. Seating and beds
 work as the GameCube's: sims sit on them (at the PC seat's height), pull dining chairs up to tables and
 eat, watch TV from sofas, sleep, relax and make the bed (made / slept-in models), two to a double bed.
 Appliances work as the GameCube's fridges, stoves, microwave, dishwasher, espresso machine, food
 processor, blender and trash can (snacks, cooking, prep steps, drinks, washing up, fire), with the PC
-model's own doors opening (fridge doors, oven doors, the dishwasher's door and rack). Off unless a mod folder exists; with none, nothing in the game changes
+model's own doors opening (fridge doors, oven doors, the dishwasher's door and rack). Lamps work as
+the GameCube's: they light their room (the light grid, in the PC lamp's colour and reach) and its
+light score, switch on by themselves at night and off by day, and show the PC lamp's lit look when on
+(glowing shade and bulb, the pool of light it paints) and its unlit look when off; ceiling lamps hang
+from the ceiling, inside only, with sims and furniture under them. Off unless a mod folder exists; with none, nothing in the game changes
 (no extra memory, same determinism hash).
 
 **Legal rule.** The PC game's files are EA's. Nothing converted from them goes into this repository,
@@ -26,8 +31,8 @@ Its PC install and disc paths are set at the top of the file.
 
 | | |
 |---|---|
-| `convert_pc_object.bat` | every Decorative, Surfaces, Seating (beds included) and Appliances object of every pack under the install, into `mods` next to simmy.exe (progress per object with the percentage and time; about two and a half minutes for every pack of the Ultimate Collection on two cores) |
-| `convert_pc_object.bat decorative` / `surfaces` / `seating` / `appliances` | only that buy-mode category (several may be given: `decorative seating`) |
+| `convert_pc_object.bat` | every Decorative, Surfaces, Seating (beds included), Appliances and Lighting object of every pack under the install, into `mods` next to simmy.exe (progress per object with the percentage and time; about three minutes for every pack of the Ultimate Collection on two cores) |
+| `convert_pc_object.bat decorative` / `surfaces` / `seating` / `appliances` / `lighting` | only that buy-mode category (several may be given: `decorative seating`) |
 | `convert_pc_object.bat list ficus` | PC objects whose name contains "ficus" |
 | `convert_pc_object.bat inventory` | only the inventory (`mods\pcobj_inventory.tsv`) |
 | `convert_pc_object.bat "No-Fuss Ficus"` | one object (name or GUID), base chosen automatically |
@@ -37,25 +42,27 @@ By hand (Python 3 with numpy and Pillow, nothing else):
 
 ```
 python tools/pcobj/pcobj_convert.py --pc "C:\Games\The Sims 2 Ultimate Collection" \
-    --gc D:\Games\Sims2.iso --out C:\Games\SIMMY\mods --categories decorative,surfaces,seating,appliances
+    --gc D:\Games\Sims2.iso --out C:\Games\SIMMY\mods --categories decorative,surfaces,seating,appliances,lighting
 ```
 
 `--pc` is the install folder (every `TSData/Res` under it is a pack); `--gc` the GameCube data the port
-plays (disc image or extracted folder). `--categories decorative,surfaces,seating,appliances` (or `all`;
-also `--all-decorative`, `--all-surfaces`, `--all-seating`, `--all-appliances`) picks the buy-mode
+plays (disc image or extracted folder). `--categories decorative,surfaces,seating,appliances,lighting`
+(or `all`; also `--all-decorative`, `--all-surfaces`, `--all-seating`, `--all-appliances`,
+`--all-lighting`) picks the buy-mode
 categories. Other modes: `--object <GUID|name> [--base <GameCube object>]`,
 `--batch list.tsv` (GUIDs in the first column, an optional base in the second), `--list <text>`,
 `--inventory <file.tsv>` (classify only, write nothing else). Options: `--packs base,ep1,sp4,...` (by
 home pack), `--jobs N` (worker processes; default CPUs - 1), `--texsize` (largest texture side, 256).
 Converting again replaces the folders it wrote; `mods/pcdeco_inventory.tsv`,
-`mods/pcsurf_inventory.tsv`, `mods/pcseat_inventory.tsv` and `mods/pcappl_inventory.tsv` keep one row per object (converted or
-skipped, and why).
+`mods/pcsurf_inventory.tsv`, `mods/pcseat_inventory.tsv`, `mods/pcappl_inventory.tsv` and
+`mods/pclight_inventory.tsv` keep one row per object (converted or skipped, and why; `pc_tab` the PC
+buy-mode tab of the object's catalogue function, `gc_tab` the GameCube tab it is put on).
 
 Start the game. The mod folder is `mods=` in simmy.ini (relative to the ini), else `SIMMY_MODS`, else
 `mods` next to the exe. The log says `[mods] <dir>: n mod(s), n object(s) (n multi-tile parts), n
 resource(s); read in n ms` and `[mods] objects: n added (n multi-tile), n skipped; rows ...` (with
 `SIMMY_MODS_VERBOSE=1`, or 20 objects or fewer, a line per object; a skipped object always says why).
-The objects are in buy mode on the **Decorative**, **Surfaces**, **Seating & Beds** and **Appliances** tabs with the PC name, description,
+The objects are in buy mode on the **Decorative**, **Surfaces**, **Seating & Beds**, **Appliances** and **Lighting** tabs with the PC name, description,
 price and room rating and a rendered thumbnail. With a mod folder the **C stick** left/right pages that catalogue
 four columns at a time (the GameCube's movie only moves a column at a time; the tab can hold 600+).
 
@@ -86,7 +93,7 @@ data 4 heights, data 8 flags, data 0xD wall flags as their init trees set them):
 | surface | `art_sculpture_wooden_model` | on tables and counters (heights 0x8C), not the floor |
 | surface plant | `art_plant_lavender` | the same, a plant |
 | rug | `rug_outdoor_blanket` (group) | walkable, objects go on it |
-| ceiling | `rug_outdoor_blanket` (group) | a one-tile rug: sims walk under it |
+| ceiling | `rug_outdoor_blanket` (group) | a one-tile rug: sims walk under it; inside only (`init_data = 0x1E:2`: the placement refuses the yard, error 10) |
 
 **Multi-tile objects.** The PC parts (OBJDs with the lead's master id; sub index x << 8 | y) give the
 footprint and the tiles' GUIDs; mod.ini lists them (`tiles = x,y:GUID ...`). The game makes a group
@@ -332,6 +339,65 @@ foot on the microwave's side-hinged door node). Parts with no node on the base (
 an oven's rack, a compactor's drawer) stay in place. The catalogue's 3D preview shows the still model
 (`model`). The base's state effects are kept (the base's skeleton is there to carry them).
 
+## Lighting
+
+**Inventory.** Lead OBJDs with the catalogue function Lighting (word 0x28 bit 0x80; all have the
+semi-global LampGlobals); where it goes from the sub-sort (word 0x5E: 1 table, 2 floor, 4 wall,
+8 ceiling, 0x10 outdoor, 0x80 misc: streetlamps, the studio umbrella, a bollard) and the mesh (a lamp
+on a fence or deck post: its mesh starts above the ground at the tile's back edge -> wall; misc and
+outdoor-only room sorts -> outdoor). 145 with the Ultimate Collection, all converted.
+
+**The GameCube's lamps.** All share the semi-global `lamp_sg`: 8 table lamps, 11 floor lamps (plus the
+boom lamp group and the dance-floor lights), 8 wall lamps and the street lamp (`scenery_lamppost`); no
+ceiling lamps. Every lamp of one placement runs the same init tree ("SG_INIT table expensive",
+"floor expensive tall", "wall cheap"; the street lamp the floor one and data 0x1E 1: outside only):
+its light amount (attribute 0xB, the semi-global's constants), a light source (data 0x10 1, data 0x28
+flags) that the room score counts, breakable, bulb burns out and is fixed (function entry 0x1D). The
+lights are automatic ("AutoLights": the main tree switches a lamp on in the evening and off in the
+morning (in our runs on from 19:00 to before 06:00), by the room's exterior windows and whether it is
+day; a room change or load re-evaluates); the "Turn On" / "Turn Off" interactions exist but their
+tree-table entries carry flag 0x80 (debug), so the GameCube offers no manual switch. Each lamp is an
+animated object: a character with an "..._off" and an "..._on" node (each a copy of the shade; the
+on one drawn with a shader without lighting, geometry modes 0, and vertex colours: it glows) and an
+"Omni" node that carries the model's light (SimsLightInfo: a point light, colour, falloff 2-6 tiles;
+the light grid gives it a reach of falloff / 2). State 0 is off, state 1 on (the state animations show
+one shade node or the other and switch the light; ObjAnimDef +0x14 = 1).
+
+**What each PC lamp becomes.**
+
+| PC placement | GameCube base | |
+|---|---|---|
+| table | `lamp_table_modern` (off node 1, on node 2) | on tables, desks and counters (also converted ones: the PC top's height) |
+| floor | `lamp_floor_modern` (on 1, off 2) | on the floor |
+| wall | `lamp_wall_sconce` (off 1, on 2) | on walls, as wall art (the model 0.45 toward the wall) |
+| ceiling | `lamp_floor_modern` + `init_data = 8:\|0x4 0x3F:0 0x1E:2` | zero extent (sims walk under it; a table, chairs or a rug may stand on its tile), no layer, inside only (the yard: error 10); the model's top at the top of the walls (3 tiles over its floor) |
+| outdoor, streetlamp | `scenery_lamppost` | outside only |
+
+**On and off.** Per PC subset the converter sorts the materials by the PC's lamp states (its MMAT
+object states and material names: "..._lit" / "..._unlit"): a subset the PC switches between a lit and
+an unlit material is drawn twice, lit on the on node, unlit on the off node; one the PC only shows lit
+(glows, the pool of light it paints on the floor or the wall, flames, beams, an unlit variant that is a
+`Null` material) on the on node only; the rest (the body, shadows) on the root node. A lit material the
+PC draws glowing (additive, emissive 0.3 or more, lighting off) gets a shader without lighting
+(geometry modes 0, as the GameCube's lit shades) and vertex colours (its PC diffuse plus emissive
+colour: a warm pool of light; white for untextured ones). The still model (catalogue preview, the
+thumbnail) is the lamp switched off. The model the states show (`anim_model`) carries one
+SimsLightInfo copied from the base model (its node, flags, intensity: the base's animations switch it),
+with the PC light's colour (brightest channel 1) and a falloff from its intensity (the base's falloff x
+sqrt(intensity / 1.25), 2.5 to 6). `light = x,y,z:r,g,b:falloff` puts the light where the PC lamp's
+light node is (the CRES's cLightRefNode, composed to the root; several PC lights -> their middle: a
+neon sign's are one per recolour at one place, the first one's colour), in model space:
+`ISimsObjectModel::AnimateLights` places it there with the object's orientation instead of the base
+node's (which is the base lamp's bulb). The light grid (lights per room, `SIMMY_LIGHT_TRACE=1`) and the
+room score take it as a GameCube lamp's.
+
+**Multi-tile PC lamps** (wall lights 2x1 to 4x1, the Neon Wedding Tack, the M&G chandelier 2x2, the
+Nightlife gobo spotlights and rotating ball 4x4 / 5x5) become one tile with the mesh's middle over it (a
+group of lamp copies would be as many lamps, each switched and counted on its own); a wall lamp keeps its
+back at the wall. Lamps on PC fence or deck posts stand on the ground (raised by the post's height; the
+GameCube has no fence posts). The two-storey chandelier comes down to 1.9 at its lowest (it reaches into
+the floor above).
+
 ## Mod folder
 
 ```
@@ -342,6 +408,9 @@ mods/
   pcseat_inventory.tsv      every seat and bed: the kind, base, seat height, seat offset, ratings, seats
   pcappl_inventory.tsv      every appliance: the kind, base, footprint, moving parts and their nodes
                             ("pieces": l_door>node2 ...), parts left still (notes)
+  pclight_inventory.tsv     every lamp: placement, base, its parts by state ("pieces": body:1 switch:3
+                            on:1 glow:4) and its light (place, colour, falloff, the PC intensity)
+                            (every inventory: pc_tab / gc_tab, the PC and the GameCube buy-mode tab)
   pc3_nofussficus_4cc4fd6c/ "pc<sort>_<name>_<GUID>" (sort: 1 plants, 2 sculptures, 3 wall art,
     mod.ini                 4 mirrors, 5 rugs, 6 curtains, 7 misc; surfaces "pcs<k>_": 1 counters,
                             2 islands, 3 dining, 4 desks, 5 coffee, 6 end tables, 7 displays/misc;
@@ -349,7 +418,8 @@ mods/
                             and lounges, 4 sofas, loveseats, sectionals, 5 benches, 6 single beds,
                             7 double beds; appliances "pca<k>_": 1 fridges and food displays,
                             2 stoves, grills, food stands, 3 microwaves and toaster ovens,
-                            4 coffee makers, processors, juicers, 5 dishwashers, compactors)
+                            4 coffee makers, processors, juicers, 5 dishwashers, compactors;
+                            lighting "pcl<k>_": 1 table, 2 floor, 3 wall, 4 ceiling, 5 outdoor lamps)
     models_96DA08B7.res     resources in the GameCube's own formats, as an archive holds them
     shaders_1FBB3FA3.res    ("<manager>_<id>.res": models, shaders, textures, ... any manager)
     textures_3A540C0D.res
@@ -362,7 +432,8 @@ mod.ini `[object]` keys: `guid`, `base` (object file) or `base_guid`, `name`, `d
 `model_corner`, `model_end_px`, `model_end_nx`, `model_ends` (counter pieces), `seat_offset`,
 `state_models`, `base_parts`, `tile_model` (repeatable, after `tiles`), `comfort`,
 `energy`, `counter_seat` (seating and beds), `animated`, `anim_base`, `anim_model`, `node` (repeatable),
-`init_data` (appliances), `pack` (informational). Mods are read in folder-name order; a GUID
+`init_data` (`index:value`, `index:|bits` sets bits, `index:&bits` keeps only them; appliances, lamps,
+ceiling objects), `light` (`x,y,z[:r,g,b[:falloff]]`: a lamp's light), `pack` (informational). Mods are read in folder-name order; a GUID
 or resource id given twice keeps the first. A resource id the disc has is never taken from a mod.
 
 ## How it works
@@ -378,6 +449,7 @@ or resource id given twice keeps the first. A resource id the disc has is never 
 | Seating, beds | `SAnimator2::positionCharacter` / `ModSeatOffset` (sanimator2.cpp), `CopyDef` / `BasePart` (modobjects.cpp) | A sim in a converted seat or bed drawn at its seat's height (`SIMMY_SEAT_TRACE=1` logs container, state, root, pelvis and offset every 30 frames); per-state and per-part models, base parts by tile, ratings |
 | Bar stools at counters | `src/game/countereat.cpp` (`simmy::countereat`), hooks in `TryFindFunctionalObject` / `TryCallFunctionalTree` / `TryCallNamedTree` / `TryElement` 0x60 (objectsim.cpp), `Behavior::GetTree` (treesim.cpp), `ObjectSlotDescriptor` (xrouting.cpp) | A counter with a counter seat facing it offers eating surface entry 0x19 through PC trees (SimAntics bytecode built in code, ids 0x1F00-0x1F03), its eating slots 0x60-0x63 and the pickup from them; nothing runs unless a loaded mod object is a counter seat |
 | Appliances | `CopyDef` (modobjects.cpp: the character and state table kept), `ISimsObjectModel::ModNodes` (isimsobjectmodel.cpp), `GetObjSelector3dDisplayInfo` (pcttarget.cpp), `cXObjectImpl::ApplyModInitData` (modobjects.cpp, from `Reset` / `cXMTObjectImpl::Reset`) | The base's skeleton, animations and effects; the bound model's nodes drawn by their turn from rest about the PC hinges; the still model in the catalogue preview; `init_data` after each init tree. `SIMMY_OBJ_NODE_TRACE`, `SIMMY_OBJ_STATE_TRACE`, `SIMMY_OBJ_STATE_FORCE` (testing.md) |
+| Lamps | `CopyDef` (as appliances: the base's character and on/off state table), `ISimsObjectModel::AnimateLights` (isimsobjectmodel.cpp), `ApplyModInitData` (`\|` / `&` ops) | The model's light (its SimsLightInfo, created by `SetupCharacter` and switched by the state animations as a GameCube lamp's) at `light`'s place with its colour and falloff; the on / off parts in sub-models on the base's on / off nodes, hidden by the state's node flags (`ERModel::DrawHierarchical`); a ceiling lamp's zero extent, layer and inside-only data after its init tree |
 | Fire code | `EIObjectMan::CountObjects` (iobjectman.cpp) | A mod object's model counts at 5/7 of its size: what it would weigh with the disc's fixed-point vertices (16 bytes a vertex against 28) |
 | Saves | unchanged | `objt` names types by GUID; a mod object (and each part) saves and loads like any other |
 
@@ -399,7 +471,7 @@ file name in a place action may name a mod object, which copies the file: use GU
 | File | What |
 |---|---|
 | `dbpf.py` | DBPF packages 1.x (index 7.0-7.2), the DIR compression directory, QFS/RefPack |
-| `rcol.py` | Scenegraph resources: CRES (blocks and the transform hierarchy), SHPE, GMND (names, links), GMDC v4 (elements, links with alias lists, groups), TXMT, TXTR (v9), LIFO |
+| `rcol.py` | Scenegraph resources: CRES (blocks, the transform hierarchy, light nodes), point / spot light resources, SHPE, GMND (names, links), GMDC v4 (elements, links with alias lists, groups), TXMT, TXTR (v9), LIFO |
 | `sg.py` | Name -> instance: CRC-24 (poly 0x864CFB, init 0xB704CE) of the lower-cased name \| 0xFF000000, instance-high CRC-32 (MSB first); packages searched newest pack first |
 | `pcinstall.py` | Packs (order, `Objects` / `StuffPack/Objects` / `Catalog/Materials` / `Sims3D` or `3D` packages), the OBJD catalogue across packs (newest wins, home pack), CTSS text, STR# 0x85 models, parts, MMAT recolours (CPF) |
 | `pcmesh.py` | CRES -> SHPE -> GMND -> GMDC meshes in object space (node transforms, shadows/bounding boxes left out, orphan mirror frames); optionally each vertex's bone or part node and the bones' places |
@@ -408,6 +480,7 @@ file name in a place action may name a mod object, which copies the file: use GU
 | `pcsurf.py` | Surfaces: kinds, bases by footprint, counter pieces, the top's height from the mesh |
 | `pcappl.py` | Appliances: kinds, bases by tier, the base skeletons' moving nodes, binding the PC parts (bones / part nodes) to them |
 | `pcseat.py` | Seating and beds: kinds, bases by footprint and rating, the seat's height, the beds' made / slept-in models and halves |
+| `pclight.py` | Lighting: placement, bases, the materials by lamp state (lit / unlit / effect, glowing), the PC lights (CRES light nodes, light resources) -> one light record |
 | `pcobj_convert.py` | Inventory, placement, base choice, materials, MODL/shaders, thumbnail, mod.ini; batch with worker processes |
 
 ## Limits
@@ -442,8 +515,18 @@ file name in a place action may name a mod object, which copies the file: use GU
   for straight rows, corners and ends (no outside corners: the PC has none either; diagonal counters
   show the straight piece). Wall shelves and the counter tray are left out.
 - Curtains are wall objects: they go on walls, not over windows (the GameCube's wall art may not
-  overlap a window). Surface objects go on tables and counters only (not on the floor). Ceiling
-  objects stand on a one-tile rug (no ceiling placement on the GameCube; not on top of another rug).
+  overlap a window). Surface objects go on tables and counters only (not on the floor). Decorative
+  ceiling objects are a one-tile rug (no ceiling placement on the GameCube; not on top of another rug),
+  inside only; they hang at the PC model's height.
+- Lamps behave as the GameCube's (`lamp_sg`): the lights switch themselves on in the evening and off in
+  the morning, as the GameCube's lamps do; the GameCube offers no manual "Turn On" / "Turn Off" (its
+  entries are debug-only), so neither do converted lamps; breaking and fixing the bulb are the base's.
+  One light per lamp (several PC lights: their middle, the first's colour; a neon sign's recolours keep
+  the default's light colour), a point light (PC spot lights, the gobos' beams, light as points); the
+  GameCube lights rooms per vertex from the light grid (no shadows, no light patterns on walls beyond
+  the PC model's own light-pool decals). Room light score: the base's light amount for its placement
+  (the GameCube does not grade lamps). Multi-tile PC lamps are one tile; lamps on PC fence posts stand on
+  the ground; the two-storey chandelier reaches through the ceiling. Recolours: the default only.
 - Recolours: only the default (the inventory counts the others). Each would be another catalogue entry
   with its own shader/texture and a model copy (the MODL names its shaders): `--recolours` is not done.
 - No LOD, no specular/environment maps (blended glass is flat), one texture per material.

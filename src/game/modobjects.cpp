@@ -342,9 +342,16 @@ void ObjectFolderImpl::AddModObjects() {
 }
 
 // PC mod: mods. After an object's init tree (cXObjectImpl::Reset, cXMTObjectImpl::Reset): a mod
-// object's init_data (data index := value), e.g. the heights it may stand at (data 4).
+// object's init_data (data index := value, or |= / &= it), e.g. the heights it may stand at (data 4), a
+// ceiling lamp's zero extent (data 8 bit 2), inside only (data 0x1E 2) and no layer (data 0x3F 0).
 void cXObjectImpl::ApplyModInitData() {
   const simmy::ModObject* m = m_selector ? m_selector->m_modObject : nullptr;
   if (!m) return;
-  for (const auto& d : m->initData) m_data.WriteVar(d.first, static_cast<short>(d.second));
+  for (const auto& d : m->initData) {
+    const int index = d.first & 0xff;
+    short v = static_cast<short>(d.second);
+    if (d.first & simmy::ModObject::kInitOr) v = static_cast<short>(m_data[index] | v);
+    else if (d.first & simmy::ModObject::kInitAnd) v = static_cast<short>(m_data[index] & v);
+    m_data.WriteVar(index, v);
+  }
 }
