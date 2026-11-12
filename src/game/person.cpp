@@ -1203,6 +1203,7 @@ int cXPersonImpl::TryGotoRoutingSlot(StackElem* frame, const unsigned char* para
     return -1;
   }
   RoutingSlot slot = slots[static_cast<size_t>(index)];
+  ModRouteFront(object->GetObjectImplementation(), slot);  // PC mod: mods (route_front)
   slot.m_flags &= ~static_cast<unsigned int>(RoutingSlot::kFailureTrees);
   if (!(params[4] & 1)) slot.m_flags |= RoutingSlot::kFailureTrees;
   return TryGotoRoutingSlot(frame, &slot);
@@ -2062,6 +2063,7 @@ int cXPersonImpl::TryGotoRelative(StackElem* frame, const unsigned char* params)
     SIMMY_STUB("cXPersonImpl::TryGotoRelative: a bad facing (vtable 0x50C)", 0x80124370);
     return 0;
   }
+  ModRouteFront(ImplOf(GetObjectFromID(frame->m_stackObject)), slot);  // PC mod: mods (route_front)
   return TryGotoRoutingSlot(frame, &slot);
 }
 

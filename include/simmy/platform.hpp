@@ -326,6 +326,23 @@ struct ModObject {
   std::string animBase;
   unsigned int animModel = 0;
   std::vector<Node> nodes;
+  // Electronics (shader_swaps = 1): the base's state table keeps its shader changes (ObjAnimDef +0x0C
+  // the shader replaced, +0x10 its replacement: a GameCube TV's channels on its screen shader, which a
+  // converted TV's screen strip uses); state_shaders = s:0xSHADER ... gives those states another
+  // replacement (the PC TV's own screen switched off).
+  bool shaderSwaps = false;
+  std::vector<std::pair<int, unsigned int>> stateShaders;
+  // wall_model = 0 | 1: how its model is drawn (ResData +5; -1 the base's): 1 as a wall object (pushed
+  // 0.45 tiles toward the wall behind it), 0 as a floor or table-top object (a PC table phone made from
+  // the GameCube's wall phone).
+  int wallModel = -1;
+  // route_front = 1: its routing slots that put a person on its own tile (the GameCube wall phone's: the
+  // caller stands under the phone) put the person on the tile in front, facing it (a PC table phone on a
+  // table, made from the wall phone: its tile is the table's).
+  bool routeFront = false;
+  // same_type = 1: trees looking for the base's GUID (object searches by type, type tests) find this
+  // object too: the fire notifies a converted smoke alarm, an incoming call rings a converted phone.
+  bool sameType = false;
 };
 void mods_init();                // once at start-up (main thread), after settings_load
 bool mods_enabled();             // a mod folder was found (also when it holds no mods)

@@ -178,6 +178,8 @@ int ObjectSlotCount(cXObjectImpl* object);
 void ObjectSlotHeight(const unsigned char* descriptor, int& height, float& alt);
 // The global routing slots (the global object file's slot list 100; GC ObjectModuleImpl +0x2078).
 const std::vector<RoutingSlot>& GlobalRoutingSlots();
+// PC mod: mods: a route_front mod object's slots on its own tile moved to the tile in front (xrouting.cpp).
+void ModRouteFront(cXObjectImpl* object, RoutingSlot& slot);
 // Where `slot` of `object` is (FTilePt; GC: TrySnap's object rotation and iso frame).
 void RoutingSlotPosition(cXObjectImpl* object, const RoutingSlot& slot, int out[2]);
 // PC stand-in for cXObjectImpl::CanPlace (vtable 0x134) of a person at `pos` (FTilePt): on the lot, no

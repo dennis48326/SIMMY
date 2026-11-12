@@ -1,12 +1,14 @@
 # PC mod: mods (objects from the PC game)
 
 Lets the player add objects converted from **their own** copy of The Sims 2 for PC: by default every
-buy-mode **Decorative**, **Surfaces**, **Seating**, **Appliances**, **Lighting** and **Plumbing** object and every **bed**
+buy-mode **Decorative**, **Surfaces**, **Seating**, **Appliances**, **Lighting**, **Plumbing** and **Electronics** object and every **bed**
 of the base game and of every expansion and stuff pack installed (about 560 decorative objects, 170
 counters, tables and desks, 180 chairs, sofas, benches, stools and beds, 54 fridges, stoves, grills,
 microwaves, toaster ovens, coffee makers, food processors, juicers, dishwashers, trash compactors,
 food displays and food stands, 145 table, floor, wall and ceiling lamps, outdoor lights and
-streetlamps, and 36 toilets, showers, bathtubs, sinks and hot tubs with the Ultimate Collection). Surfaces work as
+streetlamps, 36 toilets, showers, bathtubs, sinks and hot tubs, and 65 TVs, computers, stereos, speakers,
+jukeboxes, DJ booths, arcade and pinball machines, phones, alarms, clocks and vending machines with the
+Ultimate Collection). Surfaces work as
 surfaces: things go on their tops at the PC height, sims prepare food on the counters, eat at the
 tables and use computers on the desks, and counters join up in rows and corners. Seating and beds
 work as the GameCube's: sims sit on them (at the PC seat's height), pull dining chairs up to tables and
@@ -21,6 +23,10 @@ from the ceiling, inside only, with sims and furniture under them. Plumbing work
 toilets, showers, bathtubs, sinks and hot tubs (bladder, hygiene, comfort and fun; washing hands and
 dishes; dirt, clogs, breaking and repairs), sims sitting, standing and lying in the PC model, with the
 PC's dirty looks; counter sinks go into counters, converted ones too (which show a hole for them).
+Electronics work as the GameCube's TVs, computers, stereos, DJ booth, arcade and pinball machines, game
+console, phone, alarms and vending machines (watch TV and change channels, play, blog, design games, find a
+job, dance, call, buy a drink), the PC TV or computer showing the GameCube's own screens (the channels, the
+games, the blog, the job search) on its screen when on and the PC's switched-off screen when off.
 Off unless a mod folder exists; with none, nothing in the game changes
 (no extra memory, same determinism hash).
 
@@ -35,8 +41,8 @@ Its PC install and disc paths are set at the top of the file.
 
 | | |
 |---|---|
-| `convert_pc_object.bat` | every Decorative, Surfaces, Seating (beds included), Appliances, Lighting and Plumbing object of every pack under the install, into `mods` next to simmy.exe (progress per object with the percentage and time; about three minutes for every pack of the Ultimate Collection on two cores) |
-| `convert_pc_object.bat decorative` / `surfaces` / `seating` / `appliances` / `lighting` / `plumbing` | only that buy-mode category (several may be given: `decorative seating`) |
+| `convert_pc_object.bat` | every Decorative, Surfaces, Seating (beds included), Appliances, Lighting, Plumbing and Electronics object of every pack under the install, into `mods` next to simmy.exe (progress per object with the percentage and time; about three minutes for every pack of the Ultimate Collection on two cores) |
+| `convert_pc_object.bat decorative` / `surfaces` / `seating` / `appliances` / `lighting` / `plumbing` / `electronics` | only that buy-mode category (several may be given: `decorative seating`) |
 | `convert_pc_object.bat list ficus` | PC objects whose name contains "ficus" |
 | `convert_pc_object.bat inventory` | only the inventory (`mods\pcobj_inventory.tsv`) |
 | `convert_pc_object.bat "No-Fuss Ficus"` | one object (name or GUID), base chosen automatically |
@@ -46,27 +52,27 @@ By hand (Python 3 with numpy and Pillow, nothing else):
 
 ```
 python tools/pcobj/pcobj_convert.py --pc "C:\Games\The Sims 2 Ultimate Collection" \
-    --gc D:\Games\Sims2.iso --out C:\Games\SIMMY\mods --categories decorative,surfaces,seating,appliances,lighting,plumbing
+    --gc D:\Games\Sims2.iso --out C:\Games\SIMMY\mods --categories decorative,surfaces,seating,appliances,lighting,plumbing,electronics
 ```
 
 `--pc` is the install folder (every `TSData/Res` under it is a pack); `--gc` the GameCube data the port
-plays (disc image or extracted folder). `--categories decorative,surfaces,seating,appliances,lighting,plumbing`
+plays (disc image or extracted folder). `--categories decorative,surfaces,seating,appliances,lighting,plumbing,electronics`
 (or `all`; also `--all-decorative`, `--all-surfaces`, `--all-seating`, `--all-appliances`,
-`--all-lighting`, `--all-plumbing`) picks the buy-mode
+`--all-lighting`, `--all-plumbing`, `--all-electronics`) picks the buy-mode
 categories. Other modes: `--object <GUID|name> [--base <GameCube object>]`,
 `--batch list.tsv` (GUIDs in the first column, an optional base in the second), `--list <text>`,
 `--inventory <file.tsv>` (classify only, write nothing else). Options: `--packs base,ep1,sp4,...` (by
 home pack), `--jobs N` (worker processes; default CPUs - 1), `--texsize` (largest texture side, 256).
 Converting again replaces the folders it wrote; `mods/pcdeco_inventory.tsv`,
 `mods/pcsurf_inventory.tsv`, `mods/pcseat_inventory.tsv`, `mods/pcappl_inventory.tsv`,
-`mods/pclight_inventory.tsv` and `mods/pcplumb_inventory.tsv` keep one row per object (converted or skipped, and why; `pc_tab` the PC
+`mods/pclight_inventory.tsv`, `mods/pcplumb_inventory.tsv` and `mods/pcelec_inventory.tsv` keep one row per object (converted or skipped, and why; `pc_tab` the PC
 buy-mode tab of the object's catalogue function, `gc_tab` the GameCube tab it is put on).
 
 Start the game. The mod folder is `mods=` in simmy.ini (relative to the ini), else `SIMMY_MODS`, else
 `mods` next to the exe. The log says `[mods] <dir>: n mod(s), n object(s) (n multi-tile parts), n
 resource(s); read in n ms` and `[mods] objects: n added (n multi-tile), n skipped; rows ...` (with
 `SIMMY_MODS_VERBOSE=1`, or 20 objects or fewer, a line per object; a skipped object always says why).
-The objects are in buy mode on the **Decorative**, **Surfaces**, **Seating & Beds**, **Appliances**, **Lighting** and **Plumbing** tabs with the PC name, description,
+The objects are in buy mode on the **Decorative**, **Surfaces**, **Seating & Beds**, **Appliances**, **Lighting**, **Plumbing** and **Electronics** tabs with the PC name, description,
 price and room rating and a rendered thumbnail. With a mod folder the **C stick** left/right pages that catalogue
 four columns at a time (the GameCube's movie only moves a column at a time; the tab can hold 600+).
 
@@ -480,6 +486,80 @@ counter the cut-out is the GameCube's (larger than the PC rims), so a converted 
 counter's top, as a second sub-object. Kitchen sinks wash dishes as the GameCube's sinks do (Wash
 Dishes, function 0x18).
 
+## Electronics
+
+**Inventory.** Lead OBJDs with the catalogue function Electronics (word 0x28 bit 0x08; sub-sorts 1
+entertainment, 2 TVs and computers, 4 audio, 8 small electronics, 0x80 misc), and the PC's massage
+table (filed under Hobbies; the GameCube keeps its massage table on Electronics). The kind from the
+semi-global (TelevisionGlobals, ComputerGlobals, StereoGlobals, ArcadeGlobals, PinballMachineGlobals,
+VideoGame_Globals, PhoneGlobals, Clock_Alarm_Globals, ...) and the object name (wall TVs, wall and
+community speakers, the jukebox, DJ booths, the karaoke machine, burglar and smoke alarms, wall clocks,
+the public phone, vending machines). 75 with the Ultimate Collection: 65 converted; left out, with the
+reason in the inventory: the three remote-controlled toys (car, classic car, helicopter: toys, for a
+later Misc category), the karaoke machine (3x3; no singing on the GameCube), the three cash registers,
+the ticket machine and the gadget kiosk (shop objects: the GameCube has no businesses) and the massage
+table (the GameCube's is a machine whose robot arms massage, which the PC table has none of).
+
+**The GameCube's electronics** (catalogue function 8). TVs `electronics_tv_cheap_stand` and
+`electronics_tv_normal` (one tile, each a group of two parts on that tile) and `electronics_tv_plasma_1x3`
+(2x1): turn on / off, watch (standing or from a seat), channels, repair. Their screen is one strip with the
+shader "tv_screen_search" that every state replaces (ObjAnimDef +0x0C the shader replaced, +0x10 its
+replacement: news, food, music, horror, each an 8-frame flipbook; switched off the dark "screen 00").
+Computers `electronics_computer_cheap` / `_expensive` (blog, play, design a game, find a job, chat; at a
+desk, from a chair facing it): the screen is a quad per node (blog, chat, design, three games, job, off,
+shutdown, startup), each with its own shader; the state animations show one node and hide the others.
+Stereos: `electronics_stereo_boombox2` (on tables), `electronics_stereo_expensive` and
+`electronics_stereo_jukebox` (2x1), `electronics_stereo_djbooth` (3x2: play music, DJ, fire, fog,
+laser): play music, dance, switch station. `electronics_arcade_regular` (its attract and in-use screens
+on nodes), pinball machines (1x2), `electronics_game_console`, `electronics_phone_wall` (calls,
+services, pranks: the caller stands under the phone), `electronics_alarm_burglar`,
+`electronics_alarm_fire` (on walls), `electronics_alarm_clock`, `electronics_vending_drink` /
+`_hotdog`. All are animated objects (a character, state animations, effects).
+
+**What each PC object becomes.**
+
+| PC kind | GameCube base | |
+|---|---|---|
+| TV, 1 tile | `electronics_tv_cheap_stand` (PC fun <= 6), `electronics_tv_normal` | the base's two parts on the tile (`base_parts`, the tile listed twice) |
+| TV, 2 or 3 tiles | `electronics_tv_plasma_1x3` | 2x1 as the base's parts; the 3x1 home theatre a part per tile |
+| wall TV | as the TVs + `init_data = 8:\|0x14 0xD:0x4` | a wall object (on a wall, not on the floor), the PC mesh at its PC height |
+| computer | `electronics_computer_cheap` (price <= 1500), `_expensive` | on desks and tables; a monitor the PC raises by animation (lying flat in its bind pose) stood up |
+| stereo 1x1 / 2x1 | `electronics_stereo_boombox2` / `electronics_stereo_expensive` | |
+| wall / community speaker | `electronics_stereo_boombox2` + `init_data = 4:0x1 8:\|0x14 0xD:0x4` | a wall object |
+| jukebox, DJ booth | `electronics_stereo_jukebox`, `electronics_stereo_djbooth` | the 2x2 PC booth in the middle of the 3x2 GameCube footprint |
+| arcade machine | `electronics_arcade_regular` | the GameCube's screens on the PC screen |
+| pinball machine | `game_pinball_machine` / `_ufo` / `_shark` (1x2) | |
+| video game system | `electronics_game_console` | |
+| wall phone | `electronics_phone_wall` | the handset on the base's handset node |
+| table phone | `electronics_phone_wall` + `wall_model = 0`, `init_data = 4:0x8C 8:&0xFFEB 0xD:0x0`, `route_front = 1` | on tables, desks and counters; the caller stands in front of it |
+| public phone | `electronics_phone_wall` + `wall_model = 0`, `init_data = 8:&0xFFEB` | on the floor by a wall |
+| burglar / smoke alarm, alarm clock | `electronics_alarm_burglar`, `electronics_alarm_fire`, `electronics_alarm_clock` | |
+| wall clock | `art_wall_painting_01` | wall art (the GameCube has no wall clock), on the Electronics tab |
+| drink / snack machine | `electronics_vending_drink` / `electronics_vending_hotdog` | |
+
+**Screens.** The PC's screen is its subset "screen" (or a material named so). A TV's screen strip takes the
+base's screen shader (the disc's "tv_screen_search", 0x0E96A4E8), its uvs laid over the PC screen's
+bounding box as the base's quad lays them (an affine fit of the base quad's uvs to where each corner is
+across and up its box, applied to the PC screen's box); `shader_swaps = 1` keeps the base's per-state
+shader changes, so the TV shows the GameCube's channels, and `state_shaders = 0:0x.. 4:0x..` gives the
+states that switch it off (those whose replacement is state 0's) the PC TV's own switched-off screen.
+A computer's or arcade machine's PC screen is copied onto each of the base's screen nodes with that
+node's GameCube shader and uvs, the switched-off node with the PC's own screen material (or, when the PC
+material is its bare "screen" placeholder, the base's off quad); the base's state animations show the
+right one. The base model's light (a TV's glow) goes in front of the PC screen (`light`). All other PC
+parts are on the base's body node; a phone's handset on the base's handset node (turning about the PC
+handset's middle as the base's moves).
+
+**Engine support** (all inert without a mod that uses it): `shader_swaps` / `state_shaders` (CopyDef keeps
+or replaces ObjAnimDef +0x0C / +0x10), a tile listed twice in `tiles` with `base_parts` takes the base's
+second part on that tile (`BasePart`), `wall_model` (ResData +5: drawn as a wall or a floor object),
+`route_front` (`ModRouteFront` in xrouting.cpp, from `TryGotoRoutingSlot` / `TryGotoRelative` and the
+snap-to-slot primitive: a routing slot on the object's own tile moved to the tile in front, facing it:
+the GameCube's caller stands under the wall phone, on a table phone's tile stands a table),
+`same_type` (`ObjSelector::m_modBaseGuid`: SetToNext by GUID (kind 4) and TestObjectType find the mod
+when they look for its base's GUID: the fire's "notify fire alarm" wakes a converted smoke alarm,
+"Master - Set Ringing" rings converted phones).
+
 ## Mod folder
 
 ```
@@ -495,6 +575,8 @@ mods/
   pcplumb_inventory.tsv     every plumbing object: kind, base, seat / water height and offset, the
                             parts on nodes and the dirty / clogged states ("pieces": seat_rot>node3
                             dirty:2st clogged:2st), a counter sink's cut-out (notes)
+  pcelec_inventory.tsv      every electronics object: kind, base, footprint, its screen (the base's screen
+                            nodes or swap) and handset ("pieces": screen>nodes:2,3,..,9off handset>node1)
                             (every inventory: pc_tab / gc_tab, the PC and the GameCube buy-mode tab)
   pc3_nofussficus_4cc4fd6c/ "pc<sort>_<name>_<GUID>" (sort: 1 plants, 2 sculptures, 3 wall art,
     mod.ini                 4 mirrors, 5 rugs, 6 curtains, 7 misc; surfaces "pcs<k>_": 1 counters,
@@ -506,7 +588,9 @@ mods/
                             4 coffee makers, processors, juicers, 5 dishwashers, compactors;
                             lighting "pcl<k>_": 1 table, 2 floor, 3 wall, 4 ceiling, 5 outdoor lamps;
                             plumbing "pcp<k>_": 1 toilets, 2 showers, 3 bathtubs and shower / tubs,
-                            4 sinks, 5 hot tubs)
+                            4 sinks, 5 hot tubs; electronics "pce<k>_": 1 TVs, 2 computers, 3 stereos,
+                            speakers, jukeboxes, DJ booths, 4 arcade and pinball machines, game
+                            systems, 5 phones, 6 alarms and clocks, 7 vending machines)
     models_96DA08B7.res     resources in the GameCube's own formats, as an archive holds them
     shaders_1FBB3FA3.res    ("<manager>_<id>.res": models, shaders, textures, ... any manager)
     textures_3A540C0D.res
@@ -523,7 +607,8 @@ mod.ini `[object]` keys: `guid`, `base` (object file) or `base_guid`, `name`, `d
 ceiling objects), `light` (`x,y,z[:r,g,b[:falloff]]`: a lamp's light), `model_sink`, `model_sink_wide`, `model_sink_gc`
 (a counter's top with a hole for a sink; the last for a GameCube sink), `sink_shift` (a counter: how far
 along the PC's y a GameCube sink in it is drawn, -0.5..0.5), `sink_hole` (`narrow` / `wide`: a counter sink's), `model_flange`
-(a counter sink's flange in a GameCube counter), `pack` (informational). Mods are read in folder-name order; a GUID
+(a counter sink's flange in a GameCube counter), `shader_swaps`, `state_shaders` (a TV's channels; its
+own screen when off), `wall_model` (0 / 1), `route_front`, `same_type` (electronics), `pack` (informational). Mods are read in folder-name order; a GUID
 or resource id given twice keeps the first. A resource id the disc has is never taken from a mod.
 
 ## How it works
@@ -541,6 +626,7 @@ or resource id given twice keeps the first. A resource id the disc has is never 
 | Appliances | `CopyDef` (modobjects.cpp: the character and state table kept), `ISimsObjectModel::ModNodes` (isimsobjectmodel.cpp), `GetObjSelector3dDisplayInfo` (pcttarget.cpp), `cXObjectImpl::ApplyModInitData` (modobjects.cpp, from `Reset` / `cXMTObjectImpl::Reset`) | The base's skeleton, animations and effects; the bound model's nodes drawn by their turn from rest about the PC hinges; the still model in the catalogue preview; `init_data` after each init tree. `SIMMY_OBJ_NODE_TRACE`, `SIMMY_OBJ_STATE_TRACE`, `SIMMY_OBJ_STATE_FORCE` (testing.md) |
 | Lamps | `CopyDef` (as appliances: the base's character and on/off state table), `ISimsObjectModel::AnimateLights` (isimsobjectmodel.cpp), `ApplyModInitData` (`\|` / `&` ops) | The model's light (its SimsLightInfo, created by `SetupCharacter` and switched by the state animations as a GameCube lamp's) at `light`'s place with its colour and falloff; the on / off parts in sub-models on the base's on / off nodes, hidden by the state's node flags (`ERModel::DrawHierarchical`); a ceiling lamp's zero extent, layer and inside-only data after its init tree |
 | Plumbing | `CopyDef` (as appliances; up to 48 states: a bathtub has 36), `ModNodes`, `ModSeatOffset` (a sim in a toilet or a hot tub is its container's), `ISimsCounterTopObject::SetObjOrient` (isimsobjectmodel.cpp) | The base's skeleton, states and effects; the seat on its node; a converted counter with a sink on its tile shows its holed top (`model_sink` / `model_sink_wide` by the sink's `sink_hole`; a GameCube sink: `model_sink_gc`, drawn `sink_shift` back by `ISimsObjectModel::ApplyMatrix`), a GameCube counter with a converted sink adds the sink's flange (`model_flange`) as a second sub-object next to its cut-out top; `SIMMY_COUNTER_TRACE=1` logs the choice. `SIMMY_CENSOR_OFF=1` (testing.md) turns the mosaic off for screenshots |
+| Electronics | `CopyDef` (as appliances; `shader_swaps` / `state_shaders`, `wall_model`), `BasePart` (a tile listed twice), `ModRouteFront` (xrouting.cpp; from `TryGotoRoutingSlot`, `TryGotoRelative`, the snap primitive), `TrySetToNext` kind 4 / `TryTestObjectType` (objectsim.cpp: `m_modBaseGuid`) | The base's screens on the PC screen (its shader swaps, its screen nodes); a table phone's caller in front of it; the base's GUID searches find same-type mods |
 | Fire code | `EIObjectMan::CountObjects` (iobjectman.cpp) | A mod object's model counts at 5/7 of its size: what it would weigh with the disc's fixed-point vertices (16 bytes a vertex against 28) |
 | Saves | unchanged | `objt` names types by GUID; a mod object (and each part) saves and loads like any other |
 
@@ -573,6 +659,7 @@ file name in a place action may name a mod object, which copies the file: use GU
 | `pcseat.py` | Seating and beds: kinds, bases by footprint and rating, the seat's height, the beds' made / slept-in models and halves |
 | `pclight.py` | Lighting: placement, bases, the materials by lamp state (lit / unlit / effect, glowing), the PC lights (CRES light nodes, light resources) -> one light record |
 | `pcplumb.py` | Plumbing: kinds, bases by tier, the bases' footprints, seat / water nodes and dirty / clogged states, the seat and water heights, clean / dirty material swaps |
+| `pcelec.py` | Electronics: kinds, bases by footprint and tier, the bases' groups, placement changes (wall TVs, speakers, table phones), the screen subset, the base's screens (swap or nodes, uv fit), a monitor stood up |
 | `pcobj_convert.py` | Inventory, placement, base choice, materials, MODL/shaders, thumbnail, mod.ini; batch with worker processes |
 
 ## Limits
@@ -628,6 +715,16 @@ file name in a place action may name a mod object, which copies the file: use GU
   sink's hole in a converted counter is cut in the counter's own frame (a sink turned on its counter
   shows the hole turned); dirty counters with a sink in them show their clean holed top. GameCube
   counters keep their larger cut-out: the converted sink's flange fills it in the rim's colour.
+- Electronics behave as their GameCube base (fun, the channels, the computer's interactions and job
+  search, the phone's calls, the alarms; the base tier's fun). PC-only behaviour is not converted (no
+  channel per PC TV, no PC computer games or careers, the community speakers play the GameCube's
+  stations, a jukebox does not pick records, the DJ booth's lights and the pinball's lit playfield are
+  static, no RC toys, no karaoke, no shop registers or kiosks, no massage table). A phone's handset stays
+  on the phone during a call (as the GameCube's: its handset node does not move); a table phone's caller
+  plays the GameCube's wall-phone animation one tile in front of the table. Wall TVs and speakers are
+  floor bases made wall objects (`init_data`): their mesh hangs at the PC height. The 2x2 DJ booths take
+  the GameCube booth's 3x2 tiles; the 3x1 home theatre TV is a group of plasma copies. Wall clocks are
+  wall art (no time on them). Recolours: the default only.
 - Recolours: only the default (the inventory counts the others). Each would be another catalogue entry
   with its own shader/texture and a model copy (the MODL names its shaders): `--recolours` is not done.
 - No LOD, no specular/environment maps (blended glass is flat), one texture per material.

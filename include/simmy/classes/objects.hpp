@@ -145,6 +145,10 @@ struct ObjSelector {
   // object (counter pieces; the mod list is immutable after start-up).
   float m_modSurface = -1.0f;
   const simmy::ModObject* m_modObject = nullptr;
+  // PC mod: mods (same_type = 1): the GUID of the GameCube definition this one copies; trees looking for
+  // that GUID (SetToNext kind 4, TestObjectType) find this object too (the fire alarm the fire notifies,
+  // the phones an incoming call rings). 0: none.
+  unsigned int m_modBaseGuid = 0;
 };
 
 struct ObjectFolderImpl {

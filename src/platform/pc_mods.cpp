@@ -40,6 +40,13 @@
 //                              (moved back: its rim's front on the top's front edge)
 //   sink_hole = narrow | wide  a counter sink: the hole it needs in a converted counter
 //   model_flange = 0x...       a counter sink: drawn round it in a GameCube counter's (larger) cut-out
+//   shader_swaps = 1           an animated object keeps its base's per-state shader changes (a TV's
+//                              channels on its screen shader)
+//   state_shaders = 0:0x... 4:0x...   ... with these states' replacement shaders instead (a TV off)
+//   wall_model = 0 | 1         drawn as a floor / table-top object (0) or a wall object (1) whatever the
+//                              base is (a table phone made from the wall phone)
+//   route_front = 1            routing slots on its own tile are moved to the tile in front, facing it
+//   same_type = 1              trees looking for the base's GUID find it too (alarms, phones)
 // Resource files next to it: "<manager>_<8 hex digits>.res", e.g. "models_9A3F0C12.res". Only their
 // names are read at start-up; a resource is read from its file each time the game loads it.
 #include "pc_settings.hpp"
@@ -243,6 +250,14 @@ void LoadModIni(const std::string& mod, const std::string& path) {
       cur->seatOffset = static_cast<float>(std::atof(v.c_str()));
       ok = cur->seatOffset > -1.0f && cur->seatOffset < 1.0f;
     } else if (key == "state_models") ok = ParseStates(v, cur->states);
+    else if (key == "state_shaders") ok = ParseStates(v, cur->stateShaders), cur->shaderSwaps = true;
+    else if (key == "shader_swaps") cur->shaderSwaps = std::atoi(v.c_str()) != 0;
+    else if (key == "route_front") cur->routeFront = std::atoi(v.c_str()) != 0;
+    else if (key == "same_type") cur->sameType = std::atoi(v.c_str()) != 0;
+    else if (key == "wall_model") {
+      cur->wallModel = std::atoi(v.c_str()) != 0 ? 1 : 0;
+      ok = v == "0" || v == "1";
+    }
     else if (key == "base_parts") cur->baseParts = std::atoi(v.c_str()) != 0;
     else if (key == "comfort") cur->comfort = std::atoi(v.c_str());
     else if (key == "energy") cur->energy = std::atoi(v.c_str());

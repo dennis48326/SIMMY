@@ -5,13 +5,16 @@ rem Needs Python 3 (python.org; tick "Add to PATH") - the first run installs num
 rem Nothing is downloaded from EA or anywhere else; see docs\mods.md.
 rem
 rem   convert_pc_object.bat                     every Decorative, Surfaces, Seating and Beds, Appliances,
-rem                                             Lighting and Plumbing object of every pack found (default)
+rem                                             Lighting, Plumbing and Electronics object of every pack
+rem                                             found (default)
 rem   convert_pc_object.bat decorative          only the Decorative objects
 rem   convert_pc_object.bat surfaces            only the Surfaces objects (counters, tables, desks, ...)
 rem   convert_pc_object.bat seating             only the Seating objects and Beds (chairs, sofas, stools, beds, ...)
 rem   convert_pc_object.bat appliances          only the Appliances (fridges, stoves, microwaves, dishwashers, ...)
 rem   convert_pc_object.bat lighting            only the Lighting (table, floor, wall and ceiling lamps, outdoor lights)
 rem   convert_pc_object.bat plumbing            only the Plumbing (toilets, showers, bathtubs, sinks, hot tubs)
+rem   convert_pc_object.bat electronics         only the Electronics (TVs, computers, stereos, phones, alarms,
+rem                                             arcade and pinball machines, vending machines, ...)
 rem   convert_pc_object.bat decorative seating  several categories
 rem   convert_pc_object.bat list ficus          list PC objects whose name contains "ficus"
 rem   convert_pc_object.bat inventory           write the inventory (mods\pcobj_inventory.tsv) only
@@ -29,7 +32,10 @@ rem PC lamp's colour, its shade glowing when on, switching on at night by itself
 rem do; ceiling lamps hang from the ceiling, inside only, sims and furniture under them; plumbing: the
 rem GameCube's toilet, shower, bathtub, sink or hot tub of that kind and price, sims sitting, standing and
 rem lying in the PC model, with the PC's dirty and clogged looks; shower / tub combinations are bathtubs,
-rem counter sinks go into counters, also converted ones, which show a hole for them). Delete its folder
+rem counter sinks go into counters, also converted ones, which show a hole for them; electronics: the
+rem GameCube's TV, computer, stereo, jukebox, DJ booth, arcade or pinball machine, game console, phone,
+rem alarm or vending machine that does the same, the PC TVs and computers showing the GameCube's screens:
+rem channels, games, job search). Delete its folder
 rem in mods to remove it (saves stay loadable). Converting again replaces the folders it wrote. Takes
 rem about three minutes for all packs on two cores (progress per object, with the percentage and the
 rem time so far).
@@ -54,7 +60,7 @@ if /i "%~1"=="inventory" (
   pause
   exit /b
 )
-rem category arguments: decorative, surfaces, seating, appliances, lighting, plumbing (any of them, in any order)
+rem category arguments: decorative, surfaces, seating, appliances, lighting, plumbing, electronics (any of them, in any order)
 set "CATS="
 for %%C in (%*) do (
   if /i "%%~C"=="decorative" set "CATS=!CATS!,decorative"
@@ -65,13 +71,14 @@ for %%C in (%*) do (
   if /i "%%~C"=="lighting" set "CATS=!CATS!,lighting"
   if /i "%%~C"=="lamps" set "CATS=!CATS!,lighting"
   if /i "%%~C"=="plumbing" set "CATS=!CATS!,plumbing"
+  if /i "%%~C"=="electronics" set "CATS=!CATS!,electronics"
 )
 if defined CATS (
   echo Converting every %CATS:~1% object of every pack under "%PC%" ...
   python "%TOOL%" --pc "%PC%" --gc "%ISO%" --categories %CATS:~1% --out "%BIN%\mods"
 ) else if "%~1"=="" (
-  echo Converting every Decorative, Surfaces, Seating and Beds, Appliances, Lighting and Plumbing object of every pack under "%PC%" ...
-  python "%TOOL%" --pc "%PC%" --gc "%ISO%" --categories decorative,surfaces,seating,appliances,lighting,plumbing --out "%BIN%\mods"
+  echo Converting every Decorative, Surfaces, Seating and Beds, Appliances, Lighting, Plumbing and Electronics object of every pack under "%PC%" ...
+  python "%TOOL%" --pc "%PC%" --gc "%ISO%" --categories decorative,surfaces,seating,appliances,lighting,plumbing,electronics --out "%BIN%\mods"
 ) else if "%~2"=="" (
   python "%TOOL%" --pc "%PC%" --gc "%ISO%" --object "%~1" --out "%BIN%\mods"
 ) else (
@@ -79,8 +86,8 @@ if defined CATS (
 )
 echo.
 echo Done (exit code %ERRORLEVEL%). Start the game: the objects are in buy mode, Decorative,
-echo Surfaces, Seating ^& Beds, Appliances, Lighting and Plumbing tabs (the C stick pages four columns).
-echo The lists are mods\pcdeco_inventory.tsv, mods\pcsurf_inventory.tsv, mods\pcseat_inventory.tsv,
-echo mods\pcappl_inventory.tsv, mods\pclight_inventory.tsv and mods\pcplumb_inventory.tsv (with each
-echo object's PC and GameCube tab).
+echo Surfaces, Seating ^& Beds, Appliances, Lighting, Plumbing and Electronics tabs (the C stick pages
+echo four columns). The lists are mods\pcdeco_inventory.tsv, mods\pcsurf_inventory.tsv,
+echo mods\pcseat_inventory.tsv, mods\pcappl_inventory.tsv, mods\pclight_inventory.tsv,
+echo mods\pcplumb_inventory.tsv and mods\pcelec_inventory.tsv (with each object's PC and GameCube tab).
 pause

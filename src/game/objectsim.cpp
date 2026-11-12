@@ -679,7 +679,10 @@ int cXObjectImpl::TrySetToNext(StackElem*, const unsigned char* params) {
     switch (kind) {
       case 1: match = isPerson && dynamic_cast<cXPersonImpl*>(impl) != nullptr; break;
       case 2: match = !isPerson; break;
-      case 4: match = impl->m_def && objdef::GUID(impl->m_def) == guid; break;
+      case 4:
+        match = impl->m_def && (objdef::GUID(impl->m_def) == guid ||
+                                (impl->m_selector && impl->m_selector->m_modBaseGuid == guid && guid != 0));  // PC mod: same_type
+        break;
       case 6: match = impl->GetData(0x3b) == m_treeSim->GetCurElem()->GetParams()[0]; break;
       case 8: {
         const CTilePt t = impl->GetCTilePt();
@@ -1670,7 +1673,8 @@ int cXObjectImpl::TrySnap(StackElem* frame, const unsigned char* params) {
       Error(0x1b);
       return -1;
     }
-    const RoutingSlot& slot = slots[static_cast<size_t>(n)];
+    RoutingSlot slot = slots[static_cast<size_t>(n)];
+    ModRouteFront(target, slot);  // PC mod: mods (route_front)
     if (slot.m_flags & RoutingSlot::kSnapToDirection) {
       int first = 0;
       while (first < 7 && !((slot.m_flags >> first) & 1)) ++first;
@@ -2359,6 +2363,7 @@ int cXObjectImpl::TryTestObjectType(StackElem*, const unsigned char* params) {
   }
   if (!impl->m_def) return 0;
   if (objdef::GUID(impl->m_def) == guid) return 1;
+  if (impl->m_selector && impl->m_selector->m_modBaseGuid == guid && guid != 0) return 1;  // PC mod: same_type
   const short master = objdef::MasterID(impl->m_def);
   const unsigned char* file = master ? SelectorResFile(impl->m_selector) : nullptr;
   const auto* defs = file ? static_cast<const unsigned char*>(ERQuickdata::Ptr(file, 0)) : nullptr;

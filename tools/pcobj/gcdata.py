@@ -157,7 +157,11 @@ class GcObjects:
                 na = q.u32(anim - 4) if anim is not None else 0
                 out.append(dict(guid=q.u32(d + 0x1C), type=q.s16(d + 0x12), master=q.s16(d + 0x14), sub=q.s16(d + 0x16),
                                 price=q.s16(d + 0x24), functions=q.s16(d + 0x50) & 0xFFFF,
-                                model=q.u32(anim) if na else 0, thumbnail=q.u32(rd + 0x1C) if rd is not None else 0))
+                                model=q.u32(anim) if na else 0, thumbnail=q.u32(rd + 0x1C) if rd is not None else 0,
+                                # the state table (ObjAnimDef: model, effects, animation, shader replaced,
+                                # its replacement, ...) and the animated character
+                                states=[tuple(q.u32(anim + 0x20 * k + 4 * w) for w in range(8)) for k in range(na)],
+                                character=q.u32(rd + 0x20) if rd is not None else 0))
             self.files[rf_name(q, rf, i)] = out
         self.guids = {d['guid'] for defs in self.files.values() for d in defs}
 
@@ -207,4 +211,59 @@ def parse_modl_shaders(b):
     p += 4; ns = be(p); p += 4
     for _ in range(min(ns, 1)):
         out.append(be(p + 4))
+    return out
+
+
+def modl_strips(b):
+    """A MODL's strips: [{'sub', 'node', 'shader', 'flags', 'P' (model units), 'U'}] (positions in the
+    sub-model's node space; uvs or None). Used for the GameCube screens a converted TV / computer copies."""
+    import numpy as np
+    ver, sig, var, name, off, size = data_header(b)
+    d = b[off:off + size]
+    be = lambda o: struct.unpack_from('>I', d, o)[0]
+    p = 0x35
+    n = be(p); p += 4 + n * 0x40
+    n = be(p); p += 4
+    for _ in range(n):
+        if be(p) != 0: p += 4; continue
+        nx, ny, nz, cnt = struct.unpack_from('>4I', d, p + 0x88)
+        p += 0x98 + (cnt * nx * ny * nz * 12 if cnt > 1 else 0)
+    for psize in (0x50, 0x60):
+        n = be(p); p += 4
+        for _ in range(n): p += 4 if be(p) != 0 else 0x4C + be(p + 0x48) * psize
+    n = be(p); p += 4 + n * 0x1C
+    scale = struct.unpack_from('>f', d, p + 1)[0]
+    nsub = be(p + 5); p += 9
+    out = []
+    for si in range(nsub):
+        node = be(p); ns = be(p + 4); p += 8
+        for _ in range(ns):
+            flags = be(p); sh = be(p + 4); nstr = be(p + 8); p += 12 + nstr + 4
+            while True:
+                tag = d[p]; p += 1
+                if tag == 0:
+                    vc = be(p); p += 4
+                    fixed = flags & 0x10
+                    if fixed:
+                        P = np.frombuffer(d[p:p + vc * 8], '>i2').reshape(-1, 4)[:, :3] * scale
+                    else:
+                        P = np.frombuffer(d[p:p + vc * 16], '>f4').reshape(-1, 4)[:, :3].astype(np.float64)
+                    p += vc * (8 if fixed else 16)
+                    U = None
+                    if flags & 2:
+                        if fixed:
+                            U = np.frombuffer(d[p:p + vc * 4], '>i2').reshape(-1, 2) / 4096.0
+                        else:
+                            U = np.frombuffer(d[p:p + vc * 8], '>f4').reshape(-1, 2).astype(np.float64)
+                        p += vc * (4 if flags & 0x40 else 2) * (2 if fixed else 4)
+                    if flags & 4: p += vc * 4
+                    if flags & 8: p += vc * (4 if ver >= 0x3A else 3)
+                    if flags & 0x20:
+                        dls = be(p + 5); p += 13 + dls
+                    if vc:
+                        out.append({'sub': si, 'node': node, 'shader': sh, 'flags': flags, 'P': P, 'U': U})
+                elif tag == 1:
+                    p += 3
+                elif tag == 6:
+                    break
     return out

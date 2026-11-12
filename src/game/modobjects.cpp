@@ -111,12 +111,13 @@ const std::vector<std::pair<int, unsigned int>>& NoStates() {
   return none;
 }
 
-// A group base's part at tile (x, y) (sub index x << 8 | y), or null.
-const ObjDefinition* BasePart(ObjectFolderImpl* folder, ObjSelector* lead, int x, int y) {
+// A group base's part at tile (x, y) (sub index x << 8 | y), or null; `which`: the n-th part there (the
+// GameCube's one-tile TVs are groups of two parts on one tile).
+const ObjDefinition* BasePart(ObjectFolderImpl* folder, ObjSelector* lead, int x, int y, int which = 0) {
   for (int n = 0;; ++n) {
     auto* part = reinterpret_cast<ObjSelector*>(folder->GetNthSubSelector(lead, n));
     if (!part) return nullptr;
-    if ((objdef::SubIndex(part->m_def) & 0xffff) == (x << 8 | y)) return part->m_def;
+    if ((objdef::SubIndex(part->m_def) & 0xffff) == (x << 8 | y) && which-- == 0) return part->m_def;
   }
 }
 
@@ -175,6 +176,7 @@ unsigned char* CopyDef(Tail& tail, const ObjDefinition* from, const simmy::ModOb
   else std::memset(res, 0, kResDataSize);
   PutPtr(res, animDefs);
   if (m.thumbnail) PutBE32(res + 0x1c, m.thumbnail);
+  if (m.wallModel >= 0) res[5] = static_cast<unsigned char>(m.wallModel);  // wall_model: how it is drawn
   if (model) PutBE32(res + 0x20, animRes ? ERQuickdata::U32(animRes, 0x20) : 0);
   // The state table: every state shows the mod's model, without the base's animation, effects and
   // shader swaps (they name the base model's parts); an animated appliance keeps animRes's animations
@@ -193,8 +195,16 @@ unsigned char* CopyDef(Tail& tail, const ObjDefinition* from, const simmy::ModOb
       PutBE32(d + 0x04, 0);
       PutBE32(d + 0x08, 0);
     }
-    PutBE32(d + 0x0c, 0);
-    PutBE32(d + 0x10, 0);
+    if (!m.shaderSwaps || !animRes) {
+      PutBE32(d + 0x0c, 0);
+      PutBE32(d + 0x10, 0);
+      continue;
+    }
+    // shader_swaps: the base's shader change kept (the mod's model uses the shader it replaces: a TV's
+    // screen); state_shaders: another replacement in that state
+    if (!ERQuickdata::U32(d, 0x0c)) continue;
+    for (const auto& st : m.stateShaders)
+      if (st.first == static_cast<int>(i)) PutBE32(d + 0x10, st.second);
   }
   return def;
 }
@@ -282,8 +292,11 @@ void ObjectFolderImpl::AddModObjects() {
         unsigned int model = stateModel;
         const std::vector<std::pair<int, unsigned int>>* states = &m.states;
         if (m.baseParts && base.group) {
-          // the base's part at this tile (a bed's sides, a sofa's seats): its slots, its model role
-          from = BasePart(this, base.selector, t.x, t.y);
+          // the base's part at this tile (a bed's sides, a sofa's seats): its slots, its model role (a
+          // tile listed twice: the base's second part there)
+          int which = 0;
+          for (const simmy::ModTile* o = m.tiles.data(); o != &t; ++o) which += o->x == t.x && o->y == t.y;
+          from = BasePart(this, base.selector, t.x, t.y, which);
           if (!from) {
             partsOk = false;
             break;
@@ -323,10 +336,12 @@ void ObjectFolderImpl::AddModObjects() {
     if (!s) continue;
     s->m_modObject = &m;
     s->m_modSurface = m.surface;
+    if (m.sameType) s->m_modBaseGuid = static_cast<unsigned int>(objdef::GUID(multi ? base.lead : base.drawing));
     for (size_t i = 0; i < parts.size(); ++i) {
       ObjSelector* part = add(parts[i]);
       if (!part) continue;
       part->m_modObject = &m;
+      if (m.sameType) part->m_modBaseGuid = s->m_modBaseGuid;
       part->m_modSurface = m.tiles[i].surface > 0.0f ? m.tiles[i].surface : m.surface;
     }
     s->m_modName = m.name;

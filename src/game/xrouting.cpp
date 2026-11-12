@@ -6,6 +6,7 @@
 #include "simmy/perf.hpp"
 #include "simmy/classes/placement.hpp"
 #include "simmy/countereat.hpp"
+#include "simmy/platform.hpp"
 #include "simmy/unported_globals.hpp"
 #include "simmy/detmath.hpp"
 
@@ -159,6 +160,16 @@ const std::vector<RoutingSlot>& ObjectRoutingSlots(cXObjectImpl* object) {
   if (id > 999) file = static_cast<const unsigned char*>(ERQuickdata::Ptr(file, 0x34));
   LoadRoutingSlots(file, id, slots);
   return slots;
+}
+
+// PC mod: mods (route_front). A routing slot (the object's own or a global one) on the object's own tile (no
+// direction bits) becomes one in front of it (direction bit 0, facing it): a table phone made from the wall
+// phone stands on a table's tile. Nothing changes for other objects.
+void ModRouteFront(cXObjectImpl* object, RoutingSlot& slot) {
+  const simmy::ModObject* mo = object && object->m_selector ? object->m_selector->m_modObject : nullptr;
+  if (!mo || !mo->routeFront || !slot.IsOnTopOfObject()) return;
+  slot.m_flags = (slot.m_flags & ~0xffu) | 0x01u;
+  slot.m_facing = RoutingSlot::kFaceTowards;
 }
 
 // SlotLoader::Load's object-slot part (type 0 entries, ObjectSlot::ObjectSlot 80142CAC): the flags
