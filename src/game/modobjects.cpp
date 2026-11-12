@@ -39,7 +39,7 @@ namespace {
 constexpr unsigned int kDefSize = 0xc4;      // an ObjDefinition row (pointer at +0xC0: ResData)
 constexpr unsigned int kResDataSize = 0x38;  // ResData (pointer at +0x00: the ObjAnimDef table)
 constexpr unsigned int kAnimDefSize = 0x20;  // ObjAnimDef (no pointers)
-constexpr unsigned int kMaxStates = 32;      // states copied (mods_tail_bytes counts as many)
+constexpr unsigned int kMaxStates = 48;      // states copied (mods_tail_bytes counts as many; a bathtub has 36)
 
 void PutBE32(unsigned char* p, unsigned int v) {
   p[0] = static_cast<unsigned char>(v >> 24), p[1] = static_cast<unsigned char>(v >> 16);
@@ -151,13 +151,17 @@ unsigned char* CopyDef(Tail& tail, const ObjDefinition* from, const simmy::ModOb
   if (m.price >= 0) PutBE16(def + 0x24, static_cast<unsigned int>(m.price > 0x7fff ? 0x7fff : m.price));
   if (m.functions >= 0) PutBE16(def + 0x50, static_cast<unsigned int>(m.functions));
   if (room >= 0) PutBE16(def + 0xb0, static_cast<unsigned int>(room));
-  // Motive ratings (+0xA4: hunger, comfort, hygiene, bladder, energy, fun): the PC object's comfort and
-  // energy where the base row has one (a sofa's lead its comfort, its parts their energy).
+  // Motive ratings (+0xA4: hunger, comfort, hygiene, bladder, energy, fun): the PC object's comfort,
+  // hygiene, bladder, energy and fun where the base row has one (a sofa's lead its comfort, its parts
+  // their energy; a toilet its bladder).
   auto rating = [&](unsigned int off, int v) {
     if (v >= 0 && ERQuickdata::S16(def, off) != 0) PutBE16(def + off, static_cast<unsigned int>(v > 10 ? 10 : v));
   };
   rating(0xa6, m.comfort);
+  rating(0xa8, m.hygiene);
+  rating(0xaa, m.bladder);
   rating(0xac, m.energy);
+  rating(0xae, m.fun);
   if (!withRes) {
     PutPtr(def + 0xc0, nullptr);
     return def;

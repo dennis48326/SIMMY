@@ -1446,6 +1446,20 @@ void ISimsObjectModel::ApplyMatrix(float angle, EVec3& pos, EVec3& scale) {
   EMat4 m;
   m.Id();
   m.Scale(scale);
+  // PC mod: mods. A GameCube counter sink in a converted counter (no ModObject of its own; the counter's
+  // sink_shift): drawn moved back in its own model space so its rim fits the PC top (model y is the
+  // PC's mirrored). Only drawing: its slots and routing are its container's as ever.
+  if (cXObject* holder = m_xob->GetContainer()) {
+    cXObjectImpl* hi = holder->GetObjectImplementation();
+    const simmy::ModObject* cm = hi && hi->m_selector ? hi->m_selector->m_modObject : nullptr;
+    cXObjectImpl* me = cm && cm->sinkShift != 0.0f ? m_xob->GetObjectImplementation() : nullptr;
+    const unsigned char* res = me ? objdef::ResData(m_xob->GetDef()) : nullptr;
+    if (res && res[7] != 0 && !(me->m_selector && me->m_selector->m_modObject))
+    {
+      EVec3 back(0.0f, -cm->sinkShift, 0.0f);
+      m.PostTranslate(back);
+    }
+  }
   m.PostRotateZ(angle);
   m.PostTranslate(at);
   for (auto& row : m.m) {
@@ -2044,8 +2058,29 @@ void ISimsCounterTopObject::SetObjOrient() {
   }
   ObjectIterator it;
   it.init(tile, ObjectIterator__IterateType{0});
+  bool modHole = false;
   for (; it.m_current; ++it) {
     if (!IsSinkId(it.m_current)) continue;
+    // PC mod: mods. A converted counter has no row: its own top with a hole (model_sink /
+    // model_sink_wide), narrow or wide by the sink's own need (a converted sink's sink_hole; the
+    // GameCube's sinks: wide); the sink draws itself.
+    ObjSelector* csel = !row ? m_xob->GetSelector() : nullptr;
+    const simmy::ModObject* cm = csel ? csel->m_modObject : nullptr;
+    if (cm && (cm->sinkModels[0] || cm->sinkModels[1])) {
+      ObjSelector* ssel = it.m_current->GetSelector();
+      const simmy::ModObject* sm = ssel ? ssel->m_modObject : nullptr;
+      // (a GameCube sink: its own hole, model_sink_gc, the sink drawn moved back: ApplyMatrix)
+      const int wide = sm ? (sm->sinkHole >= 0 ? sm->sinkHole : 1) : (cm->sinkModels[2] ? 2 : 1);
+      const unsigned int hole = cm->sinkModels[wide] ? cm->sinkModels[wide]
+                                : cm->sinkModels[1] ? cm->sinkModels[1] : cm->sinkModels[0];
+      static const bool trace = std::getenv("SIMMY_COUNTER_TRACE") != nullptr;
+      if (trace)
+        std::printf("[counter] #%d at %d,%d: sink #%d in a converted counter: %s hole 0x%08x\n", m_xob->GetID(),
+                    tile.GetX(), tile.GetY(), it.m_current->GetID(), wide == 2 ? "GameCube sink" : wide ? "wide" : "narrow", hole);
+      model = hole;
+      modHole = true;
+      break;
+    }
     if (!row) {  // PC: GC reads the row's fields through a null pointer here
       static bool logged = false;
       if (!logged) std::printf("[counter] no ECntrMdlLkupTable row for model 0x%08x\n", ERQuickdata::U32(defs, 0));
@@ -2061,6 +2096,23 @@ void ISimsCounterTopObject::SetObjOrient() {
     sink->OrentSubObject();
     m_subModels.push_back(sink);
     sink->m_objFlags |= 0x10000000u;
+    // PC mod: mods. A converted sink in a GameCube counter: the cut-out fits the GameCube's sinks; the
+    // converted one's flange (model_flange, its rim's colour) fills the gap round its smaller rim.
+    {
+      ObjSelector* ssel = it.m_current->GetSelector();
+      const simmy::ModObject* sm = ssel ? ssel->m_modObject : nullptr;
+      if (sm && sm->flangeModel) {
+        auto* flange = new ISimsObjectModel;
+        flange->m_house = m_house;
+        flange->SetXOb(it.m_current);
+        flange->m_thisSideData = static_cast<unsigned short>(it.m_current->GetID());
+        flange->m_thisSideFn = ThisSide;
+        flange->SetSOMModel(sm->flangeModel);
+        flange->OrentSubObject();
+        m_subModels.push_back(flange);
+        flange->m_objFlags |= 0x10000000u;
+      }
+    }
     if (m_level) InsertSubModelsInHouse(m_level);
     model = ERQuickdata::U32(row, 8);
     static const bool trace = std::getenv("SIMMY_BUILD_TRACE") != nullptr;  // PC dev aid
@@ -2071,7 +2123,7 @@ void ISimsCounterTopObject::SetObjOrient() {
   }
   // PC mod: a mod counter's piece by its neighbours (not with a sink in it: its own model)
   int drawDir = -1;
-  if (m_subModels.empty()) ModCounterPiece(m_xob, model, drawDir);
+  if (m_subModels.empty() && !modHole) ModCounterPiece(m_xob, model, drawDir);
   SetSOMModel(model);
   if (drawDir >= 0 && drawDir != (m_xob->GetData(1) & 7)) {
     const float angle = static_cast<float>(drawDir) * 3.1415927f * 0.25f;

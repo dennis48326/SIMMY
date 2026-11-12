@@ -1,20 +1,22 @@
 #!/usr/bin/env python3
-"""PC mod: mods. Convert buy-mode objects (Decorative, Surfaces, Seating and beds, Appliances, Lighting) from the user's own The Sims 2 (PC)
+"""PC mod: mods. Convert buy-mode objects (Decorative, Surfaces, Seating and beds, Appliances, Lighting, Plumbing) from the user's own The Sims 2 (PC)
 install (base game and every expansion and stuff pack found) into a SIMMY mod folder.
 
     pcobj_convert.py --pc "<The Sims 2 install>" --gc <GameCube disc image or data folder> --out <mods>
-                     --categories decorative,surfaces,seating,appliances,lighting   every such object of every
-                                                        pack (or: all, --all-decorative, ..., --all-lighting)
+                     --categories decorative,surfaces,seating,appliances,lighting,plumbing   every such object
+                                                        of every pack (or: all, --all-decorative, ..., --all-plumbing)
     pcobj_convert.py ... --object <GUID | name>  [--base <GameCube object file>]   one object
     pcobj_convert.py ... --batch list.tsv         the GUIDs in the list's first column ([2nd: base])
     pcobj_convert.py --pc "<install>" --list ficus                                 find objects
     pcobj_convert.py --pc "<install>" --categories all --inventory inv.tsv         list, no output
 
 Each object becomes <out>/pc<k>_<name>_<guid>/ (surfaces: pcs<k>_..., seating: pcc<k>_..., appliances: pca<k>_...,
-lighting: pcl<k>_...): mod.ini (a
+lighting: pcl<k>_..., plumbing: pcp<k>_...): mod.ini (a
 copy of a GameCube object, its "base": decorative objects by where they go (wall, floor, table top,
 ceiling, rug), surfaces a GameCube counter or table of the same footprint, seating and beds a GameCube
-chair, sofa, bench or bed of the same footprint and comfort tier (seat height, made / slept-in beds); with the PC object's GUID, name,
+chair, sofa, bench or bed of the same footprint and comfort tier (seat height, made / slept-in beds); plumbing the
+GameCube toilet, shower, bathtub, sink or hot tub of that kind and tier (seat / water height, dirty and
+clogged looks, a counter sink's hole and flange); with the PC object's GUID, name,
 description, price, room rating, tiles, a surface's top height and a counter's pieces) and its
 resources in the GameCube's own formats (models_*: MODL, float indexed strips per material; shaders_*;
 textures_*: CMPR/RGB5A3 with mips; a thumbnail). <out>/pcdeco_inventory.tsv, pcsurf_inventory.tsv and
@@ -28,7 +30,7 @@ import argparse, os, re, shutil, struct, sys, time, zlib
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import rcol, sg, gcdata, gctex, pcmesh, pcinstall, pcsurf, pcseat, pcappl, pclight  # noqa: E402
+import rcol, sg, gcdata, gctex, pcmesh, pcinstall, pcsurf, pcseat, pcappl, pclight, pcplumb  # noqa: E402
 from pcinstall import (W_PRICE, W_ROOMSORT, W_FUNCSORT, W_SUBSORT, W_RATINGS, SUBSORTS, F_DECORATIVE)  # noqa: E402
 
 # ---------------------------------------------------------------------------------------------------
@@ -351,7 +353,7 @@ class Session:
             q = self.gco.qd
             self.templates = {}
             for f in (list(BASES.values()) + list(pcsurf.SURF_BASES.values()) + list(pcseat.SEAT_BASES.values()) +
-                      list(pcappl.APPL_BASES.values()) + list(pclight.LIGHT_BASES.values())):
+                      list(pcappl.APPL_BASES.values()) + list(pclight.LIGHT_BASES.values()) + list(pcplumb.PLUMB_BASES.values())):
                 defs = self.gco.files.get(f)
                 if not defs:
                     raise SystemExit(f'GameCube object {f} not found on the disc')
@@ -418,6 +420,8 @@ class Item:
             return pcappl.APPL_SUBSORTS.get(self.subsort, f'0x{self.subsort:x}')
         if self.category == 'lighting':
             return pclight.LIGHT_SUBSORTS.get(self.subsort, f'0x{self.subsort:x}')
+        if self.category == 'plumbing':
+            return pcplumb.PLUMB_SUBSORTS.get(self.subsort, f'0x{self.subsort:x}')
         return SUBSORTS.get(self.subsort, f'0x{self.subsort:x}')
 
 
@@ -579,6 +583,8 @@ def convert(s, it, base_override=None, write=True):
     seating = it.category == 'seating'
     appl = it.category == 'appliances'
     light = it.category == 'lighting'
+    plumb = it.category == 'plumbing'
+    txmt_exists = lambda name: inst.find(T_TXMT, name)[0] is not None
     picks = {}
     joints = {}
     meshes_j = None
@@ -591,6 +597,20 @@ def convert(s, it, base_override=None, write=True):
         # the stocked / working model (not "...Empty", "...UnderCounter" variants)
         order = it.models[:1] + [m for m in it.models[1:] if not any(k in m.lower() for k in ('empty', 'broken', 'dirty', 'burnt'))]
         meshes_j, used, errors = _load(inst, it, order, materials, joints)
+        meshes = [m[:6] for m in meshes_j]
+    elif plumb:
+        kind = pcplumb.plumb_kind(it)
+        it.kind = kind
+        if not kind:
+            it.status, it.reason = 'skipped', f'unknown plumbing family ({it.semiglobal or "no semi-global"})'
+            return it
+        if kind in pcplumb.SKIP:
+            it.status, it.reason = 'skipped', pcplumb.SKIP[kind]
+            return it
+        order = it.models[:1] + [m for m in it.models[1:] if not any(k in m.lower() for k in ('template', 'broken', 'dirty'))]
+        meshes_j, used, errors = _load(inst, it, order, materials, joints)
+        # the shapes' own materials can be a state's (a combo's tub "..._dirty"): the clean look by default
+        meshes_j = [(pcplumb.swap_material(inst, m[0], '_dirty', '_clean', txmt_exists),) + tuple(m[1:]) for m in meshes_j]
         meshes = [m[:6] for m in meshes_j]
     elif seating:
         kind, why = pcseat.seat_kind(it)
@@ -607,7 +627,7 @@ def convert(s, it, base_override=None, write=True):
                                        not any(k in pcsurf._norm(m) for k in ('corner', 'east', 'west'))]
         meshes, used, errors = _load(inst, it, order, materials)
         picks['main'] = used
-    if not (seating or surface or appl):
+    if not (seating or surface or appl or plumb):
         # (a lamp's second model is the debris it leaves when it breaks on the PC)
         meshes, used, errors = _load(inst, it, it.models[:1], materials)
     if not meshes:
@@ -670,6 +690,113 @@ def convert(s, it, base_override=None, write=True):
             W, H = 1, 2      # the GameCube dishwasher: the machine and the tile in front its door opens over
         elif W * H > 1:
             it.notes.append(f'{W}x{H}: a group of {W * H} copies of the base (each tile works)')
+    elif plumb:
+        base = base_override or pcplumb.plumb_base(it, kind)[0]
+        pinfo = pcplumb.BASE_INFO.get(base, {})
+        pw, ph = it.footprint()
+        W, H = pinfo.get('fp', (1, 1))
+        if (pw, ph) != (W, H):
+            it.notes.append(f'{pw}x{ph} on the PC: the base\'s {W}x{H}')
+        # the PC mesh over the base's layout (PC object space, the first tile's middle at 0)
+        sx = sy = 1.0
+        if kind == 'hottub':
+            # a 3x3 hot tub over the 2x3 Japanese hot tub: narrowed to its width, its middle on the group's
+            sx, sy = W / float(pw), H / float(ph)
+
+        def place(P, N=None):
+            P = P.copy()
+            if kind in ('tub', 'combo'):
+                # the faucet end (PC -y) to the base's (model -y after the mirror): turned half round
+                P[:, 0] = -P[:, 0]
+                P[:, 1] = (H - 1) - P[:, 1]
+            elif kind == 'hottub':
+                P[:, 0] = (P[:, 0] - (pw - 1) / 2.0) * sx + (W - 1) / 2.0
+                P[:, 1] = (P[:, 1] - (ph - 1) / 2.0) * sy + (H - 1) / 2.0
+            if N is None:
+                return P
+            N = N.copy()
+            if kind in ('tub', 'combo'):
+                N[:, 0] = -N[:, 0]
+                N[:, 1] = -N[:, 1]
+            elif kind == 'hottub':
+                N[:, 0] /= sx
+                N[:, 1] /= sy
+            return P, N
+
+        placed = []
+        for m in meshes_j:
+            P2, N2 = place(m[2], m[3])
+            placed.append((m[0], m[1], P2, N2) + tuple(m[4:]))
+        # a tub's / sink's / shower's water (the PC fills it by its own animation): a bathtub's on the
+        # base's water node (shown, filling, while it is in use), else left out; a hot tub keeps its
+        water_j = [m for m in placed if kind != 'hottub' and pcplumb.is_water(m[0], m[1])]
+        meshes_j = [m for m in placed if not (kind != 'hottub' and pcplumb.is_water(m[0], m[1]))]
+        if not pinfo.get('water'):
+            water_j = []
+        elif water_j:
+            # the PC's water is a small sheet its own animation spreads over the tub as it fills (the
+            # bathtub template's water level: x -0.29..0.30, y -0.23..1.27 at 0.45); the base's water node
+            # only lifts it (0.39..0.47): spread over the tub here
+            lo = np.min([m[2].min(0) for m in water_j], 0); hi = np.max([m[2].max(0) for m in water_j], 0)
+            want_lo, want_hi = place(np.asarray([[-0.29, -0.23, 0.0], [0.30, 1.27, 0.0]]))
+            want_lo, want_hi = np.minimum(want_lo, want_hi), np.maximum(want_lo, want_hi)
+            spread = []
+            for m in water_j:
+                P = m[2].copy()
+                for a in (0, 1):
+                    P[:, a] = want_lo[a] + (P[:, a] - lo[a]) * (want_hi[a] - want_lo[a]) / max(hi[a] - lo[a], 1e-6)
+                spread.append((m[0], m[1], P) + tuple(m[3:]))
+            water_j = spread
+        meshes = [m[:6] for m in meshes_j]
+        joints = {j: place(np.asarray([o], np.float64))[0] for j, o in joints.items()}
+        P_all = np.concatenate([m[2] for m in meshes])
+        it.bounds = (P_all.min(0), P_all.max(0))
+        seat = {}
+        flange_j = []
+        if kind == 'sink_counter':
+            # the counter's hole it needs: its cut-out plane ("..._null" subset), the PC's mask for the
+            # counter top under it
+            # its rim: what it has at the counter top's height (not its "..._null" cut-out plane, a mask
+            # the PC draws over the counter); the wide hole when the rim covers it
+            rim = [m[2][(m[2][:, 2] > -0.03) & (m[2][:, 2] < 0.06)] for m in placed
+                   if not (m[1] or '').lower().endswith('_null') and not pcplumb.is_water(m[0], m[1])]
+            rim = np.concatenate([r for r in rim if len(r)] or [np.zeros((1, 3))])
+            rlo, rhi = rim.min(0), rim.max(0)
+            wx0, wy0, wx1, wy1 = pcsurf.SINK_HOLES['sink_wide']
+            wide = rlo[0] <= wx0 + 0.01 and rhi[0] >= wx1 - 0.01 and rlo[1] <= wy0 + 0.01 and rhi[1] >= wy1 - 0.01
+            it.notes.append(f'cut-out {"wide" if wide else "narrow"} (rim x {rlo[0]:.2f}..{rhi[0]:.2f} y {rlo[1]:.2f}..{rhi[1]:.2f})')
+            pinfo = dict(pinfo, hole='wide' if wide else 'narrow')
+            # In a GameCube counter the sink stands in its cut-out top, whose hole fits the GameCube's own
+            # sinks (x -0.46..0.46, y -0.28..0.43 here): a flange in the rim's colour fills the gap
+            # between the PC rim and that hole (model_flange: drawn by such a counter only, at its top,
+            # 1.0 over the floor)
+            body = [m for m in placed if not (m[1] or '').lower().endswith('_null') and not pcplumb.is_water(m[0], m[1])]
+            near = [(m, (m[2][:, 2] > -0.03) & (m[2][:, 2] < 0.06)) for m in body]
+            m0, sel0 = max(near, key=lambda ms: int(ms[1].sum()))
+            uv = np.median(m0[4][sel0], 0) if sel0.any() else np.zeros(2)
+            ox0, oy0, ox1, oy1 = -0.47, -0.29, 0.47, 0.432
+            ix0, iy0, ix1, iy1 = rlo[0] + 0.02, rlo[1] + 0.02, rhi[0] - 0.02, rhi[1] - 0.02
+            z = 1.003
+            Pf = np.asarray([[ox0, oy0, z], [ox1, oy0, z], [ox1, oy1, z], [ox0, oy1, z],
+                             [ix0, iy0, z], [ix1, iy0, z], [ix1, iy1, z], [ix0, iy1, z]], np.float32)
+            Tf = np.asarray([[0, 1, 5], [0, 5, 4], [1, 2, 6], [1, 6, 5], [2, 3, 7], [2, 7, 6], [3, 0, 4], [3, 4, 7]], np.int64)
+            Nf = np.tile(np.asarray([[0, 0, 1]], np.float32), (8, 1))
+            Uf = np.tile(np.asarray([uv], np.float32), (8, 1))
+            flange_j = [(m0[0], 'flange', Pf, Nf, Uf, Tf)]
+        if kind in ('toilet', 'stall'):
+            sh = pcplumb.seat_height(meshes)
+            if sh:
+                seat['height'] = sh
+                seat['offset'] = float(np.clip(sh - pinfo.get('seat_h', 0.42), -0.15, 0.2))
+        elif kind == 'hottub':
+            wl = pcplumb.water_level(meshes)
+            if wl is not None:
+                seat['height'] = wl
+                # a raised hot tub: its sims drawn at its water (the base's is at the floor)
+                seat['offset'] = float(wl - pinfo.get('water_z', 0.0)) if wl > 0.25 else 0.0
+        if seat:
+            it.surface = seat['height']
+            it.seat = {'offset': seat['offset']}
     elif light:
         kind = pclight.light_kind(it, P_all)
         it.kind = kind
@@ -686,7 +813,7 @@ def convert(s, it, base_override=None, write=True):
         it.kind = kind
         base = base_override or BASES[kind]
     it.base = base
-    bdefs = s.gco.files.get(base) if gc is not None else [{'master': 1 if kind in ('rug', 'ceiling') or ((surface or seating or appl) and W * H > 1) else 0}]
+    bdefs = s.gco.files.get(base) if gc is not None else [{'master': 1 if kind in ('rug', 'ceiling') or ((surface or seating or appl or plumb) and W * H > 1) else 0}]
     if not bdefs:
         it.status, it.reason = 'failed', f'GameCube base {base} not found'
         return it
@@ -723,6 +850,20 @@ def convert(s, it, base_override=None, write=True):
             variants.append(('end_px', ends[1]))
             variants.append(('end_nx', ends[-1]))
             variants.append(('ends', ends[1] + pcsurf.mesh_minus(ends[-1], meshes)))
+        if W * H == 1 and it.surface:
+            # with a sink in it (a GameCube or converted counter sink on its tile): the top with a hole
+            # (ISimsCounterTopObject::SetObjOrient; the GameCube's own counters have cut-out models)
+            for k, rect in pcsurf.SINK_HOLES.items():
+                holed = pcsurf.cut_hole(meshes, it.surface, rect)
+                if holed:
+                    variants.append((k, holed))
+            # a GameCube sink: drawn moved back (sink_shift) in a hole of its size; its basins go 0.2
+            # down: whatever stands in that band under the hole (an island's curved apron) is cut too
+            shift, rect = pcsurf.gc_sink_fit(meshes, it.surface)
+            holed = pcsurf.cut_hole(meshes, it.surface, rect, band=0.42) if rect else None
+            if holed:
+                variants.append(('sink_gc', holed))
+                it.sink_shift = shift
     # the GameCube draws a group's model at the middle of its tiles; wall objects 0.45 off the tile's
     # middle toward the wall. PC: the first tile's middle, the wall at -y; the GameCube's model space is
     # the PC's mirrored in y (its world swaps x and y).
@@ -758,6 +899,7 @@ def convert(s, it, base_override=None, write=True):
     tag = re.sub(r'[^a-z0-9]+', '', (it.name or it.objname).lower())[:20] or 'object'
     prefix = (f'pcs{pcsurf.SURF_SORT.get(kind, "7")}' if surface else f'pcc{pcseat.SEAT_SORT.get(kind, "8")}' if seating
               else f'pca{pcappl.APPL_SORT.get(kind, "6")}' if appl else f'pcl{pclight.LIGHT_SORT.get(kind, "6")}' if light
+              else f'pcp{pcplumb.PLUMB_SORT.get(kind, "6")}' if plumb
               else f'pc{SORT_KEY.get(it.subsort, "7")}')
     folder = os.path.join(s.out or '.', f'{prefix}_{tag}_{it.guid:08x}')
     it.out = os.path.basename(folder)
@@ -905,6 +1047,61 @@ def convert(s, it, base_override=None, write=True):
             it.notes.append('moves on the PC, still here: ' + ','.join(moving))
         if kind == 'dishwasher':
             it.surface = pcsurf.surface_height(meshes, 0, 0, kind='counter') or 0.95
+    plumb_states = {}
+    if plumb:
+        # the body on the root node, a toilet's seat on the base's seat node (turning about the PC
+        # hinge), a bathtub's water on its water node; per state: the PC's clean, dirty and clogged looks
+        seat_node = pinfo.get('seat')
+        def bind(ms):
+            out = []
+            for m in ms:
+                J = m[6] if len(m) > 6 else None
+                T = m[5]
+                if seat_node is not None and J is not None and any(pcplumb.is_seat(j) for j in set(J.tolist())):
+                    keys = np.asarray([seat_node if pcplumb.is_seat(j) else 0 for j in J.tolist()])
+                    tri = keys[T[:, 0]]
+                    for node in sorted(set(tri.tolist())):
+                        out.append(((m[0], m[1], m[2], m[3], m[4], T[tri == node]), int(node)))
+                else:
+                    out.append((m[:6], 0))
+            out += [(m[:6], pinfo['water']) for m in water_j]
+            return out
+        seat_joints = sorted({j for j in joints if pcplumb.is_seat(j)})
+        if seat_node is not None and seat_joints:
+            pv = joints[seat_joints[0]]
+            node_pivots[seat_node] = ((float(pv[0] - cx), float(-(pv[1] - cy)), float(pv[2])), '')
+            it.variants.append(f'{seat_joints[0]}>node{seat_node}')
+        if water_j:
+            it.variants.append(f'water>node{pinfo["water"]}')
+
+        def looks(ms, swaps):
+            out = []
+            for m in ms:
+                mat = m[0]
+                for a, b in swaps:
+                    mat = pcplumb.swap_material(inst, mat, a, b, txmt_exists)
+                out.append((mat,) + tuple(m[1:]))
+            return out
+        variant_meshes = {'clean': meshes_j}
+        dirty = looks(meshes_j, [('_clean', '_dirty')])
+        if any(a[0] != b[0] for a, b in zip(dirty, meshes_j)):
+            variant_meshes['dirty'] = dirty
+        if pinfo.get('clogged'):
+            clog = looks(variant_meshes.get('dirty', meshes_j), [('water_water', 'water_clogged')])
+            if any(a[0] != b[0] for a, b in zip(clog, meshes_j)):
+                variant_meshes['clogged'] = clog
+        for look, ms in variant_meshes.items():
+            ps = []
+            for m6, node in bind(ms):
+                for p in gc_parts([m6]):
+                    ps.append(p + (node,))
+            plumb_states[look] = ps
+        anim_parts = plumb_states.pop('clean')
+        it.variants += [f'{k}:{len(pinfo.get(k, ()))}st' for k in plumb_states if pinfo.get(k)]
+        moving = sorted(j for j in joints if j and not pcplumb.is_seat(j) and any(w in j for w in ('door', 'knob', 'handle', 'rot')) and
+                        j not in ('root_rot',))
+        if moving:
+            it.notes.append('moves on the PC, still here: ' + ','.join(moving))
     light_recs = []
     if lamp:
         bnode = pclight.BASE_NODES.get(base) or pclight.BASE_NODES[pclight.LIGHT_BASES[kind]]
@@ -956,6 +1153,16 @@ def convert(s, it, base_override=None, write=True):
     if anim_parts:
         aid = new_id(gc, 'models', f'pcmod_{it.guid:08x}_model_anim', taken)
         files[f'models_{aid:08X}.res'] = make_modl(f'pc_{tag}_anim', anim_parts, light_recs, by_node=bool(lamp))
+    plumb_ids = {}
+    if plumb and flange_j:
+        fp = gc_parts(flange_j)
+        if fp:
+            plumb_ids['flange'] = new_id(gc, 'models', f'pcmod_{it.guid:08x}_model_flange', taken)
+            files[f'models_{plumb_ids["flange"]:08X}.res'] = make_modl(f'pc_{tag}_flange', fp)
+    for k, p in plumb_states.items():
+        if p:
+            plumb_ids[k] = new_id(gc, 'models', f'pcmod_{it.guid:08x}_model_anim_{k}', taken)
+            files[f'models_{plumb_ids[k]:08X}.res'] = make_modl(f'pc_{tag}_anim_{k}', p)
     vids = {}
     for k, p in vparts:
         vid = new_id(gc, 'models', f'pcmod_{it.guid:08x}_model_{k}', taken)
@@ -987,7 +1194,7 @@ def convert(s, it, base_override=None, write=True):
         gtaken = set()
         pcg = dict(it.tiles)
         coords = list(pcg.keys()) or [(0, 0)]
-        if appl:
+        if appl or plumb:
             coords = [(x, y) for x in range(W) for y in range(H)]
         for (x, y) in sorted(coords):
             g = pcg.get((x, y)) or tile_guid(it.guid, x, y, s.gco.guids, gtaken)
@@ -1008,6 +1215,17 @@ def convert(s, it, base_override=None, write=True):
                     g1 = tile_guid(it.guid ^ 0x5A5A5A5A, x1, y1, s.gco.guids, gtaken)
                 g0, g1 = (g0, g1) if (g0 & 0xFF) < (g1 & 0xFF) else (g1, g0)
                 tiles = [(x0, y0, g0, h0), (x1, y1, g1, h1)]
+    if plumb and tiles:
+        # the parts in the base group's order: the game makes a group's parts in the order of their GUIDs'
+        # low bytes (GameCube/folder.cpp m_selectors[guid & 0xFF]) and puts the first one made on the
+        # tile picked; the base's part at each tile sets the order its parts are made in
+        bsub = {(d['sub'] >> 8 & 0xFF, d['sub'] & 0xFF): d['guid'] & 0xFF for d in s.gco.files.get(base, []) if d['sub'] >= 0}
+        want = sorted(tiles, key=lambda t: bsub.get((t[0], t[1]), 0x100))
+        lows = sorted(t[2] & 0xFF for t in tiles)
+        if len(set(lows)) == len(lows):
+            # hand out the tiles' GUIDs (sorted by low byte) in the base's order
+            gs = sorted((t[2] for t in tiles), key=lambda g: g & 0xFF)
+            tiles = [(t[0], t[1], g, t[3]) for t, g in zip(want, gs)]
     if os.path.isdir(folder):
         shutil.rmtree(folder)
     os.makedirs(folder, exist_ok=True)
@@ -1028,11 +1246,12 @@ def convert(s, it, base_override=None, write=True):
                 '# install. EA game data: for this machine only, never share or commit it.\n')
         what = (f'surface: {pcsurf.describe(kind)}' if surface else f'seating: {pcseat.describe(kind)}' if seating
                 else f'appliance: {pcappl.describe(kind)}' if appl else f'lighting: {pclight.describe(kind)}' if light
+                else f'plumbing: {pcplumb.describe(kind)}' if plumb
                 else f'{it.subsort_name()}, placed: {kind}')
         f.write(f'# PC object "{it.objname}" ({it.home.name}), model {used}, {what}\n[object]\n')
         f.write(f'guid = 0x{it.guid:08X}\nbase = {base}\nname = {one(name)}\ndesc = {one(it.desc)}\n')
         f.write(f'price = {it.price}\nmodel = 0x{mid:08X}\nthumbnail = 0x{thumb_id:08X}\n')
-        f.write(f'functions = 0x{(pcsurf.F_SURFACES if surface else pcseat.F_SEATING if seating else pcappl.F_APPLIANCES if appl else pclight.F_LIGHTING if light else F_DECORATIVE):X}\n'
+        f.write(f'functions = 0x{(pcsurf.F_SURFACES if surface else pcseat.F_SEATING if seating else pcappl.F_APPLIANCES if appl else pclight.F_LIGHTING if light else pcplumb.F_PLUMBING if plumb else F_DECORATIVE):X}\n'
                 f'room = {max(0, min(10, it.room))}\n')
         if appl:
             # the base's skeleton, state animations and effects; the states show the bound model, the
@@ -1050,6 +1269,34 @@ def convert(s, it, base_override=None, write=True):
                 f.write('init_data = 4:0x1\n')
         if surface:
             f.write(f'surface = {it.surface:.3f}\n')
+        if plumb:
+            # the base's skeleton, state animations and effects (water, steam, flies); the PC mesh bound to
+            # its nodes; the PC's dirty / clogged looks in the base's dirty / clogged states
+            f.write(f'animated = 1\nanim_model = 0x{aid:08X}\n')
+            for node, (pv, spec) in sorted(node_pivots.items()):
+                f.write(f'node = {node}:{pv[0]:.4f},{pv[1]:.4f},{pv[2]:.4f}{":" + spec if spec else ""}\n')
+            sm = []
+            for look in ('dirty', 'clogged'):
+                if look in plumb_ids or (look == 'clogged' and 'dirty' in plumb_ids):
+                    mid_ = plumb_ids.get(look, plumb_ids.get('dirty'))
+                    sm += [f'{st}:0x{mid_:08X}' for st in pinfo.get(look, ())]
+            if sm:
+                f.write('state_models = ' + ' '.join(sm) + '\n')
+            if it.seat:
+                what_ = 'water' if kind == 'hottub' else 'seat'
+                f.write(f'# {what_} {it.surface:.3f}\nseat_offset = {it.seat["offset"]:.3f}\n')
+            if tiles:
+                f.write('base_parts = 1\n')
+            # the catalogue's motive ratings: the PC's (written where the base shows one)
+            for key, k in (('comfort', 1), ('hygiene', 2), ('bladder', 3), ('fun', 5)):
+                v = it.o.s(pcinstall.W_RATINGS + k)
+                if v > 0:
+                    f.write(f'{key} = {min(10, v)}\n')
+            if pinfo.get('hole'):
+                # the hole a converted counter it stands in shows (model_sink / model_sink_wide)
+                f.write(f'sink_hole = {pinfo["hole"]}\n')
+            if plumb_ids.get('flange'):
+                f.write(f'model_flange = 0x{plumb_ids["flange"]:08X}\n')
         if lamp:
             # the base's skeleton, on/off state animations and light; the parts by state on its nodes
             (lx, ly, lz), lc, lfo = lamp['mod']
@@ -1087,6 +1334,8 @@ def convert(s, it, base_override=None, write=True):
                 f.write(f'tile_model = 1,1:0x{mid:08X} ' + ' '.join(f'{k}:0x{sids["slept"]:08X}' for k in states) + '\n')
         if vids:
             f.write(f'connect = {"island" if kind == "island" else "counter"}\n')
+            if 'sink_gc' in vids:
+                f.write(f'sink_shift = {getattr(it, "sink_shift", 0.0):.3f}\n')
             for k, vid in vids.items():
                 f.write(f'model_{k} = 0x{vid:08X}\n')
         f.write(f'pack = {it.home.name}\n')
@@ -1101,14 +1350,14 @@ INV_COLUMNS = ['guid', 'name', 'object', 'pack', 'packs', 'subsort', 'footprint'
                'status', 'reason', 'folder', 'notes', 'bounds', 'category', 'surface', 'pieces', 'seat_offset',
                'comfort', 'energy', 'seats', 'pc_tab', 'gc_tab']
 INVENTORY = {'decorative': 'pcdeco_inventory.tsv', 'surfaces': 'pcsurf_inventory.tsv', 'seating': 'pcseat_inventory.tsv',
-             'appliances': 'pcappl_inventory.tsv', 'lighting': 'pclight_inventory.tsv'}
+             'appliances': 'pcappl_inventory.tsv', 'lighting': 'pclight_inventory.tsv', 'plumbing': 'pcplumb_inventory.tsv'}
 # buy-mode tabs: the PC's (OBJD function sort bits) and the GameCube's (definition function flags; the
 # tab a converted object is put on)
 PC_TABS = [(0x01, 'Comfort'), (0x02, 'Surfaces'), (0x04, 'Appliances'), (0x08, 'Electronics'), (0x10, 'Plumbing'),
            (0x20, 'Decorations'), (0x40, 'Miscellaneous'), (0x80, 'Lighting'), (0x100, 'Hobbies'),
            (0x400, 'Aspiration Rewards'), (0x800, 'Career Rewards')]
 GC_TABS = {'seating': 'Seating & Beds', 'appliances': 'Appliances', 'surfaces': 'Surfaces', 'decorative': 'Decorative',
-           'lighting': 'Lighting'}
+           'lighting': 'Lighting', 'plumbing': 'Plumbing'}
 
 
 def pc_tab(it):
@@ -1160,7 +1409,7 @@ def _work(args):
 
 
 CATEGORIES = {'decorative': decorative_guids, 'surfaces': pcsurf.surface_guids, 'seating': pcseat.seating_guids,
-              'appliances': pcappl.appliance_guids, 'lighting': pclight.lighting_guids}
+              'appliances': pcappl.appliance_guids, 'lighting': pclight.lighting_guids, 'plumbing': pcplumb.plumbing_guids}
 
 
 def main():
@@ -1176,7 +1425,9 @@ def main():
     ap.add_argument('--all-seating', action='store_true', help='every buy-mode Seating object and bed')
     ap.add_argument('--all-appliances', action='store_true', help='every buy-mode Appliances object')
     ap.add_argument('--all-lighting', action='store_true', help='every buy-mode Lighting object')
-    ap.add_argument('--categories', help='comma-separated buy-mode categories: decorative, surfaces (or all)')
+    ap.add_argument('--all-plumbing', action='store_true', help='every buy-mode Plumbing object (and the hot tubs)')
+    ap.add_argument('--categories', help='comma-separated buy-mode categories: decorative, surfaces, seating, appliances, '
+                    'lighting, plumbing (or all)')
     ap.add_argument('--batch', help='a list of GUIDs (first column; optional second column: base)')
     ap.add_argument('--packs', help='only objects whose home pack is one of these (codes: base, ep1..ep8, sp1..sp9)')
     ap.add_argument('--inventory', help='write the inventory (TSV) of the chosen categories here and stop')
@@ -1219,6 +1470,8 @@ def main():
         cats.append('appliances')
     if a.all_lighting and 'lighting' not in cats:
         cats.append('lighting')
+    if a.all_plumbing and 'plumbing' not in cats:
+        cats.append('plumbing')
     def category_of(o):
         f = o.w(W_FUNCSORT)
         if f & F_DECORATIVE:
@@ -1229,6 +1482,8 @@ def main():
             return 'appliances'
         if f & pclight.F_LIGHTING:
             return 'lighting'
+        if f & pcplumb.F_PLUMBING or 'hottub' in (cat.semiglobal(o) or '').lower():
+            return 'plumbing'
         return 'seating' if f & pcseat.F_SEATING else 'decorative'
     jobs = []
     if a.object:
@@ -1241,7 +1496,7 @@ def main():
         jobs = [(hits[0], a.base, category_of(cat.newest(hits[0])))]
     elif a.batch:
         known = (set(BASES.values()) | set(pcsurf.SURF_BASES.values()) | set(pcseat.SEAT_BASES.values()) |
-                 set(pcappl.APPL_BASES.values()) | set(pclight.LIGHT_BASES.values()))
+                 set(pcappl.APPL_BASES.values()) | set(pclight.LIGHT_BASES.values()) | set(pcplumb.PLUMB_BASES.values()))
         for line in open(a.batch, encoding='utf-8'):
             f = line.strip().split('\t')
             if f and re.fullmatch(r'(0x)?[0-9a-fA-F]{6,8}', f[0]):
@@ -1258,7 +1513,7 @@ def main():
     elif a.inventory:
         jobs = [(g, None, 'decorative') for g in decorative_guids(cat)]
     else:
-        raise SystemExit('nothing to do: --all-decorative, --all-surfaces, --all-seating, --all-appliances, --all-lighting, --categories, '
+        raise SystemExit('nothing to do: --all-decorative, --all-surfaces, --all-seating, --all-appliances, --all-lighting, --all-plumbing, --categories, '
                          '--object, --batch, --inventory or --list')
     packs = set(a.packs.split(',')) if a.packs else None
     items = []
@@ -1280,6 +1535,8 @@ def main():
             return ('u', pcappl.APPL_SORT.get(pcappl.appl_kind(it), '6'), (it.name or '').lower())
         if it.category == 'lighting':
             return ('v', pclight.LIGHT_SORT.get(pclight.light_kind(it), '6'), (it.name or '').lower())
+        if it.category == 'plumbing':
+            return ('w', pcplumb.PLUMB_SORT.get(pcplumb.plumb_kind(it), '6'), (it.name or '').lower())
         return ('d', SORT_KEY.get(it.subsort, '7'), (it.name or '').lower())
     items.sort(key=sort_key)
     todo = [(it, b) for it, b in items if not it.status]

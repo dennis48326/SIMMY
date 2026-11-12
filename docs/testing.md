@@ -171,6 +171,8 @@ Development only: the launcher removes all of them except `SIMMY_INI` from the g
 | `SIMMY_TEXT_PARTICLE_TEST=<type>:<word>` | Tag a word with a text particle |
 | `SIMMY_TEXT_FX_TEST=<code>:<word>` | Put an embedded text code before every `<word>` in Apt text (e.g. `ROCK_L_500A:Welcome`, `OUTLINE_FF0000:Welcome`; [ui.md](ui.md) "Text effects") |
 | `SIMMY_CENSOR_TEST=<bits>` | Censor player 1's sim |
+| `SIMMY_CENSOR_OFF=1` | No censor mosaic on any sim (screenshots of sims in toilets, showers and tubs: alignment checks) |
+| `SIMMY_FIND_TRACE=1` | Every candidate `TryFindFunctionalObject` scores (a function's object: the sink a dirty dish goes to, the table a plate goes on): its data, distance and score ([`objectsim.cpp`](../src/game/objectsim.cpp)) |
 | `SIMMY_SKILL_METER_TEST=<fill>[,repair]` | Skill/repair meter over player 1's sim |
 | `SIMMY_SPRITE_TRACE=1`, `SIMMY_SPRITE_HOLD=1` | Balloons: trace; keep up for shots |
 | `SIMMY_SLOT_TRACE=1`, `SIMMY_SLOT_OFFSET_OFF=1` | Slot offsets: trace; disable |

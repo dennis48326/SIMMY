@@ -2535,6 +2535,12 @@ int cXObjectImpl::TryFindFunctionalObject(StackElem* frame, const unsigned char*
     float s = static_cast<float>(GetData(0x42)) -
               static_cast<float>(CalcShortDistance(o)) * gFunctionalScoreDistanceAttenuation;
     if (s < 1.0f) s = 1.0f;
+    // PC development aid: SIMMY_FIND_TRACE=1 lists the candidates TryFindFunctionalObject scores
+    static const bool findTrace = std::getenv("SIMMY_FIND_TRACE") != nullptr;
+    if (findTrace)
+      std::printf("[find] #%d function entry 0x%x: candidate #%d %s data %d distance %d score %.1f\n", m_id, entry, o->m_id,
+                  o->m_selector && o->m_selector->m_fileName ? o->m_selector->m_fileName : "?", GetData(0x42),
+                  static_cast<int>(CalcShortDistance(o)), s);
     if (bestScore < s) {
       best = o;
       bestScore = s;

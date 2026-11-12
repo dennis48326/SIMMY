@@ -954,8 +954,11 @@ static int CensorTestFlags(cXPerson* person) {
 // A sim with a full skeleton (over 50 nodes) is censored while any of its person data 0x1E bits are
 // set (0x80, 1, 2, 4, 8, 0x10); the instance then stays solid near the camera (+0x68 = 2).
 void SAnimator2::updateCensor() {
-  const int flags = m_person->GetPersonData(0x1e) | CensorTestFlags(m_person);
+  int flags = m_person->GetPersonData(0x1e) | CensorTestFlags(m_person);
   if (m_sim->m_anim.NodeCount() <= 0x32) return;
+  // PC development aid (screenshots of sims using toilets, showers, tubs): SIMMY_CENSOR_OFF=1 no mosaic
+  static const bool censorOff = std::getenv("SIMMY_CENSOR_OFF") != nullptr;
+  if (censorOff) flags = 0;
   m_censor = 0;  // GC: also clears ESim +0x62C (never set: the body is always drawn)
   if (flags & 0x80) m_censor = 1;
   if (flags & 1) m_censor = 1;

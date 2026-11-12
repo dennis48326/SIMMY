@@ -263,6 +263,16 @@ struct ModObject {
   // 3 both ends; 0: none.
   int connect = 0;               // 0 none, 1 counter, 2 island
   unsigned int pieces[4] = {};
+  // A counter with a sink standing in it (model_sink, model_sink_wide): its top with a narrow / wide
+  // hole for the sink's basin (the GameCube's counters have their own cut-out models); a counter sink
+  // (sink_hole = narrow | wide, -1: none given) the hole it needs; the GameCube's own sinks take the
+  // wide one (ISimsCounterTopObject::SetObjOrient).
+  unsigned int sinkModels[3] = {};  // narrow, wide, a GameCube sink's (model_sink_gc)
+  int sinkHole = -1;
+  // A converted counter: a GameCube sink in it is drawn this far along the PC's y (model space, tiles;
+  // negative: back toward the wall) so its rim fits the PC top, which is shallower (sink_shift).
+  float sinkShift = 0.0f;
+  unsigned int flangeModel = 0;  // a counter sink's flange in a GameCube counter (model_flange)
   // Seating and beds: the height the PC object's seat or mattress has against the one the base's
   // animations sit or lie at (seat_offset, tiles): a person in its slots is drawn that much higher
   // (blended in as the pose goes from standing to sitting or lying: SAnimator2::positionCharacter).
@@ -275,6 +285,7 @@ struct ModObject {
   bool baseParts = false;
   // The catalogue's motive ratings (comfort, energy): written where the base has one (-1: the base's).
   int comfort = -1, energy = -1;
+  int hygiene = -1, bladder = -1, fun = -1;  // plumbing (and any object): the same, where the base has one
   // A bar stool (counter_seat = 1): a person sits on it to eat at the counter it faces (countereat.cpp);
   // -1 (no key): a chair seated 0.08 tiles or more above the GameCube's seats (a bar stool's height).
   int counterSeat = -1;

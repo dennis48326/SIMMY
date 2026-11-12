@@ -1,12 +1,12 @@
 # PC mod: mods (objects from the PC game)
 
 Lets the player add objects converted from **their own** copy of The Sims 2 for PC: by default every
-buy-mode **Decorative**, **Surfaces**, **Seating**, **Appliances** and **Lighting** object and every **bed**
+buy-mode **Decorative**, **Surfaces**, **Seating**, **Appliances**, **Lighting** and **Plumbing** object and every **bed**
 of the base game and of every expansion and stuff pack installed (about 560 decorative objects, 170
 counters, tables and desks, 180 chairs, sofas, benches, stools and beds, 54 fridges, stoves, grills,
 microwaves, toaster ovens, coffee makers, food processors, juicers, dishwashers, trash compactors,
-food displays and food stands, and 145 table, floor, wall and ceiling lamps, outdoor lights and
-streetlamps with the Ultimate Collection). Surfaces work as
+food displays and food stands, 145 table, floor, wall and ceiling lamps, outdoor lights and
+streetlamps, and 36 toilets, showers, bathtubs, sinks and hot tubs with the Ultimate Collection). Surfaces work as
 surfaces: things go on their tops at the PC height, sims prepare food on the counters, eat at the
 tables and use computers on the desks, and counters join up in rows and corners. Seating and beds
 work as the GameCube's: sims sit on them (at the PC seat's height), pull dining chairs up to tables and
@@ -17,7 +17,11 @@ model's own doors opening (fridge doors, oven doors, the dishwasher's door and r
 the GameCube's: they light their room (the light grid, in the PC lamp's colour and reach) and its
 light score, switch on by themselves at night and off by day, and show the PC lamp's lit look when on
 (glowing shade and bulb, the pool of light it paints) and its unlit look when off; ceiling lamps hang
-from the ceiling, inside only, with sims and furniture under them. Off unless a mod folder exists; with none, nothing in the game changes
+from the ceiling, inside only, with sims and furniture under them. Plumbing works as the GameCube's
+toilets, showers, bathtubs, sinks and hot tubs (bladder, hygiene, comfort and fun; washing hands and
+dishes; dirt, clogs, breaking and repairs), sims sitting, standing and lying in the PC model, with the
+PC's dirty looks; counter sinks go into counters, converted ones too (which show a hole for them).
+Off unless a mod folder exists; with none, nothing in the game changes
 (no extra memory, same determinism hash).
 
 **Legal rule.** The PC game's files are EA's. Nothing converted from them goes into this repository,
@@ -31,8 +35,8 @@ Its PC install and disc paths are set at the top of the file.
 
 | | |
 |---|---|
-| `convert_pc_object.bat` | every Decorative, Surfaces, Seating (beds included), Appliances and Lighting object of every pack under the install, into `mods` next to simmy.exe (progress per object with the percentage and time; about three minutes for every pack of the Ultimate Collection on two cores) |
-| `convert_pc_object.bat decorative` / `surfaces` / `seating` / `appliances` / `lighting` | only that buy-mode category (several may be given: `decorative seating`) |
+| `convert_pc_object.bat` | every Decorative, Surfaces, Seating (beds included), Appliances, Lighting and Plumbing object of every pack under the install, into `mods` next to simmy.exe (progress per object with the percentage and time; about three minutes for every pack of the Ultimate Collection on two cores) |
+| `convert_pc_object.bat decorative` / `surfaces` / `seating` / `appliances` / `lighting` / `plumbing` | only that buy-mode category (several may be given: `decorative seating`) |
 | `convert_pc_object.bat list ficus` | PC objects whose name contains "ficus" |
 | `convert_pc_object.bat inventory` | only the inventory (`mods\pcobj_inventory.tsv`) |
 | `convert_pc_object.bat "No-Fuss Ficus"` | one object (name or GUID), base chosen automatically |
@@ -42,27 +46,27 @@ By hand (Python 3 with numpy and Pillow, nothing else):
 
 ```
 python tools/pcobj/pcobj_convert.py --pc "C:\Games\The Sims 2 Ultimate Collection" \
-    --gc D:\Games\Sims2.iso --out C:\Games\SIMMY\mods --categories decorative,surfaces,seating,appliances,lighting
+    --gc D:\Games\Sims2.iso --out C:\Games\SIMMY\mods --categories decorative,surfaces,seating,appliances,lighting,plumbing
 ```
 
 `--pc` is the install folder (every `TSData/Res` under it is a pack); `--gc` the GameCube data the port
-plays (disc image or extracted folder). `--categories decorative,surfaces,seating,appliances,lighting`
+plays (disc image or extracted folder). `--categories decorative,surfaces,seating,appliances,lighting,plumbing`
 (or `all`; also `--all-decorative`, `--all-surfaces`, `--all-seating`, `--all-appliances`,
-`--all-lighting`) picks the buy-mode
+`--all-lighting`, `--all-plumbing`) picks the buy-mode
 categories. Other modes: `--object <GUID|name> [--base <GameCube object>]`,
 `--batch list.tsv` (GUIDs in the first column, an optional base in the second), `--list <text>`,
 `--inventory <file.tsv>` (classify only, write nothing else). Options: `--packs base,ep1,sp4,...` (by
 home pack), `--jobs N` (worker processes; default CPUs - 1), `--texsize` (largest texture side, 256).
 Converting again replaces the folders it wrote; `mods/pcdeco_inventory.tsv`,
-`mods/pcsurf_inventory.tsv`, `mods/pcseat_inventory.tsv`, `mods/pcappl_inventory.tsv` and
-`mods/pclight_inventory.tsv` keep one row per object (converted or skipped, and why; `pc_tab` the PC
+`mods/pcsurf_inventory.tsv`, `mods/pcseat_inventory.tsv`, `mods/pcappl_inventory.tsv`,
+`mods/pclight_inventory.tsv` and `mods/pcplumb_inventory.tsv` keep one row per object (converted or skipped, and why; `pc_tab` the PC
 buy-mode tab of the object's catalogue function, `gc_tab` the GameCube tab it is put on).
 
 Start the game. The mod folder is `mods=` in simmy.ini (relative to the ini), else `SIMMY_MODS`, else
 `mods` next to the exe. The log says `[mods] <dir>: n mod(s), n object(s) (n multi-tile parts), n
 resource(s); read in n ms` and `[mods] objects: n added (n multi-tile), n skipped; rows ...` (with
 `SIMMY_MODS_VERBOSE=1`, or 20 objects or fewer, a line per object; a skipped object always says why).
-The objects are in buy mode on the **Decorative**, **Surfaces**, **Seating & Beds**, **Appliances** and **Lighting** tabs with the PC name, description,
+The objects are in buy mode on the **Decorative**, **Surfaces**, **Seating & Beds**, **Appliances**, **Lighting** and **Plumbing** tabs with the PC name, description,
 price and room rating and a rendered thumbnail. With a mod folder the **C stick** left/right pages that catalogue
 four columns at a time (the GameCube's movie only moves a column at a time; the tab can hold 600+).
 
@@ -405,6 +409,77 @@ back at the wall. Lamps on PC fence or deck posts stand on the ground (raised by
 GameCube has no fence posts). The two-storey chandelier comes down to 1.9 at its lowest (it reaches into
 the floor above).
 
+## Plumbing
+
+**Inventory.** Lead OBJDs with the catalogue function Plumbing (word 0x28 bit 0x10), and the two hot
+tubs the PC files elsewhere (the Love Tub: an aspiration reward; Bon Voyage's hot spring: Hobbies): the
+GameCube keeps every hot tub on its Plumbing tab. The kind from the semi-global (ToiletGlobals,
+SinkGlobals, TubAndShowerGlobals, HottubGlobals) and the object name (stall, urinal, counter sink,
+"ShowerTub" combinations, "Tub", "Shower"). 38 with the Ultimate Collection: 36 converted; left out
+the urinal (the GameCube's toilet trees sit every sim down: women always, men for number 2) and the
+Bon Voyage hot spring (6x6; the GameCube's largest hot tub is 3x3).
+
+**The GameCube's plumbing.** Semi-globals `plumbing_toilet_sg`, `plumbing_shower_sg`,
+`plumbing_bathtub_sg`, `plumbing_sink_sg`, `plumbing_hottub_sg`. All are animated objects (a character,
+per-state animations and effects). Toilets: Use (number 1 / number 2; men stand for number 1, the seat
+raised), Flush, Clean, Unclog, Puke, read / play while sitting; states 0/1 clean (seat down / up), 2/3
+dirty, 4/5 clogged ("Sub - Set Graphic By State": dirty when data 0x27 >= 600, clogged when attribute
+2 is set); tiers by constants: the cheap, industrial and public toilets (no comfort, clog chance 7),
+the porcelain and ornate ones (comfort, clog chance 3). Showers (1x1; the outdoor shower 2x2): Take a
+Shower, Clean, Repair, break; states 3-5 dirty; the hygiene rate is the base's (normal 227, sonic 243,
+hi-tech 307); the water spray and steam are effects at the object (attachment bone 0xFF). Bathtubs
+(2x1 groups: lead, a drawing part and a plain one): Take a Bath (fill, get in, luxuriate, drain),
+Clean; 36 states (0-15 clean, 16-33 dirty), the water on its own node (lifted 0.39-0.47 while full),
+comfort / hygiene by tier (regular 113/144, oriental 162/180, ornate 210/208). Sinks: Wash Hands, Wash
+Dishes (function 0x18: the kitchen's washing up), Repair; floor (pedestal) and counter sinks; tiers
+420 / 520. A counter sink stands on a counter's tile (ResData +7: a sink); the counter
+(`ISimsCounterTopObject::SetObjOrient`) finds it there and draws its row of the "ECntrMdlLkupTable":
+the top with a cut-out (hole x -0.46..0.46, y -0.43..0.28 of model space) as a sub-object at the sink's
+place, and its cabinet; the sink's own model is the basin and faucet (in counter-top space). Hot tubs:
+heart-shaped (2x2), Japanese (2x3: Get In, Join, Call Over, Repair, break), the anti-gravity spa (3x3,
+modes to turn on first, its own GUID tested in its trees).
+
+**What each PC object becomes.**
+
+| PC kind | GameCube base | |
+|---|---|---|
+| toilet | `plumbing_toilet_cheap` (PC comfort 0-4), `plumbing_toilet_porcelain` (5-10) | the seat (the PC's `seat_rot` part) on the base's seat node, turning about the PC hinge; `seat_offset` from the PC seat (0.46) against the GameCube's |
+| toilet stall | `plumbing_toilet_stall` (1x2 group, `base_parts`) | the PC stall (toilet, walls, door) over the two tiles: the back one the toilet, the front one the door |
+| shower | `plumbing_shower_normal` (PC hygiene 0-9), `plumbing_shower_hitech` (10) | 1x1; spray, steam and the dirty flies are the base's effects |
+| bathtub | `plumbing_bathtub_regular` (PC hygiene 0-5), `_oriental_2x1` (6-7), `_ornate_2x1` (8-10) | 2x1 groups (`base_parts`); the PC mesh turned half round (its faucet end where the base's is); the PC water spread over the tub (the bathtub template's water level) on the base's water node |
+| shower / tub | the same bathtubs | a bathtub of the PC's footprint (the GameCube has no combination; its showers are one tile): sims take baths in it |
+| sink (pedestal) | `plumbing_sink_floor_porcelain` (hygiene 0-5), `_floor_ornate` (6-10) | the PC's soapy water and soap ring left out (the base's running water effect) |
+| counter sink | `plumbing_sink_counter_modern` (0-5), `_counter_double_basin` (6-10) | on a counter (GameCube or converted); in a GameCube counter its cut-out plus the sink's flange (`model_flange`); in a converted counter that counter's top with a hole (`sink_hole`); a GameCube counter sink in a converted counter: its own hole (`model_sink_gc`, `sink_shift`) |
+| hot tub | `plumbing_hottub_japanese` (2x3, `base_parts`) | the 3x3 PC mesh narrowed to 2 tiles; a raised tub draws its sims at the PC water (`seat_offset` 0.905), a sunken one at the base's |
+
+Every converted plumbing object keeps its base's character, state animations and effects
+(`animated = 1`); `anim_model` is the PC mesh bound to the base's nodes, `model` a still copy (the
+catalogue preview). Dirty and clogged looks are the PC's own materials (MMAT object states: each
+"..._clean" material's "..._dirty", the toilet water's "toiletwater_water_clogged"), as models of the
+base's dirty and clogged states (`state_models`). A material the PC shows only in another state by
+default (a combination's "..._dirty" tub) is replaced by its clean one. Parts the PC moves that the
+base has no node for (a shower's glass door, knobs, a hot tub's access door) stay still.
+
+**Counter sinks and converted counters.** The PC's counter sinks are basins with a faucet and a
+"..._null" plane (the PC's mask for the counter top under them); they go onto counters, as the
+GameCube's do. A converted counter (surfaces) now also gets `model_sink` and `model_sink_wide`: its
+own model with every flat face from its top down to 0.3 under it cut by a rectangle (narrow: x
+-0.29..0.29, y -0.21..0.25 of PC space; wide: x -0.37..0.37, y -0.22..0.27; uvs and normals carried
+along). With a sink on its tile it shows one of them (the converted sink's `sink_hole`, chosen from its
+rim: the wide one when its rim covers it); the sink draws itself. A GameCube counter sink is wider
+than the PC rims and its rim reaches 0.43 to the front, past a PC counter's top (0.72 deep, front edge
+at y 0.29): a converted counter also gets `model_sink_gc`, a hole 0.03 inside the GameCube rim (x
+-0.44..0.44), moved back by `sink_shift` (the top's front edge less 0.43, -0.2..0; -0.168 for most
+counters, -0.043 for the deeper Archipelago island), cut down to 0.42 under the top and through
+anything standing in that band (an island's curved apron, rails), as the GameCube's basins go 0.2
+deep; the GameCube sink in it is drawn `sink_shift` back (ISimsObjectModel::ApplyMatrix, drawing
+only: its slot, routing and sims are unchanged), its rim's front on the top's front edge. Converted
+counters without `model_sink_gc` (converted before it) show the wide hole. In a GameCube
+counter the cut-out is the GameCube's (larger than the PC rims), so a converted sink's `model_flange`
+(a flat frame in its rim's colour from the rim out to that hole, at the top's height) is drawn with the
+counter's top, as a second sub-object. Kitchen sinks wash dishes as the GameCube's sinks do (Wash
+Dishes, function 0x18).
+
 ## Mod folder
 
 ```
@@ -417,6 +492,9 @@ mods/
                             ("pieces": l_door>node2 ...), parts left still (notes)
   pclight_inventory.tsv     every lamp: placement, base, its parts by state ("pieces": body:1 switch:3
                             on:1 glow:4) and its light (place, colour, falloff, the PC intensity)
+  pcplumb_inventory.tsv     every plumbing object: kind, base, seat / water height and offset, the
+                            parts on nodes and the dirty / clogged states ("pieces": seat_rot>node3
+                            dirty:2st clogged:2st), a counter sink's cut-out (notes)
                             (every inventory: pc_tab / gc_tab, the PC and the GameCube buy-mode tab)
   pc3_nofussficus_4cc4fd6c/ "pc<sort>_<name>_<GUID>" (sort: 1 plants, 2 sculptures, 3 wall art,
     mod.ini                 4 mirrors, 5 rugs, 6 curtains, 7 misc; surfaces "pcs<k>_": 1 counters,
@@ -426,7 +504,9 @@ mods/
                             7 double beds; appliances "pca<k>_": 1 fridges and food displays,
                             2 stoves, grills, food stands, 3 microwaves and toaster ovens,
                             4 coffee makers, processors, juicers, 5 dishwashers, compactors;
-                            lighting "pcl<k>_": 1 table, 2 floor, 3 wall, 4 ceiling, 5 outdoor lamps)
+                            lighting "pcl<k>_": 1 table, 2 floor, 3 wall, 4 ceiling, 5 outdoor lamps;
+                            plumbing "pcp<k>_": 1 toilets, 2 showers, 3 bathtubs and shower / tubs,
+                            4 sinks, 5 hot tubs)
     models_96DA08B7.res     resources in the GameCube's own formats, as an archive holds them
     shaders_1FBB3FA3.res    ("<manager>_<id>.res": models, shaders, textures, ... any manager)
     textures_3A540C0D.res
@@ -440,7 +520,10 @@ mod.ini `[object]` keys: `guid`, `base` (object file) or `base_guid`, `name`, `d
 `state_models`, `base_parts`, `tile_model` (repeatable, after `tiles`), `comfort`,
 `energy`, `counter_seat` (seating and beds), `animated`, `anim_base`, `anim_model`, `node` (repeatable),
 `init_data` (`index:value`, `index:|bits` sets bits, `index:&bits` keeps only them; appliances, lamps,
-ceiling objects), `light` (`x,y,z[:r,g,b[:falloff]]`: a lamp's light), `pack` (informational). Mods are read in folder-name order; a GUID
+ceiling objects), `light` (`x,y,z[:r,g,b[:falloff]]`: a lamp's light), `model_sink`, `model_sink_wide`, `model_sink_gc`
+(a counter's top with a hole for a sink; the last for a GameCube sink), `sink_shift` (a counter: how far
+along the PC's y a GameCube sink in it is drawn, -0.5..0.5), `sink_hole` (`narrow` / `wide`: a counter sink's), `model_flange`
+(a counter sink's flange in a GameCube counter), `pack` (informational). Mods are read in folder-name order; a GUID
 or resource id given twice keeps the first. A resource id the disc has is never taken from a mod.
 
 ## How it works
@@ -457,6 +540,7 @@ or resource id given twice keeps the first. A resource id the disc has is never 
 | Bar stools at counters | `src/game/countereat.cpp` (`simmy::countereat`), hooks in `TryFindFunctionalObject` / `TryCallFunctionalTree` / `TryCallNamedTree` / `TryElement` 0x60 (objectsim.cpp), `Behavior::GetTree` (treesim.cpp), `ObjectSlotDescriptor` (xrouting.cpp) | A counter with a counter seat facing it offers eating surface entry 0x19 through PC trees (SimAntics bytecode built in code, ids 0x1F00-0x1F03), its eating slots 0x60-0x63 and the pickup from them; nothing runs unless a loaded mod object is a counter seat |
 | Appliances | `CopyDef` (modobjects.cpp: the character and state table kept), `ISimsObjectModel::ModNodes` (isimsobjectmodel.cpp), `GetObjSelector3dDisplayInfo` (pcttarget.cpp), `cXObjectImpl::ApplyModInitData` (modobjects.cpp, from `Reset` / `cXMTObjectImpl::Reset`) | The base's skeleton, animations and effects; the bound model's nodes drawn by their turn from rest about the PC hinges; the still model in the catalogue preview; `init_data` after each init tree. `SIMMY_OBJ_NODE_TRACE`, `SIMMY_OBJ_STATE_TRACE`, `SIMMY_OBJ_STATE_FORCE` (testing.md) |
 | Lamps | `CopyDef` (as appliances: the base's character and on/off state table), `ISimsObjectModel::AnimateLights` (isimsobjectmodel.cpp), `ApplyModInitData` (`\|` / `&` ops) | The model's light (its SimsLightInfo, created by `SetupCharacter` and switched by the state animations as a GameCube lamp's) at `light`'s place with its colour and falloff; the on / off parts in sub-models on the base's on / off nodes, hidden by the state's node flags (`ERModel::DrawHierarchical`); a ceiling lamp's zero extent, layer and inside-only data after its init tree |
+| Plumbing | `CopyDef` (as appliances; up to 48 states: a bathtub has 36), `ModNodes`, `ModSeatOffset` (a sim in a toilet or a hot tub is its container's), `ISimsCounterTopObject::SetObjOrient` (isimsobjectmodel.cpp) | The base's skeleton, states and effects; the seat on its node; a converted counter with a sink on its tile shows its holed top (`model_sink` / `model_sink_wide` by the sink's `sink_hole`; a GameCube sink: `model_sink_gc`, drawn `sink_shift` back by `ISimsObjectModel::ApplyMatrix`), a GameCube counter with a converted sink adds the sink's flange (`model_flange`) as a second sub-object next to its cut-out top; `SIMMY_COUNTER_TRACE=1` logs the choice. `SIMMY_CENSOR_OFF=1` (testing.md) turns the mosaic off for screenshots |
 | Fire code | `EIObjectMan::CountObjects` (iobjectman.cpp) | A mod object's model counts at 5/7 of its size: what it would weigh with the disc's fixed-point vertices (16 bytes a vertex against 28) |
 | Saves | unchanged | `objt` names types by GUID; a mod object (and each part) saves and loads like any other |
 
@@ -488,6 +572,7 @@ file name in a place action may name a mod object, which copies the file: use GU
 | `pcappl.py` | Appliances: kinds, bases by tier, the base skeletons' moving nodes, binding the PC parts (bones / part nodes) to them |
 | `pcseat.py` | Seating and beds: kinds, bases by footprint and rating, the seat's height, the beds' made / slept-in models and halves |
 | `pclight.py` | Lighting: placement, bases, the materials by lamp state (lit / unlit / effect, glowing), the PC lights (CRES light nodes, light resources) -> one light record |
+| `pcplumb.py` | Plumbing: kinds, bases by tier, the bases' footprints, seat / water nodes and dirty / clogged states, the seat and water heights, clean / dirty material swaps |
 | `pcobj_convert.py` | Inventory, placement, base choice, materials, MODL/shaders, thumbnail, mod.ini; batch with worker processes |
 
 ## Limits
@@ -534,6 +619,15 @@ file name in a place action may name a mod object, which copies the file: use GU
   the PC model's own light-pool decals). Room light score: the base's light amount for its placement
   (the GameCube does not grade lamps). Multi-tile PC lamps are one tile; lamps on PC fence posts stand on
   the ground; the two-storey chandelier reaches through the ceiling. Recolours: the default only.
+- Plumbing behaves as its GameCube base (comfort, hygiene, bladder and fun gains, clog and break
+  chances are the base tier's). The urinal and the hot spring are left out; shower / tub combinations
+  are bathtubs (no shower in them: the GameCube's showers are one tile, its groups one object file);
+  the PC hot tubs (3x3) are the GameCube's Japanese hot tub (2x3: the PC mesh narrowed by a third). The
+  shower's spray and steam come from where the base's shower head is, not the PC one's; PC moving
+  parts the base has no node for (glass doors, knobs, a hot tub's access door) stay still. A counter
+  sink's hole in a converted counter is cut in the counter's own frame (a sink turned on its counter
+  shows the hole turned); dirty counters with a sink in them show their clean holed top. GameCube
+  counters keep their larger cut-out: the converted sink's flange fills it in the rim's colour.
 - Recolours: only the default (the inventory counts the others). Each would be another catalogue entry
   with its own shader/texture and a model copy (the MODL names its shaders): `--recolours` is not done.
 - No LOD, no specular/environment maps (blended glass is flat), one texture per material.

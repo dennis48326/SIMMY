@@ -197,3 +197,105 @@ def describe(kind):
     return {'counter': 'counter', 'island': 'kitchen island', 'dining': 'dining table', 'end': 'end table',
             'coffee': 'coffee table', 'desk': 'desk', 'display': 'display', 'misc': 'table',
             'wallshelf': 'wall shelf'}.get(kind, kind)
+
+
+# ---------------------------------------------------------------------------------------------------
+# A counter with a sink in it: its top with a hole the sink's basin drops into
+
+# The hole (PC object space, the counter's tile): inside every PC counter sink's rim (their "..._null"
+# cut-out planes: x +-0.30 .. +-0.41, y -0.22 .. 0.29 and wider), and a wide one for the basins of
+# x +-0.38 and more and the GameCube's own sinks (rims x +-0.46, y -0.28 .. 0.43 in PC space).
+SINK_HOLES = {'sink': (-0.29, -0.21, 0.29, 0.25), 'sink_wide': (-0.37, -0.22, 0.37, 0.27)}
+# The GameCube's counter sinks (basin and rim x -0.47..0.47, y -0.28..0.43 here, from the counter top's
+# middle): they are as wide as a tile and deeper toward the front than a PC counter top (front edge
+# 0.29); in a converted counter one is drawn moved back by the counter's `sink_shift` and stands in a
+# hole of its own size (model_sink_gc)
+GC_SINK_RIM = (-0.47, -0.28, 0.47, 0.43)
+
+
+def gc_sink_fit(meshes, top):
+    """(shift in PC y, hole rectangle) for a GameCube sink in this counter: the sink moved back so its
+    rim's front meets the top's front edge (no further than 0.2), the hole 0.03 inside its rim."""
+    ys = []
+    for (mat, sub, P, N, U, T) in meshes:
+        if not len(T):
+            continue
+        A, B, C = P[T[:, 0]], P[T[:, 1]], P[T[:, 2]]
+        n = np.cross(B - A, C - A)
+        ln = np.maximum(np.linalg.norm(n, axis=1), 1e-12)
+        zc = (A[:, 2] + B[:, 2] + C[:, 2]) / 3
+        sel = (np.abs(n[:, 2]) > 0.95 * ln) & (np.abs(zc - top) < 0.03)
+        if sel.any():
+            ys.append(np.concatenate([A[sel, 1], B[sel, 1], C[sel, 1]]))
+    if not ys:
+        return 0.0, None
+    y = np.concatenate(ys)
+    front = float(min(y.max(), 0.5))
+    shift = float(np.clip(front - GC_SINK_RIM[3], -0.2, 0.0))
+    x0, y0, x1, y1 = GC_SINK_RIM
+    return shift, (x0 + 0.03, y0 + shift + 0.03, x1 - 0.03, min(y1 + shift - 0.03, front - 0.01))
+
+
+def _clip(poly, axis, value, keep_below):
+    """Sutherland-Hodgman: the part of `poly` (vertices: (position, normal, uv) arrays) on one side of
+    the plane coordinate[axis] = value."""
+    out = []
+    n = len(poly)
+    for i in range(n):
+        a, b = poly[i], poly[(i + 1) % n]
+        da, db = a[0][axis] - value, b[0][axis] - value
+        ina, inb = (da <= 1e-9) if keep_below else (da >= -1e-9), (db <= 1e-9) if keep_below else (db >= -1e-9)
+        if ina:
+            out.append(a)
+        if ina != inb:
+            t = da / (da - db)
+            out.append(tuple(a[k] + (b[k] - a[k]) * t for k in range(3)))
+    return out
+
+
+def cut_hole(meshes, top, rect, depth=0.3, band=0.0):
+    """The meshes with the counter's flat (horizontal) triangles from `top` down to `depth` under it (its
+    top, the top's underside, the cabinet's top board) cut by `rect` (x0, y0, x1, y1): a hole there
+    for the basin (each triangle clipped to the four pieces around the rectangle; the uvs and normals
+    carried along); everything else as it is. With `band`, every triangle wholly within `band` under the
+    top is cut too, upright ones as well (a curved apron or rail under the top that a deep basin
+    would cross). None when no top triangle was cut."""
+    x0, y0, x1, y1 = rect
+    out, cut = [], False
+    for (mat, sub, P, N, U, T) in meshes:
+        if not len(T):
+            out.append((mat, sub, P, N, U, T))
+            continue
+        A, B, C = P[T[:, 0]], P[T[:, 1]], P[T[:, 2]]
+        n = np.cross(B - A, C - A)
+        ln = np.maximum(np.linalg.norm(n, axis=1), 1e-12)
+        zc = (A[:, 2] + B[:, 2] + C[:, 2]) / 3
+        flat = (np.abs(n[:, 2]) > 0.95 * ln) & (zc < top + 0.03) & (zc > top - depth)
+        lo = np.minimum(np.minimum(A, B), C); hi = np.maximum(np.maximum(A, B), C)
+        if band:
+            flat |= (lo[:, 2] > top - band) & (hi[:, 2] < top + 0.03)
+        touch = flat & (lo[:, 0] < x1) & (hi[:, 0] > x0) & (lo[:, 1] < y1) & (hi[:, 1] > y0)
+        if not touch.any():
+            out.append((mat, sub, P, N, U, T))
+            continue
+        cut = True
+        newP, newN, newU, newT = [P], [N], [U], [T[~touch]]
+        base = len(P)
+        for t in T[touch]:
+            tri = [(P[i].astype(np.float64), N[i].astype(np.float64), U[i].astype(np.float64)) for i in t]
+            # the four pieces outside the rectangle: x <= x0; x >= x1; x0..x1 and y <= y0; x0..x1 and y >= y1
+            pieces = [_clip(tri, 0, x0, True), _clip(tri, 0, x1, False)]
+            mid = _clip(_clip(tri, 0, x0, False), 0, x1, True)
+            if mid:
+                pieces += [_clip(mid, 1, y0, True), _clip(mid, 1, y1, False)]
+            for poly in pieces:
+                if len(poly) < 3:
+                    continue
+                k0 = base
+                for v in poly:
+                    newP.append(v[0][None].astype(P.dtype)); newN.append(v[1][None].astype(N.dtype)); newU.append(v[2][None].astype(U.dtype))
+                    base += 1
+                for k in range(1, len(poly) - 1):
+                    newT.append(np.asarray([[k0, k0 + k, k0 + k + 1]], T.dtype))
+        out.append((mat, sub, np.concatenate(newP), np.concatenate(newN), np.concatenate(newU), np.concatenate(newT)))
+    return out if cut else None

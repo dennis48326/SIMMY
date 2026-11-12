@@ -22,7 +22,7 @@
 //   state_models = 1:0x... 2:0x...   per-state models (state 1 shows this model)
 //   base_parts = 1             a group base's parts are matched by tile (x << 8 | y sub index)
 //   tile_model = 1,0:0xMODEL 1:0x... 2:0x...   (repeatable) the model a tile's part draws, its states
-//   comfort = 7, energy = 2    motive ratings, where the base has one
+//   comfort = 7, energy = 2    motive ratings, where the base has one (also hygiene, bladder, fun)
 //   counter_seat = 1           a bar stool: sims sit on it to eat at the counter it faces (0: never;
 //                              no key: a chair with seat_offset 0.08 or more)
 //   init_data = 4:0x1          object data set after each init tree (4: the heights it may be placed at);
@@ -34,6 +34,12 @@
 //   anim_model = 0x...         the model the states show (strips bound to the skeleton's nodes)
 //   node = 1:0.42,-0.17,0:m    node 1 turns about this point (model space); m: mirrored in x; +x .. -z:
 //                              by its angle about that model axis
+//   model_sink = 0x..., model_sink_wide = 0x..., model_sink_gc = 0x...   a counter's top with a hole,
+//                              shown while a sink stands in it (narrow / wide hole; a GameCube sink's)
+//   sink_shift = -0.168        a counter: a GameCube sink in it is drawn this far along the PC's y
+//                              (moved back: its rim's front on the top's front edge)
+//   sink_hole = narrow | wide  a counter sink: the hole it needs in a converted counter
+//   model_flange = 0x...       a counter sink: drawn round it in a GameCube counter's (larger) cut-out
 // Resource files next to it: "<manager>_<8 hex digits>.res", e.g. "models_9A3F0C12.res". Only their
 // names are read at start-up; a resource is read from its file each time the game loads it.
 #include "pc_settings.hpp"
@@ -220,6 +226,19 @@ void LoadModIni(const std::string& mod, const std::string& path) {
     else if (key == "model_end_px") ok = ParseU32(v, cur->pieces[1]);
     else if (key == "model_end_nx") ok = ParseU32(v, cur->pieces[2]);
     else if (key == "model_ends") ok = ParseU32(v, cur->pieces[3]);
+    else if (key == "model_sink") ok = ParseU32(v, cur->sinkModels[0]);
+    else if (key == "model_sink_wide") ok = ParseU32(v, cur->sinkModels[1]);
+    else if (key == "model_sink_gc") ok = ParseU32(v, cur->sinkModels[2]);
+    else if (key == "sink_shift") {
+      cur->sinkShift = static_cast<float>(std::atof(v.c_str()));
+      ok = cur->sinkShift > -0.5f && cur->sinkShift < 0.5f;
+    }
+    else if (key == "model_flange") ok = ParseU32(v, cur->flangeModel);
+    else if (key == "sink_hole") {
+      const std::string h = Lower(v);
+      cur->sinkHole = h == "wide" ? 1 : h == "narrow" ? 0 : -1;
+      ok = cur->sinkHole >= 0;
+    }
     else if (key == "seat_offset") {
       cur->seatOffset = static_cast<float>(std::atof(v.c_str()));
       ok = cur->seatOffset > -1.0f && cur->seatOffset < 1.0f;
@@ -227,6 +246,9 @@ void LoadModIni(const std::string& mod, const std::string& path) {
     else if (key == "base_parts") cur->baseParts = std::atoi(v.c_str()) != 0;
     else if (key == "comfort") cur->comfort = std::atoi(v.c_str());
     else if (key == "energy") cur->energy = std::atoi(v.c_str());
+    else if (key == "hygiene") cur->hygiene = std::atoi(v.c_str());
+    else if (key == "bladder") cur->bladder = std::atoi(v.c_str());
+    else if (key == "fun") cur->fun = std::atoi(v.c_str());
     else if (key == "counter_seat") {
       cur->counterSeat = std::atoi(v.c_str()) != 0 ? 1 : 0;
       ok = v == "0" || v == "1";
@@ -420,7 +442,7 @@ unsigned int mods_tail_bytes() {
   if (!g_modsEnabled) return 0;
   unsigned long long bytes = 0;
   for (const ModObject& o : g_modObjects) {
-    const unsigned long long res = 0x38 + 4 + 32 * 0x20;
+    const unsigned long long res = 0x38 + 4 + 48 * 0x20;  // modobjects.cpp kMaxStates
     bytes += 0xc4 + res;
     if (!o.tiles.empty()) bytes += o.tiles.size() * 0xc4 + (o.baseParts ? o.tiles.size() : 1) * res;
   }
