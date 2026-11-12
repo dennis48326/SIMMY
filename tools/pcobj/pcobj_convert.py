@@ -32,7 +32,7 @@ import argparse, os, re, shutil, struct, sys, time, zlib
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import rcol, sg, gcdata, gctex, pcmesh, pcinstall, pcsurf, pcseat, pcappl, pclight, pcplumb, pcelec  # noqa: E402
+import rcol, sg, gcdata, gctex, pcmesh, pcinstall, pcsurf, pcseat, pcappl, pclight, pcplumb, pcelec, pchobby  # noqa: E402
 from pcinstall import (W_PRICE, W_ROOMSORT, W_FUNCSORT, W_SUBSORT, W_RATINGS, SUBSORTS, F_DECORATIVE)  # noqa: E402
 
 # ---------------------------------------------------------------------------------------------------
@@ -154,14 +154,17 @@ def load_texture(inst, name, maxdim=256):
 # ---------------------------------------------------------------------------------------------------
 # GameCube resources
 
-def make_modl(name, parts, lights=(), by_node=False):
+def make_modl(name, parts, lights=(), by_node=False, raw_subs=(), raw_scale=None):
     """parts: [(shader id, P, N, U, T[, node[, colour]])] in GameCube model space. One sub-model; an
     indexed strip (GX_TRIANGLES) per part, split at 21000 triangles (16-bit counts). Fixed point as the
     disc's models (vertex format 6: s16 positions in model units times the model's scale, s16 4.12 uvs)
     when FIXED_POINT and the uvs fit; else float (vertex format 7). A part with a colour (RGBA bytes) has
     vertex colours (its shader draws them without lighting: a lamp's glowing shade). `lights`: the
     model's SimsLightInfo records (0x1C bytes each: a lamp's light). by_node: a sub-model per node (its
-    node field set: the node's hidden flag hides it, as a GameCube lamp's on and off shades)."""
+    node field set: the node's hidden flag hides it, as a GameCube lamp's on and off shades).
+    raw_subs: sub-models copied as stored from a disc model ([(node, bytes)]: a hobby object's props, the
+    base's own canvas, guitar or barbell), whose positions are in that model's units: `raw_scale`, its
+    scale, becomes this model's (the float strips are written in its units)."""
     split = []
     for sid, P, N, U, T, *rest in parts:
         node = rest[0] if len(rest) > 0 else None
@@ -179,9 +182,11 @@ def make_modl(name, parts, lights=(), by_node=False):
     # Fixed point (vertex format 6, as most disc models) needs the model's scale, which the game applies
     # through the object's animation controller (its character): the converted objects have none, so
     # their models stay float (format 7).
-    fixed = FIXED_POINT and float(np.abs(allU).max()) < 7.9
+    fixed = FIXED_POINT and float(np.abs(allU).max()) < 7.9 and not raw_subs
     extent = max(float(np.abs(allP).max()), 1e-3)
     scale = 2.0 ** np.ceil(np.log2(extent / 32000.0)) if fixed else 1.0
+    if raw_subs and raw_scale:
+        scale = float(raw_scale)
     body = bytearray()
     body += struct.pack('>I', 0) + b'\0' * 48 + b'\0'
     body += struct.pack('>4I', 0, 0, 0, 0)
@@ -190,7 +195,7 @@ def make_modl(name, parts, lights=(), by_node=False):
     if by_node and bound:
         nodes = sorted({p[5] or 0 for p in split})
         groups = [(n, [p for p in split if (p[5] or 0) == n]) for n in nodes]
-    body += b'\0' + struct.pack('>f', scale) + struct.pack('>I', len(groups))
+    body += b'\0' + struct.pack('>f', scale) + struct.pack('>I', len(groups) + len(raw_subs))
     for gnode, gsplit in groups:
         body += struct.pack('>II', gnode, len(gsplit))
         for sid, P, N, U, T, node, col in gsplit:
@@ -204,7 +209,7 @@ def make_modl(name, parts, lights=(), by_node=False):
                 body += np.concatenate([q, np.zeros((len(P), 1), '>i2')], 1).tobytes()
                 body += np.clip(np.round(U * 4096.0), -32767, 32767).astype('>i2').tobytes()
             else:
-                body += np.concatenate([P, np.zeros((len(P), 1))], 1).astype('>f4').tobytes()
+                body += np.concatenate([P / scale, np.zeros((len(P), 1))], 1).astype('>f4').tobytes()
                 body += U.astype('>f4').tobytes()
             if col is not None:
                 body += np.tile(np.asarray(col, np.uint8)[None, :4], (len(P), 1)).tobytes()
@@ -218,6 +223,8 @@ def make_modl(name, parts, lights=(), by_node=False):
             dl += b'\0' * ((-len(dl)) % 32)
             body += struct.pack('>IBII', len(idx), 3, len(dl), 3) + dl
             body += b'\x06'
+    for rnode, raw in raw_subs:
+        body += raw
     # bounds (model units: divided by the scale)
     lo, hi = allP.min(0) / scale, allP.max(0) / scale
     c = (lo + hi) / 2; r = float(np.linalg.norm(allP / scale - c, axis=1).max())
@@ -356,7 +363,7 @@ class Session:
             self.templates = {}
             for f in (list(BASES.values()) + list(pcsurf.SURF_BASES.values()) + list(pcseat.SEAT_BASES.values()) +
                       list(pcappl.APPL_BASES.values()) + list(pclight.LIGHT_BASES.values()) + list(pcplumb.PLUMB_BASES.values()) +
-                      list(pcelec.ELEC_BASES.values())):
+                      list(pcelec.ELEC_BASES.values()) + list(pchobby.HOBBY_BASES.values())):
                 defs = self.gco.files.get(f)
                 if not defs:
                     raise SystemExit(f'GameCube object {f} not found on the disc')
@@ -427,6 +434,8 @@ class Item:
             return pcplumb.PLUMB_SUBSORTS.get(self.subsort, f'0x{self.subsort:x}')
         if self.category == 'electronics':
             return pcelec.ELEC_SUBSORTS.get(self.subsort, f'0x{self.subsort:x}')
+        if self.category == 'hobbies':
+            return pchobby.HOBBY_SUBSORTS.get(self.subsort, f'0x{self.subsort:x}')
         return SUBSORTS.get(self.subsort, f'0x{self.subsort:x}')
 
 
@@ -590,6 +599,7 @@ def convert(s, it, base_override=None, write=True):
     light = it.category == 'lighting'
     plumb = it.category == 'plumbing'
     elec = it.category == 'electronics'
+    hobby = it.category == 'hobbies'
     txmt_exists = lambda name: inst.find(T_TXMT, name)[0] is not None
     picks = {}
     joints = {}
@@ -634,6 +644,18 @@ def convert(s, it, base_override=None, write=True):
             if note:
                 it.notes.append(note)
         meshes = [m[:6] for m in meshes_j]
+    elif hobby:
+        kind = pchobby.hobby_kind(it)
+        it.kind = kind
+        if not kind:
+            it.status, it.reason = 'skipped', f'unknown hobbies family ({it.semiglobal or "no semi-global"})'
+            return it
+        if kind in pchobby.SKIP:
+            it.status, it.reason = 'skipped', pchobby.SKIP[kind]
+            return it
+        meshes_j, used, errors = _load(inst, it, pchobby.model_order(it.models), materials, joints)
+        meshes_j = [m for m in meshes_j if not pchobby.is_dropped(m[1], m[0])]
+        meshes = [m[:6] for m in meshes_j]
     elif seating:
         kind, why = pcseat.seat_kind(it)
         it.kind = kind
@@ -649,7 +671,7 @@ def convert(s, it, base_override=None, write=True):
                                        not any(k in pcsurf._norm(m) for k in ('corner', 'east', 'west'))]
         meshes, used, errors = _load(inst, it, order, materials)
         picks['main'] = used
-    if not (seating or surface or appl or plumb or elec):
+    if not (seating or surface or appl or plumb or elec or hobby):
         # (a lamp's second model is the debris it leaves when it breaks on the PC)
         meshes, used, errors = _load(inst, it, it.models[:1], materials)
     if not meshes:
@@ -842,6 +864,17 @@ def convert(s, it, base_override=None, write=True):
             meshes = [(m[0], m[1], m[2] + np.array([dx, dy, 0.0]), m[3], m[4], m[5]) for m in meshes]
             P_all = np.concatenate([m[2] for m in meshes])
             it.bounds = (P_all.min(0), P_all.max(0))
+    elif hobby:
+        base = base_override or pchobby.hobby_base(it, kind)
+        hinfo = pchobby.BASE_INFO.get(base, {})
+        btiles = hinfo.get('tiles') or [(0, 0)]
+        W, H = max(x for x, y in btiles) + 1, max(y for x, y in btiles) + 1
+        # the PC mesh over the base's footprint (its tiles centred, turned onto the base's long axis)
+        meshes, pfp, note = pchobby.place(meshes, kind, W, H)
+        it.notes.append(note)
+        P_all = np.concatenate([m[2] for m in meshes])
+        it.bounds = (P_all.min(0), P_all.max(0))
+        hobby_parts = len(btiles) > 1
     elif light:
         kind = pclight.light_kind(it, P_all)
         it.kind = kind
@@ -865,6 +898,8 @@ def convert(s, it, base_override=None, write=True):
     group_base = any(d['master'] != 0 for d in bdefs)
     multi = (W * H > 1 or group_base) and not light
     if elec and kind == 'clock_wall':
+        multi = False
+    if hobby and not hobby_parts:
         multi = False
     # surfaces: the top's height over each tile (PC tile (x, y), its middle at (x, y))
     heights = {}
@@ -948,6 +983,7 @@ def convert(s, it, base_override=None, write=True):
               else f'pca{pcappl.APPL_SORT.get(kind, "6")}' if appl else f'pcl{pclight.LIGHT_SORT.get(kind, "6")}' if light
               else f'pcp{pcplumb.PLUMB_SORT.get(kind, "6")}' if plumb
               else f'pce{pcelec.ELEC_SORT.get(kind, "8")}' if elec
+              else f'pch{pchobby.HOBBY_SORT.get(kind, "9")}' if hobby
               else f'pc{SORT_KEY.get(it.subsort, "7")}')
     folder = os.path.join(s.out or '.', f'{prefix}_{tag}_{it.guid:08x}')
     it.out = os.path.basename(folder)
@@ -1241,6 +1277,24 @@ def convert(s, it, base_override=None, write=True):
         elif mode:
             it.notes.append('no screen subset: the base\'s screens are not shown')
         elec_ini['body_node'] = body_node
+    hobby_props = ([], None)
+    if hobby and gc is not None and not pchobby.BASE_INFO.get(base, {}).get('static'):
+        # the base's skeleton, states and effects; the PC mesh on the base's body node, the base's own props
+        # (sub-models of its prop nodes, as stored) where its animation puts them
+        bd = [d for d in s.gco.files[base] if d['model'] and d['states']][0]
+        bmodel = gc.get('models', bd['model'])
+        strips = gcdata.modl_strips(bmodel)
+        props = set(pchobby.BASE_INFO.get(base, {}).get('props', ()))
+        body = max([st for st in strips if st['node'] not in props] or strips, key=lambda st: len(st['P']))
+        body_node = body['node'] if body['node'] != 0xFFFFFFFF else 0
+        body_node = pchobby.BASE_INFO.get(base, {}).get('body', body_node)
+        anim_parts = [p + (body_node,) for p in gc_parts(meshes)]
+        if props:
+            scale, subs = gcdata.modl_submodels(bmodel)
+            raw = [(n, r) for n, r in subs if n in props]
+            hobby_props = (raw, scale)
+            it.variants.append('props:' + ','.join(str(n) for n, r in raw))
+        it.variants.append(f'body>node{body_node}')
     it.verts = sum(len(p[1]) for p in parts); it.tris = sum(len(p[4]) for p in parts)
     vparts = [(k, gc_parts(m)) for k, m in variants]
     vparts = [(k, p) for k, p in vparts if p]
@@ -1260,7 +1314,8 @@ def convert(s, it, base_override=None, write=True):
     aid = None
     if anim_parts:
         aid = new_id(gc, 'models', f'pcmod_{it.guid:08x}_model_anim', taken)
-        files[f'models_{aid:08X}.res'] = make_modl(f'pc_{tag}_anim', anim_parts, light_recs, by_node=bool(lamp) or elec)
+        files[f'models_{aid:08X}.res'] = make_modl(f'pc_{tag}_anim', anim_parts, light_recs, by_node=bool(lamp) or elec or hobby,
+                                                   raw_subs=hobby_props[0], raw_scale=hobby_props[1])
     plumb_ids = {}
     if plumb and flange_j:
         fp = gc_parts(flange_j)
@@ -1298,6 +1353,15 @@ def convert(s, it, base_override=None, write=True):
                 if g in s.gco.guids or g == it.guid:
                     g = tile_guid(it.guid, gx, gy, s.gco.guids, gtaken)
                 tiles.append((gx, gy, g, None))
+    elif multi and hobby:
+        # the base's parts, tile for tile (GameCube sub x, y); a PC part's GUID where the PC has a tile there
+        gtaken = set()
+        pcg = dict(it.tiles)
+        for k, (x, y) in enumerate(pchobby.BASE_INFO.get(base, {}).get('tiles') or [(0, 0)]):
+            g = pcg.pop((x, H - 1 - y), None) or tile_guid(it.guid, x, y, s.gco.guids, gtaken)
+            if g in s.gco.guids or g == it.guid:
+                g = tile_guid(it.guid, x, y, s.gco.guids, gtaken)
+            tiles.append((x, y, g, None))
     elif multi and elec:
         # GameCube sub (x, y); a PC part's GUID where the PC has a tile there (PC (x, H-1-y), the mesh
         # moved by (dx, dy) in the base's footprint)
@@ -1338,7 +1402,7 @@ def convert(s, it, base_override=None, write=True):
                     g1 = tile_guid(it.guid ^ 0x5A5A5A5A, x1, y1, s.gco.guids, gtaken)
                 g0, g1 = (g0, g1) if (g0 & 0xFF) < (g1 & 0xFF) else (g1, g0)
                 tiles = [(x0, y0, g0, h0), (x1, y1, g1, h1)]
-    if (plumb or (elec and elec_parts)) and tiles:
+    if (plumb or (elec and elec_parts) or hobby) and tiles:
         # the parts in the base group's order: the game makes a group's parts in the order of their GUIDs'
         # low bytes (GameCube/folder.cpp m_selectors[guid & 0xFF]) and puts the first one made on the
         # tile picked; the base's part at each tile sets the order its parts are made in
@@ -1371,11 +1435,12 @@ def convert(s, it, base_override=None, write=True):
                 else f'appliance: {pcappl.describe(kind)}' if appl else f'lighting: {pclight.describe(kind)}' if light
                 else f'plumbing: {pcplumb.describe(kind)}' if plumb
                 else f'electronics: {pcelec.describe(kind)}' if elec
+                else f'hobbies: {pchobby.describe(kind)}' if hobby
                 else f'{it.subsort_name()}, placed: {kind}')
         f.write(f'# PC object "{it.objname}" ({it.home.name}), model {used}, {what}\n[object]\n')
         f.write(f'guid = 0x{it.guid:08X}\nbase = {base}\nname = {one(name)}\ndesc = {one(it.desc)}\n')
         f.write(f'price = {it.price}\nmodel = 0x{mid:08X}\nthumbnail = 0x{thumb_id:08X}\n')
-        f.write(f'functions = 0x{(pcsurf.F_SURFACES if surface else pcseat.F_SEATING if seating else pcappl.F_APPLIANCES if appl else pclight.F_LIGHTING if light else pcplumb.F_PLUMBING if plumb else pcelec.F_ELECTRONICS if elec else F_DECORATIVE):X}\n'
+        f.write(f'functions = 0x{(pcsurf.F_SURFACES if surface else pcseat.F_SEATING if seating else pcappl.F_APPLIANCES if appl else pclight.F_LIGHTING if light else pcplumb.F_PLUMBING if plumb else pcelec.F_ELECTRONICS if elec else pchobby.tab_of(base) if hobby else F_DECORATIVE):X}\n'
                 f'room = {max(0, min(10, it.room))}\n')
         if appl:
             # the base's skeleton, state animations and effects; the states show the bound model, the
@@ -1442,6 +1507,27 @@ def convert(s, it, base_override=None, write=True):
                 f.write('same_type = 1\n')
             if tiles and elec_parts:
                 f.write('base_parts = 1\n')
+        if hobby and anim_parts:
+            # the base's skeleton, state animations and effects; the PC mesh on its body node, the base's props
+            f.write(f'animated = 1\nanim_model = 0x{aid:08X}\n')
+            if hobby_props[0]:
+                f.write('prop_nodes = ' + ','.join(str(n) for n, r in hobby_props[0]) + '\n')
+            if tiles:
+                f.write('base_parts = 1\n')
+            # the base's trees test their own GUID (the cheap telescope's and bookshelf's skill rates, the air
+            # hockey table's and hamster wheel's parts): the converted object answers as its base
+            f.write('same_type = 1\n')
+            hp = pchobby.hide_props(base, kind)
+            if hp:
+                # the dress-up props of the base's own look the person would wear (the wheel round the runner)
+                f.write('hide_props = ' + ' '.join(f'0x{h:08X}' for h in hp) + '\n')
+            sk = pchobby.skill_of(base)
+            if sk:
+                f.write(f'# teaches {sk} (the base\'s)\n')
+        if hobby:
+            v = max(0, it.o.s(pcinstall.W_RATINGS + 5))
+            if v > 0:
+                f.write(f'fun = {min(10, v)}\n')
         if elec:
             v = pcelec.fun(it)
             if v > 0:
@@ -1500,14 +1586,20 @@ INV_COLUMNS = ['guid', 'name', 'object', 'pack', 'packs', 'subsort', 'footprint'
                'comfort', 'energy', 'seats', 'pc_tab', 'gc_tab']
 INVENTORY = {'decorative': 'pcdeco_inventory.tsv', 'surfaces': 'pcsurf_inventory.tsv', 'seating': 'pcseat_inventory.tsv',
              'appliances': 'pcappl_inventory.tsv', 'lighting': 'pclight_inventory.tsv', 'plumbing': 'pcplumb_inventory.tsv',
-             'electronics': 'pcelec_inventory.tsv'}
+             'electronics': 'pcelec_inventory.tsv', 'hobbies': 'pchobby_inventory.tsv'}
 # buy-mode tabs: the PC's (OBJD function sort bits) and the GameCube's (definition function flags; the
 # tab a converted object is put on)
 PC_TABS = [(0x01, 'Comfort'), (0x02, 'Surfaces'), (0x04, 'Appliances'), (0x08, 'Electronics'), (0x10, 'Plumbing'),
            (0x20, 'Decorations'), (0x40, 'Miscellaneous'), (0x80, 'Lighting'), (0x100, 'Hobbies'),
            (0x400, 'Aspiration Rewards'), (0x800, 'Career Rewards')]
 GC_TABS = {'seating': 'Seating & Beds', 'appliances': 'Appliances', 'surfaces': 'Surfaces', 'decorative': 'Decorative',
-           'lighting': 'Lighting', 'plumbing': 'Plumbing', 'electronics': 'Electronics'}
+           'lighting': 'Lighting', 'plumbing': 'Plumbing', 'electronics': 'Electronics', 'hobbies': 'Skill'}
+
+
+def gc_tab(it):
+    if it.category == 'hobbies':
+        return {pchobby.F_GC_SKILL: 'Skill', pchobby.F_GC_MISC: 'Misc', pchobby.F_GC_DECO: 'Decorative'}.get(pchobby.tab_of(it.base), '')
+    return GC_TABS.get(it.category, '')
 
 
 def pc_tab(it):
@@ -1526,7 +1618,7 @@ def inv_row(it):
             f'{it.seat["offset"]:+.3f}' if it.seat else '', str(it.seat.get('comfort', '')) if it.seat else '',
             str(it.seat.get('energy', '')) if it.seat and it.seat.get('energy', -1) >= 0 else '',
             str(it.seat.get('seats', '')) if it.seat else '', pc_tab(it),
-            GC_TABS.get(it.category, '') if it.status == 'converted' or it.status.startswith('ok') else '']
+            gc_tab(it) if it.status == 'converted' or it.status.startswith('ok') else '']
 
 
 def write_inventory(path, items):
@@ -1560,7 +1652,7 @@ def _work(args):
 
 CATEGORIES = {'decorative': decorative_guids, 'surfaces': pcsurf.surface_guids, 'seating': pcseat.seating_guids,
               'appliances': pcappl.appliance_guids, 'lighting': pclight.lighting_guids, 'plumbing': pcplumb.plumbing_guids,
-              'electronics': pcelec.electronics_guids}
+              'electronics': pcelec.electronics_guids, 'hobbies': pchobby.hobby_guids}
 
 
 def main():
@@ -1578,8 +1670,9 @@ def main():
     ap.add_argument('--all-lighting', action='store_true', help='every buy-mode Lighting object')
     ap.add_argument('--all-plumbing', action='store_true', help='every buy-mode Plumbing object (and the hot tubs)')
     ap.add_argument('--all-electronics', action='store_true', help='every buy-mode Electronics object (and the massage table)')
+    ap.add_argument('--all-hobbies', action='store_true', help='every buy-mode Hobbies object')
     ap.add_argument('--categories', help='comma-separated buy-mode categories: decorative, surfaces, seating, appliances, '
-                    'lighting, plumbing, electronics (or all)')
+                    'lighting, plumbing, electronics, hobbies (or all)')
     ap.add_argument('--batch', help='a list of GUIDs (first column; optional second column: base)')
     ap.add_argument('--packs', help='only objects whose home pack is one of these (codes: base, ep1..ep8, sp1..sp9)')
     ap.add_argument('--inventory', help='write the inventory (TSV) of the chosen categories here and stop')
@@ -1626,6 +1719,8 @@ def main():
         cats.append('plumbing')
     if a.all_electronics and 'electronics' not in cats:
         cats.append('electronics')
+    if a.all_hobbies and 'hobbies' not in cats:
+        cats.append('hobbies')
     def category_of(o):
         f = o.w(W_FUNCSORT)
         if f & F_DECORATIVE:
@@ -1640,6 +1735,8 @@ def main():
             return 'plumbing'
         if f & pcelec.F_ELECTRONICS or (cat.semiglobal(o) or '').lower() == 'tablemassageglobals':
             return 'electronics'
+        if f & pchobby.F_HOBBIES:
+            return 'hobbies'
         return 'seating' if f & pcseat.F_SEATING else 'decorative'
     jobs = []
     if a.object:
@@ -1653,7 +1750,7 @@ def main():
     elif a.batch:
         known = (set(BASES.values()) | set(pcsurf.SURF_BASES.values()) | set(pcseat.SEAT_BASES.values()) |
                  set(pcappl.APPL_BASES.values()) | set(pclight.LIGHT_BASES.values()) | set(pcplumb.PLUMB_BASES.values()) |
-                 set(pcelec.ELEC_BASES.values()))
+                 set(pcelec.ELEC_BASES.values()) | set(pchobby.HOBBY_BASES.values()))
         for line in open(a.batch, encoding='utf-8'):
             f = line.strip().split('\t')
             if f and re.fullmatch(r'(0x)?[0-9a-fA-F]{6,8}', f[0]):
@@ -1671,7 +1768,7 @@ def main():
         jobs = [(g, None, 'decorative') for g in decorative_guids(cat)]
     else:
         raise SystemExit('nothing to do: --all-decorative, --all-surfaces, --all-seating, --all-appliances, --all-lighting, --all-plumbing, '
-                         '--all-electronics, --categories, '
+                         '--all-electronics, --all-hobbies, --categories, '
                          '--object, --batch, --inventory or --list')
     packs = set(a.packs.split(',')) if a.packs else None
     items = []
@@ -1697,6 +1794,8 @@ def main():
             return ('w', pcplumb.PLUMB_SORT.get(pcplumb.plumb_kind(it), '6'), (it.name or '').lower())
         if it.category == 'electronics':
             return ('x', pcelec.ELEC_SORT.get(pcelec.elec_kind(it), '8'), (it.name or '').lower())
+        if it.category == 'hobbies':
+            return ('y', pchobby.HOBBY_SORT.get(pchobby.hobby_kind(it), '9'), (it.name or '').lower())
         return ('d', SORT_KEY.get(it.subsort, '7'), (it.name or '').lower())
     items.sort(key=sort_key)
     todo = [(it, b) for it, b in items if not it.status]

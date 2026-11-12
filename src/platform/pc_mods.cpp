@@ -254,6 +254,32 @@ void LoadModIni(const std::string& mod, const std::string& path) {
     else if (key == "shader_swaps") cur->shaderSwaps = std::atoi(v.c_str()) != 0;
     else if (key == "route_front") cur->routeFront = std::atoi(v.c_str()) != 0;
     else if (key == "same_type") cur->sameType = std::atoi(v.c_str()) != 0;
+    else if (key == "hide_props") {
+      // "0x8C0E134F 0x...": model ids
+      cur->hideProps.clear();
+      for (size_t at = 0; ok && at < v.size();) {
+        while (at < v.size() && (v[at] == ' ' || v[at] == ',')) ++at;
+        if (at >= v.size()) break;
+        size_t end = v.find_first_of(" ,", at);
+        if (end == std::string::npos) end = v.size();
+        unsigned int id = 0;
+        ok = ParseU32(v.substr(at, end - at), id);
+        if (ok) cur->hideProps.push_back(id);
+        at = end;
+      }
+    }
+    else if (key == "prop_nodes") {
+      // "2,7,8": nodes 0..31
+      cur->propNodes = 0;
+      for (size_t at = 0; ok && at < v.size();) {
+        size_t end = v.find(',', at);
+        if (end == std::string::npos) end = v.size();
+        const int n = std::atoi(v.substr(at, end - at).c_str());
+        ok = n >= 0 && n < 32;
+        if (ok) cur->propNodes |= 1u << n;
+        at = end + 1;
+      }
+    }
     else if (key == "wall_model") {
       cur->wallModel = std::atoi(v.c_str()) != 0 ? 1 : 0;
       ok = v == "0" || v == "1";

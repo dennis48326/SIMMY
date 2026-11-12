@@ -1,14 +1,15 @@
 # PC mod: mods (objects from the PC game)
 
 Lets the player add objects converted from **their own** copy of The Sims 2 for PC: by default every
-buy-mode **Decorative**, **Surfaces**, **Seating**, **Appliances**, **Lighting**, **Plumbing** and **Electronics** object and every **bed**
+buy-mode **Decorative**, **Surfaces**, **Seating**, **Appliances**, **Lighting**, **Plumbing**, **Electronics** and **Hobbies** object and every **bed**
 of the base game and of every expansion and stuff pack installed (about 560 decorative objects, 170
 counters, tables and desks, 180 chairs, sofas, benches, stools and beds, 54 fridges, stoves, grills,
 microwaves, toaster ovens, coffee makers, food processors, juicers, dishwashers, trash compactors,
 food displays and food stands, 145 table, floor, wall and ceiling lamps, outdoor lights and
 streetlamps, 36 toilets, showers, bathtubs, sinks and hot tubs, and 65 TVs, computers, stereos, speakers,
-jukeboxes, DJ booths, arcade and pinball machines, phones, alarms, clocks and vending machines with the
-Ultimate Collection). Surfaces work as
+jukeboxes, DJ booths, arcade and pinball machines, phones, alarms, clocks and vending machines, and 42
+bookcases, easels, instruments, telescopes, chess and pool tables, exercise machines and workbenches with
+the Ultimate Collection). Surfaces work as
 surfaces: things go on their tops at the PC height, sims prepare food on the counters, eat at the
 tables and use computers on the desks, and counters join up in rows and corners. Seating and beds
 work as the GameCube's: sims sit on them (at the PC seat's height), pull dining chairs up to tables and
@@ -27,6 +28,11 @@ Electronics work as the GameCube's TVs, computers, stereos, DJ booth, arcade and
 console, phone, alarms and vending machines (watch TV and change channels, play, blog, design games, find a
 job, dance, call, buy a drink), the PC TV or computer showing the GameCube's own screens (the channels, the
 games, the blog, the job search) on its screen when on and the PC's switched-off screen when off.
+Hobbies work as the GameCube's skill objects teaching the same skill (read, paint and sell the painting,
+play the piano or guitar, play chess, stargaze, lift weights, run, kickbox, build and sell a rocket), the
+sims at the PC object's bench, keys, eyepiece or treads, with the GameCube's canvas, chess pieces and rocket
+on the PC object and its guitar, barbell, brush and book in their hands; the pool tables are the
+GameCube's air hockey table.
 Off unless a mod folder exists; with none, nothing in the game changes
 (no extra memory, same determinism hash).
 
@@ -41,8 +47,8 @@ Its PC install and disc paths are set at the top of the file.
 
 | | |
 |---|---|
-| `convert_pc_object.bat` | every Decorative, Surfaces, Seating (beds included), Appliances, Lighting, Plumbing and Electronics object of every pack under the install, into `mods` next to simmy.exe (progress per object with the percentage and time; about three minutes for every pack of the Ultimate Collection on two cores) |
-| `convert_pc_object.bat decorative` / `surfaces` / `seating` / `appliances` / `lighting` / `plumbing` / `electronics` | only that buy-mode category (several may be given: `decorative seating`) |
+| `convert_pc_object.bat` | every Decorative, Surfaces, Seating (beds included), Appliances, Lighting, Plumbing, Electronics and Hobbies object of every pack under the install, into `mods` next to simmy.exe (progress per object with the percentage and time; about three minutes for every pack of the Ultimate Collection on two cores) |
+| `convert_pc_object.bat decorative` / `surfaces` / `seating` / `appliances` / `lighting` / `plumbing` / `electronics` / `hobbies` | only that buy-mode category (several may be given: `decorative seating`) |
 | `convert_pc_object.bat list ficus` | PC objects whose name contains "ficus" |
 | `convert_pc_object.bat inventory` | only the inventory (`mods\pcobj_inventory.tsv`) |
 | `convert_pc_object.bat "No-Fuss Ficus"` | one object (name or GUID), base chosen automatically |
@@ -52,27 +58,27 @@ By hand (Python 3 with numpy and Pillow, nothing else):
 
 ```
 python tools/pcobj/pcobj_convert.py --pc "C:\Games\The Sims 2 Ultimate Collection" \
-    --gc D:\Games\Sims2.iso --out C:\Games\SIMMY\mods --categories decorative,surfaces,seating,appliances,lighting,plumbing,electronics
+    --gc D:\Games\Sims2.iso --out C:\Games\SIMMY\mods --categories decorative,surfaces,seating,appliances,lighting,plumbing,electronics,hobbies
 ```
 
 `--pc` is the install folder (every `TSData/Res` under it is a pack); `--gc` the GameCube data the port
-plays (disc image or extracted folder). `--categories decorative,surfaces,seating,appliances,lighting,plumbing,electronics`
+plays (disc image or extracted folder). `--categories decorative,surfaces,seating,appliances,lighting,plumbing,electronics,hobbies`
 (or `all`; also `--all-decorative`, `--all-surfaces`, `--all-seating`, `--all-appliances`,
-`--all-lighting`, `--all-plumbing`, `--all-electronics`) picks the buy-mode
+`--all-lighting`, `--all-plumbing`, `--all-electronics`, `--all-hobbies`) picks the buy-mode
 categories. Other modes: `--object <GUID|name> [--base <GameCube object>]`,
 `--batch list.tsv` (GUIDs in the first column, an optional base in the second), `--list <text>`,
 `--inventory <file.tsv>` (classify only, write nothing else). Options: `--packs base,ep1,sp4,...` (by
 home pack), `--jobs N` (worker processes; default CPUs - 1), `--texsize` (largest texture side, 256).
 Converting again replaces the folders it wrote; `mods/pcdeco_inventory.tsv`,
 `mods/pcsurf_inventory.tsv`, `mods/pcseat_inventory.tsv`, `mods/pcappl_inventory.tsv`,
-`mods/pclight_inventory.tsv`, `mods/pcplumb_inventory.tsv` and `mods/pcelec_inventory.tsv` keep one row per object (converted or skipped, and why; `pc_tab` the PC
+`mods/pclight_inventory.tsv`, `mods/pcplumb_inventory.tsv`, `mods/pcelec_inventory.tsv` and `mods/pchobby_inventory.tsv` keep one row per object (converted or skipped, and why; `pc_tab` the PC
 buy-mode tab of the object's catalogue function, `gc_tab` the GameCube tab it is put on).
 
 Start the game. The mod folder is `mods=` in simmy.ini (relative to the ini), else `SIMMY_MODS`, else
 `mods` next to the exe. The log says `[mods] <dir>: n mod(s), n object(s) (n multi-tile parts), n
 resource(s); read in n ms` and `[mods] objects: n added (n multi-tile), n skipped; rows ...` (with
 `SIMMY_MODS_VERBOSE=1`, or 20 objects or fewer, a line per object; a skipped object always says why).
-The objects are in buy mode on the **Decorative**, **Surfaces**, **Seating & Beds**, **Appliances**, **Lighting**, **Plumbing** and **Electronics** tabs with the PC name, description,
+The objects are in buy mode on the **Decorative**, **Surfaces**, **Seating & Beds**, **Appliances**, **Lighting**, **Plumbing**, **Electronics**, **Skill** and **Misc** tabs (hobbies: their base's tab) with the PC name, description,
 price and room rating and a rendered thumbnail. With a mod folder the **C stick** left/right pages that catalogue
 four columns at a time (the GameCube's movie only moves a column at a time; the tab can hold 600+).
 
@@ -560,6 +566,82 @@ the GameCube's caller stands under the wall phone, on a table phone's tile stand
 when they look for its base's GUID: the fire's "notify fire alarm" wakes a converted smoke alarm,
 "Master - Set Ringing" rings converted phones).
 
+## Hobbies
+
+**Inventory.** Lead OBJDs with the catalogue function Hobbies (word 0x28 bit 0x100; sub-sorts 1 creative,
+2 knowledge, 4 exercise, 8 recreation, 0x80 misc); the kind from the semi-global (EaselGlobals,
+MusicGlobals, BookCaseGlobals, TelescopeGlobals, ExercisemachineGlobals, ChessGlobal, PoolTable_Globals,
+CraftingGlobals, ...) and the object name (upright / grand piano, drum kit, bass, guitar, violin,
+synthesizer, treadmill, exercise bike, ballet barre, the robot workbench). 72 with the Ultimate
+Collection: 42 converted; the massage table and the hot spring are Hobbies on the PC but go with
+Electronics and Plumbing (both left out there); the rest is left out with the reason in the inventory
+(28: the dance sphere, the party game, bowling, log rolling, the three game tables for four, basketball,
+soccer, four rinks, the dartboard and axe throwing, the sauna, five playground pieces, three street
+performers' mats and podium, the train table, the car to restore, the open-mic stage and the secret door
+bookcase). The PC's Entertainment
+sub-sort (Electronics) has nothing left with a GameCube Skill-tab home: its arcade and pinball
+machines and the game console went with Electronics, its remote-controlled toys stay for a toys
+category.
+
+**The GameCube's skill objects** (catalogue function 0x100, the Skill tab; each teaches one skill:
+person data 0xa cooking, 0xc mechanical, 0xb charisma, 0x11 body, 0x12 logic, 0xf creativity, 9
+cleaning): the bookshelves (`bookshelf_cheap` / `_expensive`, 2x1, against a wall: Read, Put Away),
+`skill_creative_easel` (Paint; the painting grows on the canvas, Sell Painting), the electric guitar
+(2x1: Play, Listen, Shoot Flame), the upright and player pianos (2x2: Play Classical / Experimental,
+Listen), the chess tables (normal, alien: Play Chess, Join, Cheer), the telescopes (normal,
+professional: Stargaze at night, Spy by day), `skill_mechanical_invention_bench` (2x1: Make Rocket,
+Launch Rocket), `skill_physical_weight_bench` (2x2: Light / Medium / High Weightlifting),
+`skill_body_hamsterwheel` (3x2: Run), `skill_body_punching_bag` (2x1: Kickbox), the bonsai, the
+charisma mirror and the chicken checkers. Its games (air hockey 3x2, foosball, the driving range, the
+trampoline, ...) are on the Misc tab (0x40). All are animated objects (a character, state animations,
+effects); the parts its sims handle are either nodes of the object the state animations move or show (the
+easel's canvas: eleven nodes, the blank canvas and the painting as it grows; the chess pieces; the invention
+bench's rocket in its stages; the hamster wheel) or dress-up props the trees put on the sim (the guitar, the
+barbell, brush and palette, a book, the rocket parts, the paddle and puck, and also the wheel round the
+runner and the punching bag itself).
+
+**What each PC object becomes.**
+
+| PC kind | GameCube base | |
+|---|---|---|
+| bookcase | `bookshelf_cheap` (PC price < 700), `bookshelf_expensive` (700 and up) | against a wall; Read (the books: cooking, mechanical, cleaning); a 1x1 PC bookcase in the middle of the 2x1 bookshelf |
+| easel | `skill_creative_easel` | Paint (creativity); the base's canvas and the painting growing on it over the PC easel; Sell Painting |
+| crafting station (toy bench, flower station, pottery wheel, sewing machine) | `skill_creative_easel` (a copy per tile) | the PC teaches creativity at them: paint, the canvas on the PC station, sell the painting (the GameCube has no crafts) |
+| robot workbench | `skill_mechanical_invention_bench` | Make Rocket (mechanical), the rocket built on the PC bench, the patent sold |
+| upright piano | `skill_creative_piano_upright` | Play (creativity), the sim on the PC bench at the PC keys |
+| grand piano | `skill_creative_player_piano` | the dearer PC piano on the dearer GameCube one (2x2: the 2x3 PC mesh overhangs) |
+| drum kit | `skill_creative_piano_upright` | played sitting, as a piano (creativity; the GameCube has no drums) |
+| guitar, bass, violin, synthesizer | `skill_creative_electric_guitar` | Play (creativity) with the base's guitar in the sim's hands, at the PC amplifier / stand |
+| telescope | `skill_logic_telescope` (price < 1000), `_professional` | Spy, Stargaze (logic) |
+| chess table | `skill_mental_chess_normal` | Play Chess, Join (logic); the base's pieces on the PC board |
+| weight machine (multipress, leg press, butterfly, bench press) | `skill_physical_weight_bench` (2x2) | weightlifting (body), the base's barbell |
+| treadmill, exercise bike | `skill_body_hamsterwheel` (3x2) | Run (body) on the PC treads (turned onto the wheel's axis; `hide_props`: no wheel round the runner) |
+| ballet barre | `skill_body_punching_bag` (2x1) | Kickbox (body) at the PC barre |
+| pool table | `game_air_hockey` (3x2, Misc tab) | Play: the GameCube's air hockey on the PC table (paddles, puck) |
+| ant farm | `art_sculpture_wooden_model` (Decorative) | a table-top decoration |
+
+Every converted hobby object keeps its base's character, states, effects and trees (`animated = 1`,
+`same_type = 1`: the base's own GUID tests, the cheap telescope's and cheap bookshelf's skill rates, the air
+hockey table's and hamster wheel's parts, answer as for the base; with `base_parts` each part answers as the base
+part it copies). `anim_model` is the PC mesh on the base's body node plus the base's **props**: the sub-models of
+the base's model on the nodes whose parts the PC mesh has no counterpart for (the easel's canvas and the painting
+growing on it, nodes 2-12; the invention bench's rocket in its stages, 3-7; the chess pieces, 1-11), copied as
+stored (the converter writes its own strips in that model's units: the anim model takes the base model's scale);
+`prop_nodes = 2,3,...` makes the game draw those nodes where the base's animation has them
+(`ISimsObjectModel::ModNodes` leaves their matrices to the controller), not by their turn from rest as the PC
+parts' nodes. What a sim holds is a dress-up prop the base's trees put on the sim (`TryChangeSuit`: the guitar,
+the barbell, brush and palette, a book, the rocket parts, the air hockey paddle and puck): they stay; the two that
+are the base's own body, the spinning wheel round the hamster wheel's runner (`0x8C0E134F`) and the punching bag
+the kicker hits (`0x0D2D87FB`), are left off on a treadmill, bike and barre (`hide_props`; a synthesizer's player
+holds no guitar, `0xB31496D7`). The PC mesh is placed over the base's footprint: the tiles it covers (PC
+footprints count the tile the sim stands on; the mesh is measured) centred in the base's, turned where the PC's
+long axis is the other one (treadmill, exercise bike: the console in front of the runner), then moved by a
+measured shift per kind (`SHIFT` in pchobby.py: the treadmill 0.35 so the runner is on the treads, a chess table
+0.06 down so the base's pieces stand on the PC board). Multi-tile objects are the base's groups (`base_parts`, the
+base's part per tile); a PC object smaller than its base takes the base's footprint (a 1x1 bookcase on the 2x1
+bookshelf, the mesh in its
+middle). The tab is the base's: Skill, Misc for the pool tables, Decorative for the ant farm.
+
 ## Mod folder
 
 ```
@@ -577,6 +659,8 @@ mods/
                             dirty:2st clogged:2st), a counter sink's cut-out (notes)
   pcelec_inventory.tsv      every electronics object: kind, base, footprint, its screen (the base's screen
                             nodes or swap) and handset ("pieces": screen>nodes:2,3,..,9off handset>node1)
+  pchobby_inventory.tsv     every hobbies object: kind, base, footprint, the body node, the base's props
+                            ("pieces": props:2,3,.. body>node1)
                             (every inventory: pc_tab / gc_tab, the PC and the GameCube buy-mode tab)
   pc3_nofussficus_4cc4fd6c/ "pc<sort>_<name>_<GUID>" (sort: 1 plants, 2 sculptures, 3 wall art,
     mod.ini                 4 mirrors, 5 rugs, 6 curtains, 7 misc; surfaces "pcs<k>_": 1 counters,
@@ -590,7 +674,10 @@ mods/
                             plumbing "pcp<k>_": 1 toilets, 2 showers, 3 bathtubs and shower / tubs,
                             4 sinks, 5 hot tubs; electronics "pce<k>_": 1 TVs, 2 computers, 3 stereos,
                             speakers, jukeboxes, DJ booths, 4 arcade and pinball machines, game
-                            systems, 5 phones, 6 alarms and clocks, 7 vending machines)
+                            systems, 5 phones, 6 alarms and clocks, 7 vending machines; hobbies
+                            "pch<k>_": 1 easels and crafting stations, 2 instruments, 3 bookcases,
+                            4 telescopes and chess tables, 5 exercise machines, 6 workbenches, 7 pool
+                            tables, 8 the ant farm)
     models_96DA08B7.res     resources in the GameCube's own formats, as an archive holds them
     shaders_1FBB3FA3.res    ("<manager>_<id>.res": models, shaders, textures, ... any manager)
     textures_3A540C0D.res
@@ -608,7 +695,9 @@ ceiling objects), `light` (`x,y,z[:r,g,b[:falloff]]`: a lamp's light), `model_si
 (a counter's top with a hole for a sink; the last for a GameCube sink), `sink_shift` (a counter: how far
 along the PC's y a GameCube sink in it is drawn, -0.5..0.5), `sink_hole` (`narrow` / `wide`: a counter sink's), `model_flange`
 (a counter sink's flange in a GameCube counter), `shader_swaps`, `state_shaders` (a TV's channels; its
-own screen when off), `wall_model` (0 / 1), `route_front`, `same_type` (electronics), `pack` (informational). Mods are read in folder-name order; a GUID
+own screen when off), `wall_model` (0 / 1), `route_front`, `same_type` (electronics, hobbies), `prop_nodes` (`2,7,8`: nodes drawn where the base's animation has
+them: a hobby object's props, sub-models copied from the base's model), `hide_props` (`0x8C0E134F ...`:
+dress-up props of the base the sim does not wear on this object), `pack` (informational). Mods are read in folder-name order; a GUID
 or resource id given twice keeps the first. A resource id the disc has is never taken from a mod.
 
 ## How it works
@@ -627,6 +716,7 @@ or resource id given twice keeps the first. A resource id the disc has is never 
 | Lamps | `CopyDef` (as appliances: the base's character and on/off state table), `ISimsObjectModel::AnimateLights` (isimsobjectmodel.cpp), `ApplyModInitData` (`\|` / `&` ops) | The model's light (its SimsLightInfo, created by `SetupCharacter` and switched by the state animations as a GameCube lamp's) at `light`'s place with its colour and falloff; the on / off parts in sub-models on the base's on / off nodes, hidden by the state's node flags (`ERModel::DrawHierarchical`); a ceiling lamp's zero extent, layer and inside-only data after its init tree |
 | Plumbing | `CopyDef` (as appliances; up to 48 states: a bathtub has 36), `ModNodes`, `ModSeatOffset` (a sim in a toilet or a hot tub is its container's), `ISimsCounterTopObject::SetObjOrient` (isimsobjectmodel.cpp) | The base's skeleton, states and effects; the seat on its node; a converted counter with a sink on its tile shows its holed top (`model_sink` / `model_sink_wide` by the sink's `sink_hole`; a GameCube sink: `model_sink_gc`, drawn `sink_shift` back by `ISimsObjectModel::ApplyMatrix`), a GameCube counter with a converted sink adds the sink's flange (`model_flange`) as a second sub-object next to its cut-out top; `SIMMY_COUNTER_TRACE=1` logs the choice. `SIMMY_CENSOR_OFF=1` (testing.md) turns the mosaic off for screenshots |
 | Electronics | `CopyDef` (as appliances; `shader_swaps` / `state_shaders`, `wall_model`), `BasePart` (a tile listed twice), `ModRouteFront` (xrouting.cpp; from `TryGotoRoutingSlot`, `TryGotoRelative`, the snap primitive), `TrySetToNext` kind 4 / `TryTestObjectType` (objectsim.cpp: `m_modBaseGuid`) | The base's screens on the PC screen (its shader swaps, its screen nodes); a table phone's caller in front of it; the base's GUID searches find same-type mods |
+| Hobbies | `CopyDef` (as appliances), `ModNodes` (`prop_nodes`: those nodes keep the controller's matrices), `cXPersonImpl::TryChangeSuit` (person.cpp: `hide_props`), `ObjectFolderImpl::AddModObjects` (same_type: each part answers as the base part it copies) | The base's skill trees, states, effects and dress-up props; its canvas, chess pieces and rocket drawn on their nodes over the PC mesh; the wheel round the runner and the punching bag left off; the trees' own GUID tests (the cheap telescope's and bookshelf's skill rates, the air hockey table's and hamster wheel's parts) answered as the base |
 | Fire code | `EIObjectMan::CountObjects` (iobjectman.cpp) | A mod object's model counts at 5/7 of its size: what it would weigh with the disc's fixed-point vertices (16 bytes a vertex against 28) |
 | Saves | unchanged | `objt` names types by GUID; a mod object (and each part) saves and loads like any other |
 
@@ -659,6 +749,7 @@ file name in a place action may name a mod object, which copies the file: use GU
 | `pcseat.py` | Seating and beds: kinds, bases by footprint and rating, the seat's height, the beds' made / slept-in models and halves |
 | `pclight.py` | Lighting: placement, bases, the materials by lamp state (lit / unlit / effect, glowing), the PC lights (CRES light nodes, light resources) -> one light record |
 | `pcplumb.py` | Plumbing: kinds, bases by tier, the bases' footprints, seat / water nodes and dirty / clogged states, the seat and water heights, clean / dirty material swaps |
+| `pchobby.py` | Hobbies: kinds, bases by function and price tier, the bases' groups, body nodes, props and props to leave off, the mesh over the base's footprint (centred, turned, shifted per kind) |
 | `pcelec.py` | Electronics: kinds, bases by footprint and tier, the bases' groups, placement changes (wall TVs, speakers, table phones), the screen subset, the base's screens (swap or nodes, uv fit), a monitor stood up |
 | `pcobj_convert.py` | Inventory, placement, base choice, materials, MODL/shaders, thumbnail, mod.ini; batch with worker processes |
 
@@ -725,6 +816,19 @@ file name in a place action may name a mod object, which copies the file: use GU
   floor bases made wall objects (`init_data`): their mesh hangs at the PC height. The 2x2 DJ booths take
   the GameCube booth's 3x2 tiles; the 3x1 home theatre TV is a group of plasma copies. Wall clocks are
   wall art (no time on them). Recolours: the default only.
+- Hobbies behave as their GameCube base (its skill, its rate, its fun; a painting, a rocket's patent as
+  the base pays). PC-only behaviour is not converted: no crafts (toys, flowers, pottery, clothes: the
+  stations paint, the GameCube's only creative product), no drums, violin or synthesizer of their own
+  (the drum kit is played as a piano, the violin and bass with the GameCube's guitar, the synthesizer by
+  hand), no pool (air hockey on the pool table), no secret door, no PC study menu (the GameCube's books).
+  The base's footprint is kept: a 1x1 PC bookcase takes the bookshelf's 2x1, the 2x3 grand piano and the
+  1x3 weight machines overhang the base's 2x2, a crafting station of 2x1 on the easel is two easels. The
+  PC's moving parts (piano lids, weight stacks, treads, pedals, the telescope's tilt) stay still; the
+  sims' animations are the GameCube's (lying for the bench press on every weight machine, running on the
+  treadmill and the bike, kickboxing at the barre). Left out: dance sphere, bingo, bowling, log rolling,
+  game tables for four, basketball, soccer, rinks, darts and axe throwing, sauna, playground pieces,
+  street performers' mats, the train table, the car to restore, the open-mic stage, the secret door
+  bookcase (reasons in the inventory).
 - Recolours: only the default (the inventory counts the others). Each would be another catalogue entry
   with its own shader/texture and a model copy (the MODL names its shaders): `--recolours` is not done.
 - No LOD, no specular/environment maps (blended glass is flat), one texture per material.

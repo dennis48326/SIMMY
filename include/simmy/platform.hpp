@@ -343,6 +343,16 @@ struct ModObject {
   // same_type = 1: trees looking for the base's GUID (object searches by type, type tests) find this
   // object too: the fire notifies a converted smoke alarm, an incoming call rings a converted phone.
   bool sameType = false;
+  // Hobbies (prop_nodes = 2,7,8): the base's character nodes whose parts the converted model keeps from
+  // the base's own model (sub-models copied as stored, in the node's own space: a canvas and its
+  // paintings, the guitar a sim plays, the barbell it lifts). Those nodes are drawn where the base's
+  // animation has them (its own matrices), not by their turn from rest as the PC parts' nodes (ModNodes).
+  // Bit n: node n (nodes 0..31).
+  unsigned int propNodes = 0;
+  // hide_props = 0x8C0E134F ...: dress-up props (models the sim wears, TryChangeSuit) its base's trees put on
+  // the person using it that the converted object leaves off (the hamster wheel's spinning wheel, worn
+  // by the runner: a converted treadmill shows its own treads).
+  std::vector<unsigned int> hideProps;
 };
 void mods_init();                // once at start-up (main thread), after settings_load
 bool mods_enabled();             // a mod folder was found (also when it holds no mods)

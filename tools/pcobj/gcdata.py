@@ -214,6 +214,50 @@ def parse_modl_shaders(b):
     return out
 
 
+def modl_submodels(b):
+    """A MODL's sub-models as stored: (scale, [(node, raw bytes)]) (the raw bytes of each sub-model from
+    its node field to the end of its last strip: copied into a converted object's model, hobbies' props)."""
+    ver, sig, var, name, off, size = data_header(b)
+    d = b[off:off + size]
+    be = lambda o: struct.unpack_from('>I', d, o)[0]
+    p = 0x35
+    n = be(p); p += 4 + n * 0x40
+    n = be(p); p += 4
+    for _ in range(n):
+        if be(p) != 0: p += 4; continue
+        nx, ny, nz, cnt = struct.unpack_from('>4I', d, p + 0x88)
+        p += 0x98 + (cnt * nx * ny * nz * 12 if cnt > 1 else 0)
+    for psize in (0x50, 0x60):
+        n = be(p); p += 4
+        for _ in range(n): p += 4 if be(p) != 0 else 0x4C + be(p + 0x48) * psize
+    n = be(p); p += 4 + n * 0x1C
+    scale = struct.unpack_from('>f', d, p + 1)[0]
+    nsub = be(p + 5); p += 9
+    out = []
+    for si in range(nsub):
+        start = p
+        node = be(p); ns = be(p + 4); p += 8
+        for _ in range(ns):
+            flags = be(p); nstr = be(p + 8); p += 12 + nstr + 4
+            while True:
+                tag = d[p]; p += 1
+                if tag == 0:
+                    vc = be(p); p += 4
+                    fixed = flags & 0x10
+                    p += vc * (8 if fixed else 16)
+                    if flags & 2: p += vc * (4 if flags & 0x40 else 2) * (2 if fixed else 4)
+                    if flags & 4: p += vc * 4
+                    if flags & 8: p += vc * (4 if ver >= 0x3A else 3)
+                    if flags & 0x20:
+                        dls = be(p + 5); p += 13 + dls
+                elif tag == 1:
+                    p += 3
+                elif tag == 6:
+                    break
+        out.append((node, bytes(d[start:p])))
+    return scale, out
+
+
 def modl_strips(b):
     """A MODL's strips: [{'sub', 'node', 'shader', 'flags', 'P' (model units), 'U'}] (positions in the
     sub-model's node space; uvs or None). Used for the GameCube screens a converted TV / computer copies."""

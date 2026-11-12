@@ -7,6 +7,7 @@
 #include "simmy/classes/placement.hpp"
 #include "simmy/unported_globals.hpp"
 #include "simmy/detmath.hpp"
+#include "simmy/platform.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -1048,6 +1049,19 @@ int cXPersonImpl::TryChangeSuit(StackElem* frame, const unsigned char* params) {
     return -1;
   }
   int result = 1;
+  // PC mod: mods. A converted object (hide_props) leaves off a prop its base's trees dress the person in
+  // (the hamster wheel's wheel on a converted treadmill's runner). Only for mod objects.
+  if (simmy::mods_enabled() && !(flags & 1) && frame && frame->m_stackObject) {
+    cXObject* so = GetObjectFromID(frame->m_stackObject);
+    cXObjectImpl* soi = so ? so->GetObjectImplementation() : nullptr;
+    const simmy::ModObject* mo = soi && soi->m_selector ? soi->m_selector->m_modObject : nullptr;
+    if (mo && !mo->hideProps.empty())
+      for (unsigned int id : mo->hideProps)
+        if (id == prop->GetAdultModel() || id == prop->GetChildModel()) {
+          PropTable::DestroyInstance(table);
+          return 1;
+        }
+  }
   if (m_animator) {
     if (flags & 1) m_animator->Undress(prop);
     else if (flags & 2) result = m_animator->PreloadDress(prop) ? 1 : 0;
@@ -2643,6 +2657,12 @@ void TracePerson(cXPersonImpl* person, bool named) {
   std::printf("%s motives: energy %.1f comfort %.1f hunger %.1f hygiene %.1f bladder %.1f social %.1f fun %.1f "
               "mood %.1f room %.1f; deltas %d; stack", named ? "" : "[sim]  ", m.m_values[5], m.m_values[6], m.m_values[7], m.m_values[8], m.m_values[9],
               m.m_values[0xe], m.m_values[0xf], m.m_values[3], m.m_values[0xd], static_cast<int>(person->m_motiveDeltas.size()));
+  // skill points (person data: cooking 0xa, mechanical 0xc, charisma 0xb, body 0x11, logic 0x12,
+  // creativity 0xf, cleaning 9; 0..1000) and the lot's funds: the hobbies' skill gains
+  std::printf(" skills ck %d me %d ch %d bo %d lo %d cr %d cl %d funds %d;", person->GetPersonData(0xa),
+              person->GetPersonData(0xc), person->GetPersonData(0xb), person->GetPersonData(0x11),
+              person->GetPersonData(0x12), person->GetPersonData(0xf), person->GetPersonData(9),
+              Globs_pSimulator ? Globs_pSimulator->GetFunds() : -1);
   for (int i = 0; i < person->m_treeSim->GetStackSize(); ++i) {
     StackElem* e = person->m_treeSim->GetNthElem(static_cast<short>(i));
     std::printf(" %04x:%d", static_cast<unsigned short>(e->GetTreeID()), e->m_node);

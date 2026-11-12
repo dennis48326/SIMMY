@@ -279,6 +279,7 @@ void ObjectFolderImpl::AddModObjects() {
     unsigned char* lead = multi ? CopyDef(tail, base.lead, m, m.guid, true, m.room, m.model, NoStates())
                                 : CopyDef(tail, base.drawing, m, m.guid, true, m.room, stateModel, m.states, animOf(base.drawing));
     std::vector<unsigned char*> parts;
+    std::vector<unsigned int> partBase;  // each part's base part's GUID (same_type)
     short master = 0;
     bool partsOk = true;
     if (lead && multi) {
@@ -310,6 +311,7 @@ void ObjectFolderImpl::AddModObjects() {
         PutBE16(d + 0x14, static_cast<unsigned int>(master));
         PutBE16(d + 0x16, static_cast<unsigned int>(t.x << 8 | t.y));
         parts.push_back(d);
+        partBase.push_back(static_cast<unsigned int>(objdef::GUID(from)));
         first = false;
       }
     }
@@ -341,7 +343,9 @@ void ObjectFolderImpl::AddModObjects() {
       ObjSelector* part = add(parts[i]);
       if (!part) continue;
       part->m_modObject = &m;
-      if (m.sameType) part->m_modBaseGuid = s->m_modBaseGuid;
+      // same_type: a part is found as the base's part it copies (with base_parts: the air hockey table's
+      // init tree and the hamster wheel's trees find their parts by the base parts' GUIDs)
+      if (m.sameType) part->m_modBaseGuid = m.baseParts && i < partBase.size() ? partBase[i] : s->m_modBaseGuid;
       part->m_modSurface = m.tiles[i].surface > 0.0f ? m.tiles[i].surface : m.surface;
     }
     s->m_modName = m.name;

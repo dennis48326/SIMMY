@@ -774,7 +774,8 @@ void Store(const Rigid& a, EMat4& m) {
 // that point (the PC part's hinge) instead of the base node's; with m the turn is mirrored in model x
 // (a door hinged on the other side); its slide (translation) is kept. Before a rest pose has been seen
 // every node stays at rest. Runs after each Compute (the controller keeps a frame's matrices: a second
-// call in the same frame is skipped).
+// call in the same frame is skipped). A hobby object's prop nodes (prop_nodes: the base's own canvas,
+// guitar, barbell, rocket, copied as stored into its model) keep the controller's matrices.
 void ISimsObjectModel::ModNodes() {
   cXObjectImpl* self = m_xob ? m_xob->GetObjectImplementation() : nullptr;
   const simmy::ModObject* mo = self && self->m_selector ? self->m_selector->m_modObject : nullptr;
@@ -833,6 +834,8 @@ void ISimsObjectModel::ModNodes() {
                  self->m_id, static_cast<int>(m_modRest.size()) == n ? "known" : "not yet", mo->nodes.size(), m_trackTime);
   const Rigid root = RigidOf(m_orient);
   for (int i = 0; i < n; ++i) {
+    // a hobby object's props (prop_nodes: the base's own parts, in the node's space) keep the base's pose
+    if (i < 32 && (mo->propNodes & (1u << i))) continue;
     Rigid delta{{{1, 0, 0}, {0, 1, 0}, {0, 0, 1}}, {0, 0, 0}};
     if (static_cast<int>(m_modRest.size()) == n) {
       const Rigid rest = RigidOf(m_modRest[static_cast<size_t>(i)]);

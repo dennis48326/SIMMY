@@ -214,7 +214,7 @@ Development only: the launcher removes all of them except `SIMMY_INI` from the g
 |---|---|
 | `SIMMY_FIXED_DT=1` | One retrace of game time per frame |
 | `SIMMY_SIM_SPEED=<n>[@<house>]`, `SIMMY_SIM_SPEED_JOB=<n>` | Simulator speed once a house is up / once player 1 has a job |
-| `SIMMY_SIM_TRACE=1` | Simulator dispatches, motives, routes, careers |
+| `SIMMY_SIM_TRACE=1` | Simulator dispatches, motives, routes, careers; the motive lines also give the seven skills' points (`skills ck me ch bo lo cr cl`: cooking, mechanical, charisma, body, logic, creativity, cleaning, 0..1000) and the lot's funds (skill objects: skill gained, a painting or rocket sold); `[prop]` lines: the props (models) a sim wears and takes off |
 | `SIMMY_TRACE_IDS=98,126` | Also trace those objects |
 | `SIMMY_GSC_TRACE=1` | Each generic sim call id (primitive 0x01) on its first use: the object and tree |
 | `SIMMY_VM_TRACE=1\|<id>`, `SIMMY_VM_TRACE_TREES=<hex>,...`, `SIMMY_VM_TRACE_WHO=<text>` | Primitive trace (all / one object / some trees / name filter) |
