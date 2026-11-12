@@ -150,6 +150,8 @@ RET_UNKNOWN filter_object(PCTTarget__PCTTabInfo* tab, ObjSelector* selector) {
   const ObjDefinition* def = selector->m_def;
   const short subsort = ERQuickdata::S16(def, 0x8a);
   if (subsort != 0) return subsort == tab->subsort ? 1 : 0;
+  // PC mod: mods. Screenshot mode (SIMMY_MODS_ONLY): only the mods' objects are for sale.
+  if (simmy::mods_only() && !selector->m_modObject) return 0;
   const unsigned short functions = ERQuickdata::U16(def, 0x50);
   if (functions == 0 && (!g_unlockAllCheat || tab->functions != 0x40)) return 0;
   return (tab->functions & functions) != 0 ? 1 : 0;

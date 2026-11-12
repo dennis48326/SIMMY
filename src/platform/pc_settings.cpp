@@ -756,7 +756,14 @@ std::string settings_value_string(const GraphicsSettings& g, const char* rawKey)
   return buf;
 }
 
-bool settings_fire_code_limit() { return graphics_settings().fireCodeLimit; }
+bool settings_fire_code_limit() {
+  if (const char* e = std::getenv("SIMMY_FIRE_CODE_LIMIT"); e && *e) {  // show_pc_objects.bat, tests
+    GraphicsSettings tmp;
+    ApplyValue(tmp, "firecodelimit", e);
+    return tmp.fireCodeLimit;
+  }
+  return graphics_settings().fireCodeLimit;
+}
 bool settings_perf() { return graphics_settings().perf; }
 int settings_frame_pacing() {
   if (const char* e = std::getenv("SIMMY_FRAME_PACING"); e && *e) {  // tests / A-B

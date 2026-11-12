@@ -360,6 +360,17 @@ void mods_init() {
 
 bool mods_enabled() { return g_modsEnabled; }
 
+bool mods_only() {
+  static const bool on = [] {
+    const char* e = std::getenv("SIMMY_MODS_ONLY");
+    const bool v = e && *e && *e != '0';
+    if (v) std::fprintf(stderr, "[mods] mods only: buy mode lists only the mods' objects%s\n",
+                        g_modsEnabled ? "" : " (no mod folder: nothing to list)");
+    return v;
+  }();
+  return on && g_modsEnabled;
+}
+
 const std::vector<ModObject>& mods_objects() { return g_modObjects; }
 
 bool mods_resource(const char* manager, unsigned int id, std::vector<unsigned char>& out) {

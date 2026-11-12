@@ -318,6 +318,9 @@ struct ModObject {
 };
 void mods_init();                // once at start-up (main thread), after settings_load
 bool mods_enabled();             // a mod folder was found (also when it holds no mods)
+// Screenshot mode (SIMMY_MODS_ONLY=1, set by tools/windows/show_pc_objects.bat): buy mode lists only
+// the mods' objects; the GameCube's own objects stay in the game (and on the lot), just not for sale.
+bool mods_only();
 const std::vector<ModObject>& mods_objects();
 // A mod's resource for manager `manager` ("models", "shaders", "textures", ...) by id, read from its
 // file into `out` (on demand: nothing is kept in memory); false if no mod has it. Only asked for ids

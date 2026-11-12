@@ -41,6 +41,7 @@
 #include <SDL3/SDL_video.h>
 #include <SDL3/SDL_cpuinfo.h>
 #include <aurora/aurora.h>
+#include <aurora/card.h>
 #include <aurora/event.h>
 #include <aurora/gfx.hpp>
 #include <aurora/main.h>
@@ -840,6 +841,16 @@ int main(int argc, char* argv[]) {  // aurora/main.h renames this to aurora_main
   // PC mod: network play (pc_net.cpp): connect, check, take the host's settings and memory card, before
   // the game's first frame (the session runs in lockstep from boot).
   if (const int rc = simmy::net_start_session(); rc != 0) simmy::platform_shutdown_and_exit(rc < 0 ? 0 : rc);
+
+  // PC mod: mods. SIMMY_CARD_DIR=<folder>: a memory card of its own in <folder> (show_pc_objects.bat, so a
+  // screenshot session never writes to the player's own saves); not in a network session (the host's card).
+  if (const char* cardDir = std::getenv("SIMMY_CARD_DIR"); cardDir && *cardDir && !simmy::net_session()) {
+    std::error_code ec;
+    const std::string dir(cardDir);
+    std::filesystem::create_directories(std::filesystem::path(std::u8string(dir.begin(), dir.end())), ec);
+    aurora_card_set_base_dir(cardDir);
+    std::fprintf(stderr, "[simmy] memory card: %s (SIMMY_CARD_DIR)\n", cardDir);
+  }
 
   // Dev switch: SIMMY_SKIP_INTRO=1 sets the config block's SkipEAMovie (+0x43C) and SkipIntroMovie
   // (+0x3A8) flags, so boot goes from the Maxis screen straight to the start screen. (A network session

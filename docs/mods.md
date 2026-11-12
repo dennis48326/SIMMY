@@ -66,6 +66,13 @@ The objects are in buy mode on the **Decorative**, **Surfaces**, **Seating & Bed
 price and room rating and a rendered thumbnail. With a mod folder the **C stick** left/right pages that catalogue
 four columns at a time (the GameCube's movie only moves a column at a time; the tab can hold 600+).
 
+**Screenshot mode** (`tools/windows/show_pc_objects.bat`): buy mode lists only the mods' objects
+(`SIMMY_MODS_ONLY=1`; the GameCube's own objects stay in the game and on lots, just not for sale; tabs
+without converted objects are empty). The bat also gives the game its own memory card
+(`SIMMY_CARD_DIR=<folder>`: `pc_objects_card` next to simmy.exe, so the player's saves are never touched;
+not in a network session), 999,999 simoleons when buy mode opens (`SIMMY_BUY_FUNDS`) and no fire-code
+limit (`SIMMY_FIRE_CODE_LIMIT=off`, the same as `fire_code_limit=off` in simmy.ini for that run only).
+
 ## What the converter makes of a PC object
 
 **Inventory.** Packs are ordered by release (base, University, Nightlife, Open for Business, Family
