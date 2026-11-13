@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """PC mod: mods. Convert buy-mode objects (Decorative, Surfaces, Seating and beds, Appliances, Lighting, Plumbing, Electronics,
-Hobbies, Storage, Kids) from the user's own The Sims 2 (PC)
+Hobbies, Storage, Kids, Miscellaneous: every buy-mode tab) from the user's own The Sims 2 (PC)
 install (base game and every expansion and stuff pack found) into a SIMMY mod folder.
 
     pcobj_convert.py --pc "<The Sims 2 install>" --gc <GameCube disc image or data folder> --out <mods>
-                     --categories decorative,surfaces,seating,appliances,lighting,plumbing,electronics,hobbies,storage,kids   every
+                     --categories decorative,surfaces,seating,appliances,lighting,plumbing,electronics,hobbies,storage,kids,misc
+                                                        every
                                                         such object of every pack (or: all, --all-decorative, ...)
     pcobj_convert.py ... --object <GUID | name>  [--base <GameCube object file>]   one object
     pcobj_convert.py ... --batch list.tsv         the GUIDs in the list's first column ([2nd: base])
@@ -13,7 +14,7 @@ install (base game and every expansion and stuff pack found) into a SIMMY mod fo
 
 Each object becomes <out>/pc<k>_<name>_<guid>/ (surfaces: pcs<k>_..., seating: pcc<k>_..., appliances: pca<k>_...,
 lighting: pcl<k>_..., plumbing: pcp<k>_..., electronics: pce<k>_..., hobbies: pch<k>_..., storage and kids:
-pck<k>_...): mod.ini (a
+pck<k>_..., misc: pcm<k>_...): mod.ini (a
 copy of a GameCube object, its "base": decorative objects by where they go (wall, floor, table top,
 ceiling, rug), surfaces a GameCube counter or table of the same footprint, seating and beds a GameCube
 chair, sofa, bench or bed of the same footprint and comfort tier (seat height, made / slept-in beds); plumbing the
@@ -22,12 +23,15 @@ clogged looks, a counter sink's hole and flange); electronics the GameCube TV, c
 pinball machine, phone, alarm or vending machine that does the same (the GameCube's screens on the PC
 screen); hobbies the GameCube skill object or game that does the same; storage the GameCube dresser or
 wardrobe (dressers, armoires, lockers: "Change Clothes"), kids the game console (the remote-control toys)
-or a decoration (toys, toy boxes; the baby and toddler furniture is left out); with the PC object's GUID, name,
+or a decoration (toys, toy boxes; the baby and toddler furniture is left out); misc (the rest of the PC's
+Miscellaneous tab) the GameCube drink bar, keg, bubble blower, bonfire, trash can, wardrobe (clothing booths), a
+fridge (buffets), the smoke alarm (the sprinkler) or a decoration (cakes, balloons, arches, pet furniture; cars,
+shop displays and pet supplies are left out); with the PC object's GUID, name,
 description, price, room rating, tiles, a surface's top height and a counter's pieces) and its
 resources in the GameCube's own formats (models_*: MODL, float indexed strips per material; shaders_*;
 textures_*: CMPR/RGB5A3 with mips; a thumbnail). <out>/pcdeco_inventory.tsv, pcsurf_inventory.tsv and
 pcseat_inventory.tsv (and one per further category: pcappl_, pclight_, pcplumb_, pcelec_, pchobby_,
-pcstorage_, pckids_inventory.tsv) list every object found, converted or skipped (and why).
+pcstorage_, pckids_, pcmisc_inventory.tsv) list every object found, converted or skipped (and why).
 
 Never put the output in the source tree or share it: it is made of EA's PC game data, converted on the
 user's machine from the user's own copy. See docs/mods.md.
@@ -37,7 +41,7 @@ import argparse, os, re, shutil, struct, sys, time, zlib
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import rcol, sg, gcdata, gctex, pcmesh, pcinstall, pcsurf, pcseat, pcappl, pclight, pcplumb, pcelec, pchobby, pckids  # noqa: E402
+import rcol, sg, gcdata, gctex, pcmesh, pcinstall, pcsurf, pcseat, pcappl, pclight, pcplumb, pcelec, pchobby, pckids, pcmisc  # noqa: E402
 from pcinstall import (W_PRICE, W_ROOMSORT, W_FUNCSORT, W_SUBSORT, W_RATINGS, SUBSORTS, F_DECORATIVE)  # noqa: E402
 
 # ---------------------------------------------------------------------------------------------------
@@ -369,7 +373,7 @@ class Session:
             for f in (list(BASES.values()) + list(pcsurf.SURF_BASES.values()) + list(pcseat.SEAT_BASES.values()) +
                       list(pcappl.APPL_BASES.values()) + list(pclight.LIGHT_BASES.values()) + list(pcplumb.PLUMB_BASES.values()) +
                       list(pcelec.ELEC_BASES.values()) + list(pchobby.HOBBY_BASES.values()) +
-                      list(pckids.KID_BASES.values())):
+                      list(pckids.KID_BASES.values()) + list(pcmisc.MISC_BASES.values())):
                 defs = self.gco.files.get(f)
                 if not defs:
                     raise SystemExit(f'GameCube object {f} not found on the disc')
@@ -419,6 +423,7 @@ class Item:
         self.variants = []
         self.model_used = ''
         self.seat = {}
+        self.mkind = ''
 
     def footprint(self):
         if getattr(self, 'fp', None):
@@ -446,6 +451,8 @@ class Item:
             if self.guid in pckids.RC_GUIDS:
                 return pcelec.ELEC_SUBSORTS.get(self.subsort, f'0x{self.subsort:x}')
             return pckids.MISC_SUBSORTS.get(self.subsort, f'0x{self.subsort:x}')
+        if self.category == 'misc':
+            return pcmisc.MISC_SUBSORTS.get(self.subsort, f'0x{self.subsort:x}')
         return SUBSORTS.get(self.subsort, f'0x{self.subsort:x}')
 
 
@@ -615,8 +622,29 @@ def convert(s, it, base_override=None, write=True):
     # storage and kids (pckids): a dresser / wardrobe goes the Hobbies way (an animated base, the PC mesh on
     # its body node), a remote-control toy the Electronics way (the game console), the rest are decorations
     kid = it.category in ('storage', 'kids')
-    hmod = pckids if kid else pchobby
+    # the rest of the Miscellaneous tab (pcmisc): an animated base the Hobbies way (bars, the keg, fires, trash
+    # cans, booths), the smoke alarm the Electronics way (the sprinkler), a fridge the Appliances way (buffets),
+    # the rest decorations
+    misc = it.category == 'misc'
+    hmod = pckids if kid else pcmisc if misc else pchobby
     kidkind = ''
+    mkind = ''
+    if misc:
+        mkind = pcmisc.misc_kind(it)
+        it.kind = it.mkind = mkind
+        if not mkind:
+            it.status, it.reason = 'skipped', f'unknown miscellaneous object ({it.semiglobal or "no semi-global"})'
+            return it
+        if mkind in pcmisc.SKIP:
+            it.status, it.reason = 'skipped', pcmisc.SKIP[mkind]
+            return it
+        mpath = pcmisc.path(mkind)
+        if mpath == 'elec':
+            elec = True
+        elif mpath == 'appl':
+            appl = True
+        elif mpath == 'hobby':
+            hobby = True
     if kid:
         kidkind = pckids.kid_kind(it)
         it.kind = kidkind
@@ -635,7 +663,7 @@ def convert(s, it, base_override=None, write=True):
     joints = {}
     meshes_j = None
     if appl:
-        kind = pcappl.appl_kind(it)
+        kind = pcmisc.PATH_KIND.get(mkind, '') if misc else pcappl.appl_kind(it)
         it.kind = kind
         if not kind:
             it.status, it.reason = 'skipped', f'unknown appliance family ({it.semiglobal or "no semi-global"})'
@@ -643,6 +671,8 @@ def convert(s, it, base_override=None, write=True):
         # the stocked / working model (not "...Empty", "...UnderCounter" variants)
         order = it.models[:1] + [m for m in it.models[1:] if not any(k in m.lower() for k in ('empty', 'broken', 'dirty', 'burnt'))]
         meshes_j, used, errors = _load(inst, it, order, materials, joints)
+        if misc:
+            meshes_j = pcmisc.pre_place(meshes_j, mkind)
         meshes = [m[:6] for m in meshes_j]
     elif plumb:
         kind = pcplumb.plumb_kind(it)
@@ -659,28 +689,30 @@ def convert(s, it, base_override=None, write=True):
         meshes_j = [(pcplumb.swap_material(inst, m[0], '_dirty', '_clean', txmt_exists),) + tuple(m[1:]) for m in meshes_j]
         meshes = [m[:6] for m in meshes_j]
     elif elec:
-        kind = kidkind or pcelec.elec_kind(it)
+        kind = kidkind or (pcmisc.PATH_KIND.get(mkind, '') if misc else '') or pcelec.elec_kind(it)
         it.kind = kind
         if not kind:
             it.status, it.reason = 'skipped', f'unknown electronics family ({it.semiglobal or "no semi-global"})'
             return it
-        if kind in pcelec.SKIP and not kid:
+        if kind in pcelec.SKIP and not (kid or misc):
             it.status, it.reason = 'skipped', pcelec.SKIP[kind]
             return it
         meshes_j, used, errors = _load(inst, it, pcelec.model_order(it.models), materials, joints)
         meshes_j = [m for m in meshes_j if not pcelec.is_dropped(m[1], m[0])]
+        if misc:
+            meshes_j = pcmisc.pre_place(meshes_j, mkind)
         if kind == 'computer':
             meshes_j, note = pcelec.open_lid(meshes_j, joints)
             if note:
                 it.notes.append(note)
         meshes = [m[:6] for m in meshes_j]
     elif hobby:
-        kind = kidkind or pchobby.hobby_kind(it)
+        kind = kidkind or mkind or pchobby.hobby_kind(it)
         it.kind = kind
         if not kind:
             it.status, it.reason = 'skipped', f'unknown hobbies family ({it.semiglobal or "no semi-global"})'
             return it
-        if kind in pchobby.SKIP and not kid:
+        if kind in pchobby.SKIP and not (kid or misc):
             it.status, it.reason = 'skipped', pchobby.SKIP[kind]
             return it
         meshes_j, used, errors = _load(inst, it, hmod.model_order(it.models), materials, joints)
@@ -703,9 +735,10 @@ def convert(s, it, base_override=None, write=True):
         picks['main'] = used
     if not (seating or surface or appl or plumb or elec or hobby):
         # (a lamp's second model is the debris it leaves when it breaks on the PC)
-        meshes, used, errors = _load(inst, it, pckids.model_order(it.models)[:1] if kid else it.models[:1], materials)
-        if kid:
-            meshes = [m for m in meshes if not pckids.is_dropped(m[1], m[0])]
+        kmod = pckids if kid else pcmisc
+        meshes, used, errors = _load(inst, it, kmod.model_order(it.models)[:1] if (kid or misc) else it.models[:1], materials)
+        if kid or misc:
+            meshes = [m for m in meshes if not kmod.is_dropped(m[1], m[0])]
     if not meshes:
         it.status, it.reason = 'skipped', errors[0] if errors else 'model has no drawable mesh'
         return it
@@ -897,12 +930,13 @@ def convert(s, it, base_override=None, write=True):
             P_all = np.concatenate([m[2] for m in meshes])
             it.bounds = (P_all.min(0), P_all.max(0))
     elif hobby:
-        base = base_override or (pckids.kid_base(it, kind, meshes) if kid else pchobby.hobby_base(it, kind))
+        base = base_override or (pckids.kid_base(it, kind, meshes) if kid else pcmisc.misc_base(it, kind, meshes) if misc
+                                 else pchobby.hobby_base(it, kind))
         hinfo = hmod.BASE_INFO.get(base, {})
         btiles = hinfo.get('tiles') or [(0, 0)]
         W, H = max(x for x, y in btiles) + 1, max(y for x, y in btiles) + 1
         # the PC mesh over the base's footprint (its tiles centred, turned onto the base's long axis)
-        meshes, pfp, note = hmod.place(meshes, kind, W, H, base) if kid else hmod.place(meshes, kind, W, H)
+        meshes, pfp, note = hmod.place(meshes, kind, W, H, base) if (kid or misc) else hmod.place(meshes, kind, W, H)
         it.notes.append(note)
         P_all = np.concatenate([m[2] for m in meshes])
         it.bounds = (P_all.min(0), P_all.max(0))
@@ -916,11 +950,13 @@ def convert(s, it, base_override=None, write=True):
             # its own switch): the model over one tile, centred on it
             it.notes.append(f'{W}x{H} on the PC: one tile, the model centred on it')
     else:
-        # (a kids' or storage decoration: placed by its mesh alone, its Misc sub-sort is not a Decorative one)
-        kind = classify(it, P_all, subsort=0 if kid else None)
+        # (a kids', storage or misc decoration: placed by its mesh alone, its Misc sub-sort is not a Decorative one)
+        kind = classify(it, P_all, subsort=0 if (kid or misc) else None)
         if kid:
             it.notes.append(pckids.describe(kidkind))
-        if kid and kidkind in pckids.FLOOR_ONLY and kind != 'floor':
+        if misc:
+            it.notes.append(pcmisc.describe(mkind))
+        if ((kid and kidkind in pckids.FLOOR_ONLY) or (misc and mkind in pcmisc.FLOOR_ONLY)) and kind != 'floor':
             it.notes.append(f'on the floor (placed as {kind} by its mesh)')
             kind = 'floor'
         if kind == 'roof':
@@ -1018,6 +1054,7 @@ def convert(s, it, base_override=None, write=True):
         cx, cy = 1.0, 0.5
     tag = re.sub(r'[^a-z0-9]+', '', (it.name or it.objname).lower())[:20] or 'object'
     prefix = (f'pck{pckids.sort_key(kidkind, base)}' if kid
+              else f'pcm{pcmisc.sort_key(mkind, base)}' if misc
               else f'pcs{pcsurf.SURF_SORT.get(kind, "7")}' if surface else f'pcc{pcseat.SEAT_SORT.get(kind, "8")}' if seating
               else f'pca{pcappl.APPL_SORT.get(kind, "6")}' if appl else f'pcl{pclight.LIGHT_SORT.get(kind, "6")}' if light
               else f'pcp{pcplumb.PLUMB_SORT.get(kind, "6")}' if plumb
@@ -1480,6 +1517,7 @@ def convert(s, it, base_override=None, write=True):
         f.write('# PC mod: mods. Converted by tools/pcobj/pcobj_convert.py from the user\'s own The Sims 2 (PC)\n'
                 '# install. EA game data: for this machine only, never share or commit it.\n')
         what = (f'{it.category}: {pckids.describe(kidkind)}' + (f', placed: {kind}' if kidkind in pckids.DECOR else '') if kid
+                else f'misc: {pcmisc.describe(mkind)}' + (f', placed: {kind}' if mkind in pcmisc.DECOR else '') if misc
                 else f'surface: {pcsurf.describe(kind)}' if surface else f'seating: {pcseat.describe(kind)}' if seating
                 else f'appliance: {pcappl.describe(kind)}' if appl else f'lighting: {pclight.describe(kind)}' if light
                 else f'plumbing: {pcplumb.describe(kind)}' if plumb
@@ -1573,6 +1611,9 @@ def convert(s, it, base_override=None, write=True):
             sk = hmod.skill_of(base)
             if sk:
                 f.write(f'# teaches {sk} (the base\'s)\n')
+        if misc and mkind in pcmisc.INIT:
+            # the trash chute: the bottomless trash can on a wall (data 8 / 0xD: a wall object)
+            f.write(f'init_data = {pcmisc.INIT[mkind]}\n')
         if hobby and not kid:
             v = max(0, it.o.s(pcinstall.W_RATINGS + 5))
             if v > 0:
@@ -1639,7 +1680,7 @@ INV_COLUMNS = ['guid', 'name', 'object', 'pack', 'packs', 'subsort', 'footprint'
 INVENTORY = {'decorative': 'pcdeco_inventory.tsv', 'surfaces': 'pcsurf_inventory.tsv', 'seating': 'pcseat_inventory.tsv',
              'appliances': 'pcappl_inventory.tsv', 'lighting': 'pclight_inventory.tsv', 'plumbing': 'pcplumb_inventory.tsv',
              'electronics': 'pcelec_inventory.tsv', 'hobbies': 'pchobby_inventory.tsv',
-             'storage': 'pcstorage_inventory.tsv', 'kids': 'pckids_inventory.tsv'}
+             'storage': 'pcstorage_inventory.tsv', 'kids': 'pckids_inventory.tsv', 'misc': 'pcmisc_inventory.tsv'}
 # buy-mode tabs: the PC's (OBJD function sort bits) and the GameCube's (definition function flags; the
 # tab a converted object is put on)
 PC_TABS = [(0x01, 'Comfort'), (0x02, 'Surfaces'), (0x04, 'Appliances'), (0x08, 'Electronics'), (0x10, 'Plumbing'),
@@ -1647,7 +1688,7 @@ PC_TABS = [(0x01, 'Comfort'), (0x02, 'Surfaces'), (0x04, 'Appliances'), (0x08, '
            (0x400, 'Aspiration Rewards'), (0x800, 'Career Rewards')]
 GC_TABS = {'seating': 'Seating & Beds', 'appliances': 'Appliances', 'surfaces': 'Surfaces', 'decorative': 'Decorative',
            'lighting': 'Lighting', 'plumbing': 'Plumbing', 'electronics': 'Electronics', 'hobbies': 'Skill',
-           'storage': 'Misc', 'kids': 'Misc'}
+           'storage': 'Misc', 'kids': 'Misc', 'misc': 'Misc'}
 
 
 def gc_tab(it):
@@ -1656,6 +1697,13 @@ def gc_tab(it):
         if it.base in pckids.BASE_INFO:
             return 'Misc'
         return 'Electronics' if it.base == pckids.KID_BASES['rc'] else 'Decorative'
+    if it.category == 'misc':
+        # the base's tab: the drink bar, bonfire, trash cans and wardrobe Misc, the keg and bubble blower
+        # Appliances, the fridge (buffets) Appliances, the smoke alarm Electronics, a decoration Decorative
+        p = pcmisc.path(it.mkind)
+        if p == 'hobby':
+            return {pcmisc.F_GC_MISC: 'Misc', pcmisc.F_GC_APPL: 'Appliances'}.get(pcmisc.tab_of(it.base), 'Misc')
+        return {'elec': 'Electronics', 'appl': 'Appliances', 'decor': 'Decorative'}.get(p, '')
     if it.category == 'hobbies':
         return {pchobby.F_GC_SKILL: 'Skill', pchobby.F_GC_MISC: 'Misc', pchobby.F_GC_DECO: 'Decorative'}.get(pchobby.tab_of(it.base), '')
     return GC_TABS.get(it.category, '')
@@ -1712,7 +1760,7 @@ def _work(args):
 CATEGORIES = {'decorative': decorative_guids, 'surfaces': pcsurf.surface_guids, 'seating': pcseat.seating_guids,
               'appliances': pcappl.appliance_guids, 'lighting': pclight.lighting_guids, 'plumbing': pcplumb.plumbing_guids,
               'electronics': pcelec.electronics_guids, 'hobbies': pchobby.hobby_guids,
-              'storage': pckids.storage_guids, 'kids': pckids.kids_guids}
+              'storage': pckids.storage_guids, 'kids': pckids.kids_guids, 'misc': pcmisc.misc_guids}
 
 
 def main():
@@ -1734,8 +1782,10 @@ def main():
     ap.add_argument('--all-storage', action='store_true', help='every buy-mode Storage object (Miscellaneous: dressers)')
     ap.add_argument('--all-kids', action='store_true', help='every buy-mode Kids object (Miscellaneous: kids) and the '
                     'remote-control toys')
+    ap.add_argument('--all-misc', action='store_true', help='every other buy-mode Miscellaneous object (bars, party '
+                    'objects, trash cans, booths, pet furniture...)')
     ap.add_argument('--categories', help='comma-separated buy-mode categories: decorative, surfaces, seating, appliances, '
-                    'lighting, plumbing, electronics, hobbies, storage, kids (or all)')
+                    'lighting, plumbing, electronics, hobbies, storage, kids, misc (or all)')
     ap.add_argument('--batch', help='a list of GUIDs (first column; optional second column: base)')
     ap.add_argument('--packs', help='only objects whose home pack is one of these (codes: base, ep1..ep8, sp1..sp9)')
     ap.add_argument('--inventory', help='write the inventory (TSV) of the chosen categories here and stop')
@@ -1788,6 +1838,8 @@ def main():
         cats.append('storage')
     if a.all_kids and 'kids' not in cats:
         cats.append('kids')
+    if a.all_misc and 'misc' not in cats:
+        cats.append('misc')
     def category_of(o):
         f = o.w(W_FUNCSORT)
         if o.guid in pckids.RC_GUIDS:
@@ -1810,6 +1862,8 @@ def main():
             return 'storage'
         if f & pckids.F_MISC and o.w(W_SUBSORT) & pckids.SUB_KIDS:
             return 'kids'
+        if f & pcmisc.F_MISC:
+            return 'misc'
         return 'seating' if f & pcseat.F_SEATING else 'decorative'
     jobs = []
     if a.object:
@@ -1823,7 +1877,8 @@ def main():
     elif a.batch:
         known = (set(BASES.values()) | set(pcsurf.SURF_BASES.values()) | set(pcseat.SEAT_BASES.values()) |
                  set(pcappl.APPL_BASES.values()) | set(pclight.LIGHT_BASES.values()) | set(pcplumb.PLUMB_BASES.values()) |
-                 set(pcelec.ELEC_BASES.values()) | set(pchobby.HOBBY_BASES.values()) | set(pckids.KID_BASES.values()))
+                 set(pcelec.ELEC_BASES.values()) | set(pchobby.HOBBY_BASES.values()) | set(pckids.KID_BASES.values()) |
+                 set(pcmisc.MISC_BASES.values()))
         for line in open(a.batch, encoding='utf-8'):
             f = line.strip().split('\t')
             if f and re.fullmatch(r'(0x)?[0-9a-fA-F]{6,8}', f[0]):
@@ -1845,7 +1900,7 @@ def main():
         jobs = [(g, None, 'decorative') for g in decorative_guids(cat)]
     else:
         raise SystemExit('nothing to do: --all-decorative, --all-surfaces, --all-seating, --all-appliances, --all-lighting, --all-plumbing, '
-                         '--all-electronics, --all-hobbies, --all-storage, --all-kids, --categories, '
+                         '--all-electronics, --all-hobbies, --all-storage, --all-kids, --all-misc, --categories, '
                          '--object, --batch, --inventory or --list')
     packs = set(a.packs.split(',')) if a.packs else None
     items = []
@@ -1873,6 +1928,8 @@ def main():
             return ('x', pcelec.ELEC_SORT.get(pcelec.elec_kind(it), '8'), (it.name or '').lower())
         if it.category in ('storage', 'kids'):
             return ('z', pckids.KID_SORT.get(pckids.kid_kind(it), '8'), (it.name or '').lower())
+        if it.category == 'misc':
+            return ('zz', pcmisc.MISC_SORT.get(pcmisc.misc_kind(it), '9'), (it.name or '').lower())
         if it.category == 'hobbies':
             return ('y', pchobby.HOBBY_SORT.get(pchobby.hobby_kind(it), '9'), (it.name or '').lower())
         return ('d', SORT_KEY.get(it.subsort, '7'), (it.name or '').lower())
