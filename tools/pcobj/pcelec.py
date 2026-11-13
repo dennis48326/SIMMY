@@ -79,6 +79,9 @@ BASE_INFO = {
     'game_pinball_machine_ufo': {'tiles': [(0, 0), (0, 1)]},
     'game_pinball_machine_shark': {'tiles': [(0, 0), (0, 1)]},
     'electronics_phone_wall': {'handset': 1},
+    # the console's largest part (node 0x45) is the hologram its game shows, hidden while idle: the PC mesh on
+    # the root (a video game system, a remote-control toy)
+    'electronics_game_console': {'body': 0},
 }
 
 # Placement changes after the base's init tree (mod.ini init_data) and how the model is drawn
