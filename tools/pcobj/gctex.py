@@ -204,9 +204,11 @@ def make_txfl(name, img, kind=None, maxdim=256, dxt1_levels=None, mips=True):
 
 
 def make_thumb_txfl(name, img):
-    """The catalogue thumbnail: RGB5A3, no mips."""
+    """The catalogue thumbnail: RGB5A3, no mips. Stored bottom row first, like the GameCube's own
+    thumbnails (the catalogue draws them flipped back); `img` is the right way up."""
     H, W = img.shape[:2]
-    return gcdata.make_header(9, 0x5458464C, 0xFFFFFFFF, name, texdef(W, H, FMT_RGB5A3, 16, 1) + gx_rgb5a3(img))
+    return gcdata.make_header(9, 0x5458464C, 0xFFFFFFFF, name,
+                              texdef(W, H, FMT_RGB5A3, 16, 1) + gx_rgb5a3(np.ascontiguousarray(img[::-1])))
 
 
 def decode_cmpr(data, w, h):

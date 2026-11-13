@@ -149,7 +149,9 @@ GameCube's DXT1 in GX 8x8 tiles; a PC DXT1 level is moved over block for block, 
 by a principal-axis fit) with mip levels down to 8x8, or **RGB5A3** (max 128) where the alpha is real.
 The largest level <= `--texsize` (256) is taken. Shaders are copies of a disc shader with the layer's
 blend (field 0x0C bit 0x40), alpha test (flags bit 4) and reference set. A 64x64 RGB5A3 thumbnail is
-software-rendered from the PC mesh.
+software-rendered from the PC mesh and stored bottom row first, as the disc's own thumbnails are (the
+catalogue draws them flipped back; before build eb the converted ones showed upside down; convert again
+to fix older mods folders). `thumbnail.png` in each mod folder is the same picture the right way up.
 
 **Model.** MODL v0x3A, one sub-model, a float indexed strip (GX_TRIANGLES, vertex format 7) per material,
 split at 21000 triangles. Mesh: the highest level of detail; skinned groups in their bind pose.
