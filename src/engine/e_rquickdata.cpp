@@ -237,7 +237,10 @@ void ERQuickdata::LockImage() {}
 
 // PC mod: mods (see the header).
 unsigned int ERQuickdata::ModTailSize() const {
-  return m_id == kModTailImage && simmy::mods_enabled() ? simmy::mods_tail_bytes() : 0;
+  if (!simmy::mods_enabled()) return 0;
+  if (m_id == kModTailImage) return simmy::mods_tail_bytes();
+  if (m_id == kBuildSetsImage) return simmy::mods_coverings_tail_bytes();  // wall and floor coverings
+  return 0;
 }
 unsigned char* ERQuickdata::ModTail() const {
   return m_image && ModTailSize() ? m_image + ((m_imageSize + 7) & ~7u) + m_cellCount * sizeof(void*) : nullptr;

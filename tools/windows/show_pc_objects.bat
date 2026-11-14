@@ -2,6 +2,8 @@
 rem SIMMY PC objects (PC mod: mods): SCREENSHOT MODE. Starts the game with buy mode showing ONLY the
 rem objects converted from The Sims 2 (PC) by convert_pc_object.bat (the mods folder next to simmy.exe):
 rem the GameCube's own objects are not for sale in this mode (the ones already on a lot stay there).
+rem With converted wall and floor coverings in the mods folder (convert_pc_object.bat walls floors),
+rem build mode's Wallpaper and Floors tabs likewise list only those (the GameCube's stay on the walls).
 rem
 rem   show_pc_objects.bat                         the disc image from ISO below (or iso= in simmy.ini)
 rem   show_pc_objects.bat "D:\Games\Sims 2.iso"   another disc image
@@ -29,7 +31,7 @@ set SIMMY_MODS_ONLY=1
 set SIMMY_FIRE_CODE_LIMIT=off
 set SIMMY_BUY_FUNDS=999999
 set "SIMMY_CARD_DIR=%BIN%\pc_objects_card"
-echo Starting SIMMY in PC objects screenshot mode (only converted objects in buy mode) ...
+echo Starting SIMMY in PC objects screenshot mode (only converted objects in buy mode, converted wallpapers and floors in build mode) ...
 simmy.exe %ISOARG% --split=gc 2> "%~dp0show_pc_objects_log.txt"
 echo.
 echo simmy.exe exited with code %ERRORLEVEL% (log: show_pc_objects_log.txt)

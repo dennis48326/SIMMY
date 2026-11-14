@@ -1,4 +1,4 @@
-# PC mod: mods (objects from the PC game)
+# PC mod: mods (objects, wallpapers and floors from the PC game)
 
 Lets the player add objects converted from **their own** copy of The Sims 2 for PC: by default every
 buy-mode **Decorative**, **Surfaces**, **Seating**, **Appliances**, **Lighting**, **Plumbing**, **Electronics**, **Hobbies** and
@@ -43,6 +43,11 @@ work as the GameCube's drink bar (pour drinks behind the PC counter), the juice 
 blower and bonfire as its own, trash cans and the trash chute as its trash cans, clothing booths as its
 wardrobe, buffets as a fridge and the sprinkler as its smoke alarm; cakes, balloons, wedding arches and pet
 furniture are decorations (the GameCube has no birthdays, weddings or pets).
+And every **wall covering** (about 1480: paint, wallpaper, paneling, tile, stone, brick, siding, concrete)
+and **floor covering** (about 650: carpet, wood, tile, linoleum, stone, brick, concrete) of build mode:
+they are on build mode's Wallpaper and Floors tabs next to the GameCube's own, paint walls (each side
+on its own) and floors, sell back, count in the lot's value and save with the lot (see "Walls and
+floors").
 Off unless a mod folder exists; with none, nothing in the game changes
 (no extra memory, same determinism hash).
 
@@ -57,8 +62,9 @@ Its PC install and disc paths are set at the top of the file.
 
 | | |
 |---|---|
-| `convert_pc_object.bat` | every Decorative, Surfaces, Seating (beds included), Appliances, Lighting, Plumbing, Electronics, Hobbies, Storage, Kids and Miscellaneous object of every pack (the complete set) under the install, into `mods` next to simmy.exe (progress per object with the percentage and time; about three and a half minutes for every pack of the Ultimate Collection on two cores) |
+| `convert_pc_object.bat` | every Decorative, Surfaces, Seating (beds included), Appliances, Lighting, Plumbing, Electronics, Hobbies, Storage, Kids and Miscellaneous object and every wall and floor covering of every pack (the complete set) under the install, into `mods` next to simmy.exe (progress per object with the percentage and time; about four minutes for every pack of the Ultimate Collection on two cores: three and a half for the objects, half a minute for the coverings) |
 | `convert_pc_object.bat decorative` / `surfaces` / `seating` / `appliances` / `lighting` / `plumbing` / `electronics` / `hobbies` / `storage` / `kids` / `misc` | only that buy-mode category (several may be given: `decorative seating`) |
+| `convert_pc_object.bat walls` / `floors` | only the wall / floor coverings (`walls floors`: both; about 30 s and 40 MB for all packs) |
 | `convert_pc_object.bat list ficus` | PC objects whose name contains "ficus" |
 | `convert_pc_object.bat inventory` | only the inventory (`mods\pcobj_inventory.tsv`) |
 | `convert_pc_object.bat "No-Fuss Ficus"` | one object (name or GUID), base chosen automatically |
@@ -73,7 +79,7 @@ python tools/pcobj/pcobj_convert.py --pc "C:\Games\The Sims 2 Ultimate Collectio
 
 `--pc` is the install folder (every `TSData/Res` under it is a pack); `--gc` the GameCube data the port
 plays (disc image or extracted folder). `--categories decorative,surfaces,seating,appliances,lighting,plumbing,electronics,hobbies,storage,kids,misc`
-(or `all`; also `--all-decorative`, `--all-surfaces`, `--all-seating`, `--all-appliances`,
+(or `all`, which takes `walls` and `floors` too; `--categories walls,floors` the coverings alone; also `--all-decorative`, `--all-surfaces`, `--all-seating`, `--all-appliances`,
 `--all-lighting`, `--all-plumbing`, `--all-electronics`, `--all-hobbies`, `--all-storage`, `--all-kids`, `--all-misc`) picks the buy-mode
 categories. Other modes: `--object <GUID|name> [--base <GameCube object>]`,
 `--batch list.tsv` (GUIDs in the first column, an optional base in the second), `--list <text>`,
@@ -89,13 +95,15 @@ Start the game. The mod folder is `mods=` in simmy.ini (relative to the ini), el
 `mods` next to the exe. The log says `[mods] <dir>: n mod(s), n object(s) (n multi-tile parts), n
 resource(s); read in n ms` and `[mods] objects: n added (n multi-tile), n skipped; rows ...` (with
 `SIMMY_MODS_VERBOSE=1`, or 20 objects or fewer, a line per object; a skipped object always says why).
-The objects are in buy mode on the **Decorative**, **Surfaces**, **Seating & Beds**, **Appliances**, **Lighting**, **Plumbing**, **Electronics**, **Skill** and **Misc** tabs (hobbies, storage and kids: their base's tab) with the PC name, description,
+Wall and floor coverings add `n wall and n floor covering(s)` to the first line and `[mods] coverings: n wall
+and n floor covering(s) added (after the disc's 95 and 67), n skipped`. The objects are in buy mode on the **Decorative**, **Surfaces**, **Seating & Beds**, **Appliances**, **Lighting**, **Plumbing**, **Electronics**, **Skill** and **Misc** tabs (hobbies, storage and kids: their base's tab) with the PC name, description,
 price and room rating and a rendered thumbnail. With a mod folder the **C stick** left/right pages that catalogue
 four columns at a time (the GameCube's movie only moves a column at a time; the tab can hold 600+).
 
 **Screenshot mode** (`tools/windows/show_pc_objects.bat`): buy mode lists only the mods' objects
 (`SIMMY_MODS_ONLY=1`; the GameCube's own objects stay in the game and on lots, just not for sale; tabs
-without converted objects are empty). The bat also gives the game its own memory card
+without converted objects are empty); with wall or floor coverings in the mods, build mode's Wallpaper and
+Floors tabs list only those (the GameCube's stay on the lot's walls and floors). The bat also gives the game its own memory card
 (`SIMMY_CARD_DIR=<folder>`: `pc_objects_card` next to simmy.exe, so the player's saves are never touched;
 not in a network session), 999,999 simoleons when buy mode opens (`SIMMY_BUY_FUNDS`) and no fire-code
 limit (`SIMMY_FIRE_CODE_LIMIT=off`, the same as `fire_code_limit=off` in simmy.ini for that run only).
@@ -730,12 +738,90 @@ The bars, keg, bubble blower, fires, trash cans and booths are Hobbies-style obj
 bar's glasses); the sprinkler goes the Electronics way, the buffets the Appliances way, the rest the
 Decorative way. No new keys and no engine change: `init_data` (the chute) and the others already existed.
 
+## Walls and floors
+
+**PC side.** Every pack's `Catalog/Patterns/catpatterns.bundle.package` holds the coverings as XOBJ
+property sets (type `wall` or `floor`): GUID, name, description, cost, sub-sort (walls: paint, wallpaper,
+paneling, tile, masonry, brick, siding, poured, other; floors: carpet, wood, tile, lino, stone, brick,
+poured, other), surface type (floors: the footstep sound) and material: a TXMT in the pack's scenegraph
+packages whose base texture is the picture. A wall's is 256 x 512 (one wall tile wide, the whole wall
+height, crown, chair rail and kick molding drawn in; 20 paints are a 4 x 4 colour with a bump map), a
+floor's 256 x 256 for one tile, or larger for several (`floorMaterialScaleU` n: n x n tiles; 93 floors).
+Packs re-ship earlier packs' coverings: the newest definition wins, the home pack is the oldest. Left
+out: the ones not in the PC catalogue (`showincatalog` 0: pool siding, pirate ship planks, ...).
+
+**GameCube side.** Build mode's Wallpaper and Floors tabs list the rows of the build sets quickdata
+(0x19A16F2D) "WallSet" (95 rows: +0 price, +4 name, +8 shader, +0xC kind, +0x10 for sale) and "FloorSet"
+(67: +0 price, +4 name, +8 footstep surface: 4 grass, 6 dirt, 9 wood, 10 tile, 11 carpet, 12 metal, 13
+stone; +0xC shader, +0x10 kind: 8 / 9 grass, 10 not drawn; +0x14 for sale), sorted by price or name;
+there are no sub-groups. A covering's shader is both what the walls / floors draw and its catalogue
+picture: one GX C8 texture (8-bit, 256 RGBA8 colours, 4 mip levels), 128 x 64 for walls (x up the wall's
+height from the floor, y along one wall tile) and 64 x 64 for a floor tile (floor strips map it
+mirrored, as seen from above). A wall side's covering and a floor tile's are a byte in the world's
+arrays: their row number in the set (wall entry bytes 4-7, a diagonal tile's floor halves in bytes 2 and
+4; floor array: 0xFF marks a tile split by a diagonal). Pattern 0 is the bare wall (the stripping tool
+sets it) and the lot's grass (taking a floor up). The painters charge the row's price per wall side /
+tile from the stock the funds buy, and the stripping / take-up tools refund each pattern's price. The
+lot's value (`ComputeArchValue`) counts them; saves keep the arrays ('Arry' 11 floors, 12 walls).
+
+**What the converter makes** (`tools/pcobj/pcwall.py`; `convert_pc_object.bat walls floors`): per
+covering a C8 texture in the disc's own layout (walls: the PC picture turned a quarter so its floor end is
+x = 0, scaled to 128 x 64, a bump map baked in faintly as light and shade; floors: 64 x 64 a tile, up to
+256 x 256 for a picture spanning several tiles, mirrored), 256 colours shared by its mip levels, and a
+copy of its base's shader with that texture. The base is the GameCube covering of the same kind and the
+nearest colour: walls by the GameCube name's kind (paint, wallpaper, paneling, tile, stone, siding,
+concrete), floors by the footstep surface (PC surface type: carpet -> carpet, marble / lino -> tile, wood
+and decks -> wood, cement -> stone, gravel -> dirt, grass -> grass). Name, description and price are the
+PC's (walls 1-16, floors 0-22 simoleons a side / tile; the GameCube's are 1-5). One mod folder per PC
+sub-sort (`pcw1_paint` .. `pcw9_other`, `pcf1_carpet` .. `pcf8_other`), so the PC's grouping is the
+catalogue's order among equal prices; `preview.png` in each shows its pictures.
+
+mod.ini, one section per covering:
+
+```
+[wall]                      or [floor]
+key = pcw_8cd65ea1          what saves call it (letters, digits, _ and -; unique among the mods)
+name = "Too Much Light" Wallpaper with Crown and Kick Molding in Medium Wood
+desc = These medium and dark gray stripes ...
+price = 6                   per wall side / floor tile
+shader = 0x6A3E19C2         its shader (a mod resource: shaders_6A3E19C2.res and its texture)
+base = 0xF0C6B750           the GameCube covering (its shader id) whose row it copies; a lot saved
+                            with it shows this one when the mod is gone
+sound = 11                  floors: the footstep surface (default: the base's)
+scale = 2                   floors: the picture spans 2 x 2 tiles (1..8)
+group = wallpaper           informational (the PC sub-sort), as pack =
+```
+
+**In the game** (`src/game/modcoverings.cpp`): with coverings in the mods, `SetDefaults` copies the
+two sets into the build sets image's mod tail (`ERQuickdata::ModTail`, sized by
+`simmy::mods_coverings_tail_bytes`): the disc's rows first, room for 255 patterns, and per covering a
+copy of its base's row with its price, name (a slot cell pointing at the mod's text), shader and
+footstep surface. The catalogue lists the disc's rows, then every covering (cell id `0x40000000 | n`);
+picking one gives it a free pattern number (a "slot", 95.. for walls, 67.. for floors) for this lot,
+which the painters, the walls' and floors' shaders, the refunds, the lot value and the footsteps then
+read like a disc row. A lot can show at most **160 different converted wall coverings and 188 floor
+coverings** at once (255 patterns a byte; when all are taken a pattern the lot no longer shows is reused,
+else the catalogue plays the error sound). The description (the GameCube's coverings have none) shows
+under the price. Floors whose picture spans n x n tiles get texture coordinates from the lot's tile grid
+divided by n (`EFloorShdTblNode::BuildStrip`; the disc's floors keep theirs).
+
+**Saves.** `cFixedWorldImpl::Save` adds the lot's palette when it shows coverings: 'Arry' resource
+0x4D43: `SMC1`, a count, and per covering its kind, pattern number, the GameCube pattern of its base and
+its key. `cFixedWorldImpl::Load` maps the palette back after reading the arrays: a covering the mods have
+gets a pattern number again (the bytes renumbered if it changed: another set of mods), one they do not
+have is shown as its GameCube base (the bytes rewritten; the log says `lot palette: ... is not in the
+mods; shown as GameCube wall 52`), an unknown number as the bare wall / grass; the next save is then a
+plain GameCube lot. A save without a palette (every lot made without coverings) is loaded as it is; without
+mods nothing is set up and only a palette is read.
+
 ## All categories
 
 One run of every category (`convert_pc_object.bat` with no argument, or `--categories all`) over the
-Ultimate Collection (the base game, 8 expansions, 9 stuff packs) on two cores: 195 s, 1473 buy-mode
-objects found, 1373 converted, 100 left out (each with its reason in its inventory), 281 MB of mods; the
-game reads them in 0.13 s and adds 1373 objects (461 multi-tile) in 0.28 s, 0 skipped.
+Ultimate Collection (the base game, 8 expansions, 9 stuff packs) on two cores: 238 s (201 s objects, 36 s
+coverings), 1473 buy-mode objects found, 1373 converted, 100 left out, and 2129 wall and floor coverings,
+2122 converted, 7 left out (each with its reason in its inventory), 319 MB of mods (39 MB of it the
+coverings); the game reads them in 0.2 s and adds 1373 objects (461 multi-tile) in 0.28 s, 0 skipped, and
+1477 wall and 645 floor coverings.
 
 | Category | PC tab (sub-sorts) | found | converted | left out | GameCube tabs | folders |
 |---|---|---|---|---|---|---|
@@ -750,7 +836,9 @@ game reads them in 0.13 s and adds 1373 objects (461 multi-tile) in 0.28 s, 0 sk
 | Storage | Miscellaneous: Dressers | 45 | 43 | 2 | Misc, Decorative (coat rack) | `pck<k>_` |
 | Kids | Miscellaneous: Kids (and the three RC toys) | 29 | 19 | 10 | Electronics, Decorative | `pck<k>_` |
 | Miscellaneous | Miscellaneous: the rest | 99 | 62 | 37 | Misc, Appliances, Electronics, Decorative | `pcm<k>_` |
-| **All** | | **1473** | **1373** | **100** | | |
+| **All objects** | | **1473** | **1373** | **100** | | |
+| Walls | Build: wall coverings (9 sub-sorts) | 1482 | 1477 | 5 | Wallpaper (build mode) | `pcw<k>_<group>` (9 folders) |
+| Floors | Build: floor coverings (8 sub-sorts) | 647 | 645 | 2 | Floors (build mode) | `pcf<k>_<group>` (8 folders) |
 
 (In a run of every category the earlier ones take the objects a later one shares: the massage table and
 hot spring go with Electronics and Plumbing, the RC toys with Kids; a category on its own counts them
@@ -763,6 +851,14 @@ babies and toddlers, pets, cars, shops, restaurants and hotels.
 
 ```
 mods/
+  pcwall_inventory.tsv      every wall covering found: pack, kind, name, PC id, PC sub-sort, gc_group
+  pcfloor_inventory.tsv     (the GameCube tab; floors: the footstep surface), price, status, reason,
+                            key, the GameCube base (id, name), material, texture size, scale, folder
+  pcw2_wallpaper/           one folder per PC sub-sort: walls pcw1_paint, 2 wallpaper, 3 paneling,
+    mod.ini                 4 tile, 5 masonry, 6 brick, 7 siding, 8 poured, 9 other; floors
+    shaders_6A3E19C2.res    pcf1_carpet, 2 wood, 3 tile, 4 lino, 5 stone, 6 brick, 7 poured, 8 other:
+    textures_6A3E19C2.res   a [wall] / [floor] section per covering, its shader and texture
+    preview.png             (for the user; not read)
   pcdeco_inventory.tsv      every decorative object found: GUID, name, pack, sub-sort, footprint,
                             placement, base, price, room, BHAVs, model, textures, recolours, status, ...
   pcsurf_inventory.tsv      every surface: the same, the kind as placement, the top's height, the pieces
@@ -847,6 +943,7 @@ or resource id given twice keeps the first. A resource id the disc has is never 
 | Hobbies | `CopyDef` (as appliances), `ModNodes` (`prop_nodes`: those nodes keep the controller's matrices), `cXPersonImpl::TryChangeSuit` (person.cpp: `hide_props`), `ObjectFolderImpl::AddModObjects` (same_type: each part answers as the base part it copies) | The base's skill trees, states, effects and dress-up props; its canvas, chess pieces and rocket drawn on their nodes over the PC mesh; the wheel round the runner and the punching bag left off; the trees' own GUID tests (the cheap telescope's and bookshelf's skill rates, the air hockey table's and hamster wheel's parts) answered as the base |
 | Fire code | `EIObjectMan::CountObjects` (iobjectman.cpp) | A mod object's model counts at 5/7 of its size: what it would weigh with the disc's fixed-point vertices (16 bytes a vertex against 28) |
 | Saves | unchanged | `objt` names types by GUID; a mod object (and each part) saves and loads like any other |
+| Wall and floor coverings | `src/game/modcoverings.cpp` (`simmy::modcov`): `InstallSets` from `EGlobal::SetDefaults` (global.cpp), `AfterWorldLoad` / `AfterWorldSave` from `cFixedWorldImpl::Load` / `Save` (world.cpp), the catalogue's `on_tab_changed_wallpaper` / `_floor`, `enter_wallpaper_mode` / `enter_floor_mode`, `cCellInfo::GetDesc` (pcttarget.cpp), `EFloorShdTblNode::BuildStrip` (ifloor.cpp), `ERQuickdata::ModTailSize` (e_rquickdata.cpp) | The sets copied into the build sets image's tail with the coverings' rows; a pattern number given per covering and lot; the lot's palette saved and mapped back (or to GameCube coverings) on load; floor pictures over several tiles. See "Walls and floors" |
 
 **Unknown GUIDs (mod removed).** The saved type has no selector, so `ObjectFolderImpl::ReconSelector`
 gives the placeholder (GUID 0x3C08965F); `ObjectModuleImpl::DoStream` reads the object's stream and
@@ -854,7 +951,9 @@ kills the placeholders, as the GameCube does for any missing type. The lot loads
 next save no longer has it. Things that stood on a removed surface are on the floor. A tree frame owned by the missing type has no behaviour and is popped
 (`TreeSimImpl::DoNodeAction`, GC).
 
-**Development aids** (testing.md): `SIMMY_PLACE_TEST` `probe:<guid>@x,y,dir|...` (first legal spot,
+**Development aids** (testing.md): `SIMMY_PLACE_TEST` `paperroom@x,y,<pattern or covering key>` (a room
+papered, as the wallpaper tool's room fill), `floorroom@x,y,<pattern or covering key>` (a room floored),
+`probe:<guid>@x,y,dir|...` (first legal spot,
 nothing placed), `try:<guid>@...` (placed there), `info#<guid>` (an object's placement data),
 `sell#<id>` (an object sold, e.g. to put a converted table where the lot's own stood; note that an object
 file name in a place action may name a mod object, which copies the file: use GUIDs);
@@ -881,7 +980,8 @@ file name in a place action may name a mod object, which copies the file: use GU
 | `pcmisc.py` | The rest of Miscellaneous: the inventory, kinds, which path (an animated base, Electronics, Appliances, a decoration), bases by function and price, what is left out, the mesh over the base (a bar's counter on the base's front row) |
 | `pckids.py` | Storage and kids: the inventory (Miscellaneous sub-sorts, the remote-control toys), kinds, the dresser / wardrobe by width, what is left out or made a decoration, the mesh over the base (turned, centred) |
 | `pcelec.py` | Electronics: kinds, bases by footprint and tier, the bases' groups, placement changes (wall TVs, speakers, table phones), the screen subset, the base's screens (swap or nodes, uv fit), a monitor stood up |
-| `pcobj_convert.py` | Inventory, placement, base choice, materials, MODL/shaders, thumbnail, mod.ini; batch with worker processes |
+| `pcwall.py` | Walls and floors: the coverings of every pack (catpatterns XOBJ), the GameCube's sets (rows, names, pictures' colours), the base by kind / surface and colour, the C8 textures (walls turned, bump baked in; floors mirrored, multi-tile), shaders, mod.ini per sub-sort, preview.png, inventories |
+| `pcobj_convert.py` | Inventory, placement, base choice, materials, MODL/shaders, thumbnail, mod.ini; batch with worker processes; `--categories walls,floors` (and `all`) run pcwall.py |
 
 ## Limits
 
@@ -982,6 +1082,16 @@ file name in a place action may name a mod object, which copies the file: use GU
   furniture are decorations (view only; the cakes on tables and counters only). Left out: cars, shop
   displays, the photo booth, podiums, hotel desks, pet bowls, toys and the litter box, the pirate ship.
   With Miscellaneous every PC buy-mode tab is covered; what is left out anywhere is in the inventories.
+- Wall and floor coverings: the GameCube's texture size (128 x 64 a wall tile, 64 x 64 a floor tile: a
+  quarter of the PC's 256 x 512 / 256 x 256 in each direction; floors spanning several tiles up to 256 x
+  256) and its 256-colour format, so fine patterns and lettering blur and gradients band a little; no
+  bump maps (baked in faintly) or shine. At most 160 different converted wall coverings and 188 floor
+  coverings on one lot (the GameCube's byte per wall side and floor tile; the disc's own 95 and 67 are
+  always there). The PC's long names can wrap over the catalogue's price bar. The GameCube's walls have
+  one height: PC pictures made for other proportions (11 of 256 x 768) are squeezed. The catalogue has no
+  sub-groups: the PC sub-sort only orders the coverings (sorted by price or name as the GameCube's).
+  Converted coverings cost the PC's prices (up to 16 a wall side, 22 a floor tile; the GameCube's 1-5).
+  Diagonal walls and half tiles take them as the GameCube's. No PC terrain paints, roofs or fences.
 - Recolours: only the default (the inventory counts the others). Each would be another catalogue entry
   with its own shader/texture and a model copy (the MODL names its shaders): `--recolours` is not done.
 - No LOD, no specular/environment maps (blended glass is flat), one texture per material.

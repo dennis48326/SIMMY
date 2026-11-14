@@ -20,6 +20,7 @@
 #include <cstdlib>
 #include <map>
 #include <utility>
+#include "simmy/modcoverings.hpp"
 
 std::vector<EFloorShdTblNode> EFloorShdTblNode::s_table;  // 80478C18 _eFloorOrderTable
 int EFloorShdTblNode::s_inited = 0;                       // m_bTableInited
@@ -30,6 +31,9 @@ std::vector<EFloorStripInfo> EFloorShdTblNode::s_lightStrips[256];  // m_stripsF
 namespace {
 std::vector<EIFloor*> s_floors;  // m_floors (ERedBlackTree by room)
 int s_stripsCreated = 0;         // numStripsCreated
+// PC mod: mods. The tiles one picture of the pattern being built spans (a floor covering's `scale`; 1
+// for the disc's floors, whose strips keep the GameCube's texture coordinates).
+int s_modUvScale = 1;
 // _lightingBuffer: the point lights' colour at each light-grid vertex ([x][y], x * 63 + y), written by
 // EvaluateLightAtVertices for the vertices of the floor being lit (shared by all floors, as on the GC).
 float s_lightingBuffer[ELightGrid::kGridSize * ELightGrid::kGridSize][3];
@@ -372,6 +376,15 @@ void EFloorShdTblNode::BuildStrip(ERC* rc, EFloorStripInfo info, EVec2& offset, 
     grow(a);
     std::memset(colors + last * 4, 0x7f, 4);
   }
+  // PC mod: mods. A floor covering whose picture spans n x n tiles: texture coordinates from the lot's
+  // tile grid, divided by n (the GameCube's run 0..1 a tile along and across the strip).
+  if (s_modUvScale > 1) {
+    const float inv = 1.0f / static_cast<float>(s_modUvScale);
+    for (int i = 0; i < count; ++i) {
+      uvs[i * 2] = (pos[i * 4] - offset.y) * inv;
+      uvs[i * 2 + 1] = (pos[i * 4 + 1] - offset.x + 0.5f) * inv;
+    }
+  }
   rc->TriStripRef(count, pos, uvs, colors, nrm, nullptr, false);
 }
 
@@ -527,7 +540,9 @@ void EIFloor::CreateFloors(EHouse* house) {
         }
         EVec2 offset = house ? EVec2{house->m_posY, house->m_posX} : EVec2{0.0f, 0.0f};
         EFloorTileStrip strip;
+        s_modUvScale = simmy::modcov::FloorScale(static_cast<int>(&node - EFloorShdTblNode::s_table.data()));
         EFloorShdTblNode::BuildStrip(rc, *it, offset, &strip, normals, level, *reinterpret_cast<EBound3*>(bounds), first);
+        s_modUvScale = 1;
         strips.push_back(strip);
         it = node.m_strips.erase(it);
       }

@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <cstring>
 #include <vector>
+#include "simmy/modcoverings.hpp"
 
 cFixedWorldImpl* Globs_pFixedWorld = nullptr;  // 804FDBF8 Globs::pFixedWorld
 
@@ -471,6 +472,8 @@ int cFixedWorldImpl::Save(iResFile* file, int) {
     m_walls->WriteToDisk(file, 0x41727279, 0xc, true);
     r = m_flags->WriteToDisk(file, 0x41727279, 8, true);
   }
+  // PC mod: mods. The wall and floor coverings the lot shows (its palette; only with coverings).
+  if (r == 0) simmy::modcov::AfterWorldSave(this, file);
   return r;
 }
 
@@ -493,6 +496,9 @@ int cFixedWorldImpl::Load(iResFile* file, int) {
     m_xSize = xSize;
     m_ySize = ySize;
   }
+  // PC mod: mods. A lot saved with wall or floor coverings: its palette maps them to their patterns
+  // now (or, their mods gone, to GameCube coverings). Nothing for a lot without one.
+  simmy::modcov::AfterWorldLoad(this, file);
   return 0;
 }
 

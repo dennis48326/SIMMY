@@ -122,10 +122,14 @@ struct ERQuickdata : public EResource {
   int GetTableCount() const { return m_image ? S32(m_image, kImageTableCount) : 0; }
   const void* GetTableByIndex(int i) const { return m_image + kImageTables + i * kTableEntrySize; }
 
-  // PC mod: mods. The zeroed bytes after the "SimsObjects" image's cells when mods are there
+  // PC mod: mods. The zeroed bytes after the "SimsObjects" image's cells when mods are there (and after
+  // the build sets' when the mods have wall or floor coverings)
   // (simmy::mods_tail_bytes, sized from the mods' objects; null and 0 otherwise): mod rows placed
   // there can point into the image (modobjects.cpp).
   static constexpr unsigned int kModTailImage = 0x0C33DB41;  // "SimsObjects"
+  // The build sets ("WallSet", "FloorSet", "FenceSet"): with wall or floor coverings in the mods, their
+  // rows and the sets' new pointer arrays live in its tail (modcoverings.cpp).
+  static constexpr unsigned int kBuildSetsImage = 0x19A16F2D;
   unsigned int ModTailSize() const;
   unsigned char* ModTail() const;
 

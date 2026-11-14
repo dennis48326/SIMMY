@@ -29,6 +29,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include "simmy/modcoverings.hpp"
 
 // ---------------------------------------------------------------------------------------------------
 // game/interactorutils.cpp (InteractorModule::)
@@ -1068,9 +1069,13 @@ bool UpdatePlaceManipulator(int player, float dt) {
 //   create:<file>@x,y     an object made and put on the tile as TryCreateObject does (dynamic ones merge)
 //   chain@x,y             the tile's object chain printed (the tile map's object and its siblings)
 //   model#<hex>           the object files whose first ObjAnimDef draws that model printed
-//   paperroom@x,y,i[,sell] the room at the tile papered with WallSet entry i (or stripped), wallpainter.cpp
+//   paperroom@x,y,i[,sell] the room at the tile papered with WallSet entry i (or stripped), wallpainter.cpp;
+//                         i may be a wall covering's key (a mod's: its pattern is given as the catalogue does)
+//   floorroom@x,y,i       the room at the tile floored with FloorSet entry i (or a floor covering's key),
+//                         floorpainter.cpp
 //   probe:<guid>@x,y,dir|...  the first legal spot of the list (tested only); try:<guid>@... puts it there
 void WallPainterRoomTest(int x, int y, int index, bool sell);  // wallpainter.cpp
+void FloorPainterRoomTest(int x, int y, int index);             // floorpainter.cpp
 int TestCreateObjectAt(const char* fileName, int x, int y);     // objectsim.cpp
 void PlacementTestTick(int ticks) {
   static const char* spec = std::getenv("SIMMY_PLACE_TEST");
@@ -1081,8 +1086,13 @@ void PlacementTestTick(int ticks) {
     if (!a) continue;
     ++a;
     int x = 0, y = 0, z = 0;
-    if (std::strncmp(a, "paperroom@", 10) == 0 && std::sscanf(a + 10, "%d,%d,%d", &x, &y, &z) == 3) {
+    int at = 0;
+    if (std::strncmp(a, "paperroom@", 10) == 0 && std::sscanf(a + 10, "%d,%d,%n", &x, &y, &at) == 2 && at > 0 &&
+        (z = simmy::modcov::PatternFromText(false, a + 10 + at)) >= 0) {
       WallPainterRoomTest(x, y, z, std::strstr(a, ",sell") != nullptr && std::strstr(a, ",sell") < (std::strchr(a, ';') ? std::strchr(a, ';') : a + std::strlen(a)));
+    } else if (std::strncmp(a, "floorroom@", 10) == 0 && std::sscanf(a + 10, "%d,%d,%n", &x, &y, &at) == 2 && at > 0 &&
+               (z = simmy::modcov::PatternFromText(true, a + 10 + at)) >= 0) {
+      FloorPainterRoomTest(x, y, z);
     } else if (std::strncmp(a, "create:", 7) == 0 && std::strchr(a, '@')) {
       const char* at = std::strchr(a, '@');
       const std::string name(a + 7, at);

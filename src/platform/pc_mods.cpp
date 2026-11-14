@@ -47,6 +47,16 @@
 //                              base is (a table phone made from the wall phone)
 //   route_front = 1            routing slots on its own tile are moved to the tile in front, facing it
 //   same_type = 1              trees looking for the base's GUID find it too (alarms, phones)
+//   [wall] / [floor]           one per wall or floor covering the mod adds (modcoverings.cpp)
+//   key = pcw_8cd65ea1         what saves call it (letters, digits, '_', '-'; unique)
+//   name = ..., desc = ...     catalogue texts
+//   price = 6                  per wall side / floor tile
+//   shader = 0x12345678        its shader (walls / floors and the catalogue's picture)
+//   base = 0x83076E0B          the GameCube covering (its shader id) whose row it copies and that a
+//                              lot saved with it falls back to without the mod
+//   sound = 11                 a floor's footstep surface (default: the base's)
+//   scale = 2                  a floor: its picture spans 2 x 2 tiles (1..8)
+//   pack = ..., group = ...    informational
 // Resource files next to it: "<manager>_<8 hex digits>.res", e.g. "models_9A3F0C12.res". Only their
 // names are read at start-up; a resource is read from its file each time the game loads it.
 #include "pc_settings.hpp"
@@ -76,6 +86,7 @@ namespace simmy {
 namespace {
 bool g_modsEnabled = false;
 std::vector<ModObject> g_modObjects;
+std::vector<ModCovering> g_modCoverings;
 // (manager name lower-case, id) -> the resource's file.
 std::map<std::pair<std::string, unsigned int>, std::string> g_modResources;
 
@@ -183,9 +194,11 @@ void LoadModIni(const std::string& mod, const std::string& path) {
   if (!LoadFile(path, raw)) return;
   std::string text(raw.begin(), raw.end());
   ModObject* cur = nullptr;
+  ModCovering* cov = nullptr;
   size_t pos = 0;
   int lineNo = 0;
   std::vector<ModObject> objects;
+  std::vector<ModCovering> coverings;
   while (pos <= text.size()) {
     size_t end = text.find('\n', pos);
     if (end == std::string::npos) end = text.size();
@@ -194,19 +207,49 @@ void LoadModIni(const std::string& mod, const std::string& path) {
     ++lineNo;
     if (line.empty() || line[0] == '#' || line[0] == ';') continue;
     if (line[0] == '[') {
-      if (Lower(line) == "[object]") {
+      cur = nullptr;
+      cov = nullptr;
+      const std::string section = Lower(line);
+      if (section == "[object]") {
         objects.emplace_back();
         cur = &objects.back();
         cur->mod = mod;
-      } else {
-        cur = nullptr;
+      } else if (section == "[wall]" || section == "[floor]") {
+        coverings.emplace_back();
+        cov = &coverings.back();
+        cov->mod = mod;
+        cov->floor = section == "[floor]";
       }
       continue;
     }
     const size_t eq = line.find('=');
-    if (!cur || eq == std::string::npos) continue;
+    if ((!cur && !cov) || eq == std::string::npos) continue;
     const std::string key = Lower(Trim(line.substr(0, eq))), v = Trim(line.substr(eq + 1));
     bool ok = true;
+    if (cov) {
+      if (key == "key") {
+        cov->key = v;
+        for (char c : v) ok = ok && (std::isalnum(static_cast<unsigned char>(c)) || c == '_' || c == '-');
+        ok = ok && !v.empty() && v.size() < 64;
+      } else if (key == "name") cov->name = Utf16(v);
+      else if (key == "desc") cov->desc = Utf16(v);
+      else if (key == "price") {
+        cov->price = std::atoi(v.c_str());
+        ok = cov->price >= 0 && cov->price < 100000;
+      } else if (key == "shader") ok = ParseU32(v, cov->shader);
+      else if (key == "base") ok = ParseU32(v, cov->base);
+      else if (key == "sound") {
+        cov->sound = std::atoi(v.c_str());
+        ok = cov->sound >= 0 && cov->sound < 0x100;
+      } else if (key == "scale") {
+        cov->scale = std::atoi(v.c_str());
+        ok = cov->scale >= 1 && cov->scale <= 8;
+        if (!ok) cov->scale = 1;
+      } else if (key == "pack") cov->pack = v;
+      else if (key == "group") cov->group = v;
+      if (!ok) std::fprintf(stderr, "[mods] %s:%d: bad value \"%s\"\n", path.c_str(), lineNo, v.c_str());
+      continue;
+    }
     if (key == "guid") ok = ParseU32(v, cur->guid);
     else if (key == "base_guid") ok = ParseU32(v, cur->baseGuid);
     else if (key == "base") cur->baseFile = v;
@@ -366,6 +409,17 @@ void LoadModIni(const std::string& mod, const std::string& path) {
     }
     g_modObjects.push_back(std::move(o));
   }
+  for (ModCovering& c : coverings) {
+    if (c.key.empty() || !c.shader || !c.base) {
+      std::fprintf(stderr, "[mods] %s: a [%s] without key, shader or base is skipped\n", path.c_str(), c.floor ? "floor" : "wall");
+      continue;
+    }
+    if (std::any_of(g_modCoverings.begin(), g_modCoverings.end(), [&](const ModCovering& o) { return o.key == c.key; })) {
+      std::fprintf(stderr, "[mods] %s: covering key %s is already given by another mod; skipped\n", path.c_str(), c.key.c_str());
+      continue;
+    }
+    g_modCoverings.push_back(std::move(c));
+  }
 }
 
 // "<manager>_<8 hex>.res" files of one mod folder.
@@ -416,9 +470,18 @@ void mods_init() {
   }
   size_t tiles = 0;
   for (const ModObject& o : g_modObjects) tiles += o.tiles.size();
-  std::fprintf(stderr, "[mods] %s: %zu mod(s), %zu object(s) (%zu multi-tile parts), %zu resource(s); read in %.1f ms\n",
-               dir.c_str(), mods.size(), g_modObjects.size(), tiles, g_modResources.size(),
-               static_cast<double>(SDL_GetTicksNS() - start) / 1e6);
+  if (g_modCoverings.empty())
+    std::fprintf(stderr, "[mods] %s: %zu mod(s), %zu object(s) (%zu multi-tile parts), %zu resource(s); read in %.1f ms\n",
+                 dir.c_str(), mods.size(), g_modObjects.size(), tiles, g_modResources.size(),
+                 static_cast<double>(SDL_GetTicksNS() - start) / 1e6);
+  else
+    std::fprintf(stderr,
+                 "[mods] %s: %zu mod(s), %zu object(s) (%zu multi-tile parts), %zu wall and %zu floor covering(s), %zu "
+                 "resource(s); read in %.1f ms\n",
+                 dir.c_str(), mods.size(), g_modObjects.size(), tiles,
+                 static_cast<size_t>(std::count_if(g_modCoverings.begin(), g_modCoverings.end(), [](const ModCovering& c) { return !c.floor; })),
+                 static_cast<size_t>(std::count_if(g_modCoverings.begin(), g_modCoverings.end(), [](const ModCovering& c) { return c.floor; })),
+                 g_modResources.size(), static_cast<double>(SDL_GetTicksNS() - start) / 1e6);
 }
 
 bool mods_enabled() { return g_modsEnabled; }
@@ -435,6 +498,7 @@ bool mods_only() {
 }
 
 const std::vector<ModObject>& mods_objects() { return g_modObjects; }
+const std::vector<ModCovering>& mods_coverings() { return g_modCoverings; }
 
 bool mods_resource(const char* manager, unsigned int id, std::vector<unsigned char>& out) {
   if (!g_modsEnabled || !manager) return false;
@@ -489,5 +553,13 @@ unsigned int mods_tail_bytes() {
   }
   bytes = (bytes + 0x1000 + 0xfff) & ~0xfffull;
   return bytes > 0x4000000ull ? 0x4000000u : static_cast<unsigned int>(bytes);
+}
+
+// Per kind: the set's row cell and pointer array (count and 256 pointers); per covering its row (0x18
+// bytes at most) and its name's slot cell (modcoverings.cpp).
+unsigned int mods_coverings_tail_bytes() {
+  if (!g_modsEnabled || g_modCoverings.empty()) return 0;
+  const unsigned long long bytes = 2 * (16 + 4 + 256 * 4) + g_modCoverings.size() * (0x18 + 8) + 0x100;
+  return static_cast<unsigned int>((bytes + 0xfff) & ~0xfffull);
 }
 }  // namespace simmy

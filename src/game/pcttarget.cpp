@@ -12,6 +12,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include "simmy/modcoverings.hpp"
 
 PCTTarget* PCTTarget::s_placing = nullptr;
 int g_unlockAllCheat = 0;     // DAT_8047618C
@@ -335,6 +336,12 @@ int PCTTarget__cCellInfo::GetName(unsigned short* out) const {
 
 // 801D22FC
 int PCTTarget__cCellInfo::GetDesc(unsigned short* out) const {
+  // PC mod: mods. A wall or floor covering's description (the GameCube's have none).
+  if ((m_type == 3 || m_type == 4) && out && m_data)
+    if (const unsigned short* desc = simmy::modcov::CoveringDesc(m_data)) {
+      CopyText(out, desc);
+      return 1;
+    }
   if (m_type != 1 || !out || !m_selector) return 0;
   auto* master = reinterpret_cast<ObjSelector*>(m_selector->GetMasterSelector());
   if (!master) return 0;
@@ -861,12 +868,21 @@ int PCTTarget::on_tab_changed_wall() {
 // The wallpapers the filter takes (by their index in the set), sorted by name (sort_wallpaper_by_name
 // 801D1D0C: the row's +0x04) or price.
 int PCTTarget::on_tab_changed_wallpaper() {
-  const int n = ibuild::SetCount(_globals.m_wallSet);
-  for (int i = 0; i < n; ++i) {
+  // PC mod: mods. With wall coverings: the disc's wallpapers (not the coverings' slots after them), then
+  // every covering (cell id kModCell | n: its pattern is given when it is picked); screenshot mode
+  // (SIMMY_MODS_ONLY) only the coverings.
+  const bool coverings = simmy::modcov::Active();
+  const int n = coverings ? simmy::modcov::DiscCount(false) : ibuild::SetCount(_globals.m_wallSet);
+  for (int i = 0; i < n && !(coverings && simmy::mods_only()); ++i) {
     const void* row = ibuild::SetRow(_globals.m_wallSet, i);
     if (!filter_wallpaper(row)) continue;
     m_cells.emplace_back();
     m_cells.back().Init(i, static_cast<const WallTile*>(row));
+  }
+  for (int i = 0; i < simmy::modcov::CoveringCount(false); ++i) {
+    m_cells.emplace_back();
+    m_cells.back().Init(static_cast<int>(simmy::modcov::kModCell | i),
+                        static_cast<const WallTile*>(simmy::modcov::CoveringRow(false, i)));
   }
   if (m_sort == 1)
     std::stable_sort(m_cells.begin(), m_cells.end(), [](const PCTTarget__cCellInfo& a, const PCTTarget__cCellInfo& b) {
@@ -882,12 +898,18 @@ int PCTTarget::on_tab_changed_wallpaper() {
 int PCTTarget::on_tab_changed_floor() {
   const char* house = _globals.m_house ? _globals.m_house->GetHouseName() : "";
   const unsigned int grass = static_cast<unsigned int>(_globals.GetHouseGrassShaderId(const_cast<char*>(house)));
-  const int n = ibuild::SetCount(_globals.m_floorSet);
-  for (int i = 0; i < n; ++i) {
+  const bool coverings = simmy::modcov::Active();  // PC mod: mods (as the wallpaper's)
+  const int n = coverings ? simmy::modcov::DiscCount(true) : ibuild::SetCount(_globals.m_floorSet);
+  for (int i = 0; i < n && !(coverings && simmy::mods_only()); ++i) {
     const void* row = ibuild::SetRow(_globals.m_floorSet, i);
     if (!filter_floor(i, grass, row)) continue;
     m_cells.emplace_back();
     m_cells.back().Init(i, static_cast<const FloorTile*>(row));
+  }
+  for (int i = 0; i < simmy::modcov::CoveringCount(true); ++i) {
+    m_cells.emplace_back();
+    m_cells.back().Init(static_cast<int>(simmy::modcov::kModCell | i),
+                        static_cast<const FloorTile*>(simmy::modcov::CoveringRow(true, i)));
   }
   if (m_sort == 1)
     std::stable_sort(m_cells.begin(), m_cells.end(), [](const PCTTarget__cCellInfo& a, const PCTTarget__cCellInfo& b) {
@@ -1543,6 +1565,17 @@ int PCTTarget::enter_wallpaper_mode(PCTTarget__cCellInfo* cell, bool placed) {
   } else {
     params.index = static_cast<int>(cell->m_id);
     params.data = cell->m_data;
+    // PC mod: mods. A covering: the lot's pattern number for it (given now if it has none).
+    if (simmy::modcov::Active() && (cell->m_id & simmy::modcov::kModCell)) {
+      const int slot = simmy::modcov::Slot(false, static_cast<int>(cell->m_id & ~simmy::modcov::kModCell));
+      if (slot < 0) {
+        play_sound(0x3804219f);  // PCT_SndError
+        set_dialog_visible(true);
+        return 0;
+      }
+      params.index = slot;
+      params.data = ibuild::SetRow(_globals.m_wallSet, slot);
+    }
   }
   params.stock = 0;
   if (g_freeBuildBuyCheat) {
@@ -1635,6 +1668,17 @@ int PCTTarget::enter_floor_mode(PCTTarget__cCellInfo* cell, bool placed) {
   } else {
     params.index = static_cast<int>(cell->m_id);
     params.data = cell->m_data;
+    // PC mod: mods. A covering: the lot's pattern number for it (given now if it has none).
+    if (simmy::modcov::Active() && (cell->m_id & simmy::modcov::kModCell)) {
+      const int slot = simmy::modcov::Slot(true, static_cast<int>(cell->m_id & ~simmy::modcov::kModCell));
+      if (slot < 0) {
+        play_sound(0x3804219f);  // PCT_SndError
+        set_dialog_visible(true);
+        return 0;
+      }
+      params.index = slot;
+      params.data = ibuild::SetRow(_globals.m_floorSet, slot);
+    }
   }
   params.stock = 0;
   if (g_freeBuildBuyCheat) {

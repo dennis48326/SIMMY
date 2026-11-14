@@ -229,7 +229,7 @@ int settings_frame_pacing();  // frame_pacing: 0 sleep, 1 precise, 2 vsync (pc_s
 // ---- PC mod: mods (pc_mods.cpp; the game side is src/game/modobjects.cpp) ----
 // Off unless a mod folder exists (mods= in simmy.ini, SIMMY_MODS, or "mods" next to the exe). Each
 // sub-folder with a mod.ini is a mod: [object] sections (objects the converter made from the user's own
-// PC install, tools/pcobj/) and resource files "<manager>_<ID>.res" (e.g. models_9A3F0C12.res: the
+// PC install, tools/pcobj/), [wall] / [floor] sections (wall and floor coverings) and resource files "<manager>_<ID>.res" (e.g. models_9A3F0C12.res: the
 // resource's bytes as an archive would hold them). Nothing of a mod is ever read from or written to
 // the disc data or the saves except the objects' GUIDs.
 struct ModTile {
@@ -367,6 +367,28 @@ bool mods_resource(const char* manager, unsigned int id, std::vector<unsigned ch
 // The bytes the "SimsObjects" quickdata image keeps after its cells for the mod objects' rows
 // (modobjects.cpp), sized from the mods' objects and tiles; 0 without mods.
 unsigned int mods_tail_bytes();
+// Wall and floor coverings ([wall] / [floor] sections; the game side is src/game/modcoverings.cpp):
+// build mode's wallpaper and floor catalogues list them after the GameCube's own. A lot keeps at most
+// 255 patterns of each kind (a byte per wall side and floor tile), the disc's first: a covering gets one
+// of the free pattern numbers while the lot uses it, and saves name it by `key`.
+struct ModCovering {
+  std::string mod;               // the mod's folder name
+  bool floor = false;            // [floor] (else [wall])
+  std::string key;               // what saves call it (unique; e.g. pcw_8cd65ea1)
+  std::u16string name, desc;     // catalogue texts
+  int price = 0;                 // per wall side or floor tile
+  unsigned int shader = 0;       // its shader: drawn on the walls / floors and as its catalogue picture
+  unsigned int base = 0;         // the GameCube covering (its shader id) whose row it copies: the row's
+                                 // other fields (a floor's footstep sound), and what a lot saved with it
+                                 // shows when the mod is gone
+  int sound = -1;                // a floor's footstep surface (FloorSet row +8), -1: the base's
+  int scale = 1;                 // a floor: one picture spans scale x scale tiles (1..8)
+  std::string pack, group;       // where it came from, its PC catalogue sub-sort (informational)
+};
+const std::vector<ModCovering>& mods_coverings();
+// The bytes the build sets quickdata image (0x19A16F2D: "WallSet", "FloorSet") keeps after its cells
+// for the coverings' rows (modcoverings.cpp); 0 without coverings.
+unsigned int mods_coverings_tail_bytes();
 
 // ---- Widescreen (pc_splitscreen.cpp, pc_hud.cpp; settings in pc_settings.cpp) ----
 // aspect=16:9 (single player): the frame fills the window (aurora's "stretch" viewport policy) and

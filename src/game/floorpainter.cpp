@@ -639,3 +639,16 @@ const void* InteractorModule__FloorPainter::GetSelectedFloorData() { return m_pa
 int InteractorModule__FloorPainter::IsInPlaceMode() { return m_params.place; }
 // 802091AC
 bool InteractorModule__FloorPainter::IsInRemoveMode() { return m_params.place == 0; }
+
+// PC development aid (SIMMY_PLACE_TEST's "floorroom@x,y,index", placemanipulator.cpp): the floor painter's
+// room fill (PaintRoom) at the tile with FloorSet entry `index`, as the trigger-held tool lays it.
+void FloorPainterRoomTest(int x, int y, int index) {
+  InteractorModule__FloorPainter painter;
+  painter.m_savedPos = EVec3{static_cast<float>(y) + 0.5f, static_cast<float>(x) + 0.5f, 0.0f};
+  painter.m_params.index = index;
+  painter.m_params.data = ibuild::SetRow(_globals.m_floorSet, index);
+  painter.m_params.place = 1;
+  std::vector<int> counts(256, 0);
+  const int n = painter.PaintRoom(counts.data());
+  std::printf("[build] floor room test at %d,%d: pattern %d on %d tile%s\n", x, y, index, n, n == 1 ? "" : "s");
+}

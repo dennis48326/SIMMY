@@ -5,6 +5,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include "simmy/modcoverings.hpp"
 
 namespace {
 // The config block holds C strings and numbers at fixed offsets from +0x168.
@@ -149,6 +150,8 @@ void EGlobal::SetDefaults() {
       if (const void* t = m_buildSets->getTable("WallSet")) m_wallSet = ERQuickdata::TableRows(t);
       if (const void* t = m_buildSets->getTable("FloorSet")) m_floorSet = ERQuickdata::TableRows(t);
       if (const void* t = m_buildSets->getTable("FenceSet")) m_fenceSet = ERQuickdata::TableRows(t);
+      // PC mod: mods. Wall and floor coverings: the sets copied with their rows after the disc's.
+      simmy::modcov::InstallSets(m_buildSets, m_wallSet, m_floorSet);
     }
   }
   SIMMY_STUB("EGlobal::SetDefaults: 0xc33db41/0xc8c09e94 quickdata, shader 0xea090184, "
