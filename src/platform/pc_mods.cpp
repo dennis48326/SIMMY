@@ -47,6 +47,10 @@
 //                              base is (a table phone made from the wall phone)
 //   route_front = 1            routing slots on its own tile are moved to the tile in front, facing it
 //   same_type = 1              trees looking for the base's GUID find it too (alarms, phones)
+//   route_shift = 0.43         routing slots on its own tile put the person this much (tiles) nearer its
+//                              middle (a wall urinal: stood at its bowl)
+//   stand_only = 1             a toilet for men only, standing: "Interaction - Use" also needs the
+//                              semi-global's "Use Urinal - TEST", "Sub - number2" runs "Sub - number1"
 //   [wall] / [floor]           one per wall or floor covering the mod adds (modcoverings.cpp)
 //   key = pcw_8cd65ea1         what saves call it (letters, digits, '_', '-'; unique)
 //   name = ..., desc = ...     catalogue texts
@@ -296,6 +300,11 @@ void LoadModIni(const std::string& mod, const std::string& path) {
     else if (key == "state_shaders") ok = ParseStates(v, cur->stateShaders), cur->shaderSwaps = true;
     else if (key == "shader_swaps") cur->shaderSwaps = std::atoi(v.c_str()) != 0;
     else if (key == "route_front") cur->routeFront = std::atoi(v.c_str()) != 0;
+    else if (key == "route_shift") {
+      cur->routeShift = static_cast<float>(std::atof(v.c_str()));
+      ok = cur->routeShift >= 0.0f && cur->routeShift <= 0.75f;
+    }
+    else if (key == "stand_only") cur->standOnly = std::atoi(v.c_str()) != 0;
     else if (key == "same_type") cur->sameType = std::atoi(v.c_str()) != 0;
     else if (key == "hide_props") {
       // "0x8C0E134F 0x...": model ids

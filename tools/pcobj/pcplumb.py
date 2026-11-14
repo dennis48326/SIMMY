@@ -18,8 +18,11 @@ What the GameCube has: toilets (cheap; porcelain with comfort), the toilet stall
 (heart-shaped 2x2, Japanese 2x3 with break / repair, the anti-gravity spa 3x3 with modes). The PC's
 shower / tub combinations take a bathtub (their footprint and a bath); the PC hot tubs (3x3) the
 Japanese hot tub (2x3: the PC mesh is narrowed to its width), raised ones drawing their sims at the
-PC water (seat_offset). Not converted: the urinal (the GameCube's toilet trees sit every sim down for
-number 2 and women always) and the Bon Voyage hot spring (6x6: no GameCube hot tub comes near).
+PC water (seat_offset). The wall urinal takes the public toilet: the GameCube's toilet trees stand men up
+for number 1 (and sit them for number 2, women always); `stand_only = 1` has the engine offer it to men
+only and take the standing branch every time, `route_shift` stands them at the PC bowl, which hangs on
+the wall behind the toilet's bowl. Not converted: the Bon Voyage hot spring (6x6: no GameCube hot tub
+comes near).
 """
 import numpy as np
 
@@ -45,11 +48,13 @@ PLUMB_TIERS = {
     'sink': [(5, 'plumbing_sink_floor_porcelain'), (10, 'plumbing_sink_floor_ornate')],
     'sink_counter': [(5, 'plumbing_sink_counter_modern'), (10, 'plumbing_sink_counter_double_basin')],
     'hottub': [(10, 'plumbing_hottub_japanese')],
+    # a wall urinal: the public toilet (no comfort; its trees stand men up for number 1)
+    'urinal': [(10, 'plumbing_toilet_public')],
 }
 PLUMB_BASES = {f'{k}{i}': b for k, tiers in PLUMB_TIERS.items() for i, (_, b) in enumerate(tiers)}
 
 # where it sorts in the catalogue (mod folder prefix "pcp<k>_")
-PLUMB_SORT = {'toilet': '1', 'stall': '1', 'shower': '2', 'combo': '3', 'tub': '3', 'sink': '4', 'sink_counter': '4',
+PLUMB_SORT = {'toilet': '1', 'stall': '1', 'urinal': '1', 'shower': '2', 'combo': '3', 'tub': '3', 'sink': '4', 'sink_counter': '4',
               'hottub': '5'}
 
 # The base's footprint (GameCube tiles: x across, y along) and per-state looks:
@@ -58,6 +63,8 @@ PLUMB_SORT = {'toilet': '1', 'stall': '1', 'shower': '2', 'combo': '3', 'tub': '
 BASE_INFO = {
     'plumbing_toilet_cheap': {'seat': 3, 'dirty': (2, 3), 'clogged': (4, 5), 'seat_h': 0.42},
     'plumbing_toilet_porcelain': {'seat': 1, 'dirty': (2, 3), 'clogged': (4, 5), 'seat_h': 0.42},
+    # (front: its bowl's front edge, PC object space: where its standing animations put a man's feet)
+    'plumbing_toilet_public': {'seat': 1, 'dirty': (2, 3), 'clogged': (4, 5), 'seat_h': 0.42, 'front': 0.31},
     'plumbing_toilet_stall': {'fp': (1, 2), 'seat_h': 0.42},
     'plumbing_shower_normal': {'dirty': (3, 4, 5)},
     'plumbing_shower_hitech': {'dirty': (3, 4, 5)},
@@ -72,7 +79,6 @@ BASE_INFO = {
 }
 
 SKIP = {
-    'urinal': 'a wall urinal: the GameCube\'s toilet trees sit every sim down (women always, men for number 2)',
     'hotspring': 'a 6x6 natural hot spring: no GameCube hot tub comes near its size (largest 3x3)',
 }
 
@@ -123,6 +129,13 @@ def plumb_kind(it):
     return kind
 
 
+def urinal_shift(meshes, base):
+    """How far (tiles) a urinal's users stand nearer than the base toilet's (mod.ini route_shift): from the
+    base's bowl front to the PC bowl's (its mesh's front, PC object space), 0..0.6."""
+    front = max(float(m[2][:, 1].max()) for m in meshes)
+    return float(np.clip(BASE_INFO.get(base, {}).get('front', 0.31) - front, 0.0, 0.6))
+
+
 def ratings(it):
     """PC comfort, hygiene (OBJD motive ratings)."""
     return max(0, it.o.s(W_RATINGS + 1)), max(0, it.o.s(W_RATINGS + 2))
@@ -140,7 +153,7 @@ def plumb_base(it, kind):
 
 def describe(kind):
     return {'toilet': 'toilet', 'stall': 'toilet stall', 'shower': 'shower', 'tub': 'bathtub',
-            'combo': 'shower / tub (a bathtub here)', 'sink': 'sink (pedestal)', 'sink_counter': 'counter sink',
+            'combo': 'shower / tub (a bathtub here)', 'urinal': 'urinal (men, standing)', 'sink': 'sink (pedestal)', 'sink_counter': 'counter sink',
             'hottub': 'hot tub'}.get(kind, kind)
 
 

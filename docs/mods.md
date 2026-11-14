@@ -7,7 +7,7 @@ of the base game and of every expansion and stuff pack installed (about 560 deco
 counters, tables and desks, 180 chairs, sofas, benches, stools and beds, 54 fridges, stoves, grills,
 microwaves, toaster ovens, coffee makers, food processors, juicers, dishwashers, trash compactors,
 food displays and food stands, 145 table, floor, wall and ceiling lamps, outdoor lights and
-streetlamps, 36 toilets, showers, bathtubs, sinks and hot tubs, and 65 TVs, computers, stereos, speakers,
+streetlamps, 37 toilets, the urinal, showers, bathtubs, sinks and hot tubs, and 65 TVs, computers, stereos, speakers,
 jukeboxes, DJ booths, arcade and pinball machines, phones, alarms, clocks and vending machines, and 42
 bookcases, easels, instruments, telescopes, chess and pool tables, exercise machines and workbenches, and
 45 dressers, armoires, lockers and closets, the coat rack, three remote-control toys and 17 toys and toy
@@ -448,9 +448,8 @@ the floor above).
 tubs the PC files elsewhere (the Love Tub: an aspiration reward; Bon Voyage's hot spring: Hobbies): the
 GameCube keeps every hot tub on its Plumbing tab. The kind from the semi-global (ToiletGlobals,
 SinkGlobals, TubAndShowerGlobals, HottubGlobals) and the object name (stall, urinal, counter sink,
-"ShowerTub" combinations, "Tub", "Shower"). 38 with the Ultimate Collection: 36 converted; left out
-the urinal (the GameCube's toilet trees sit every sim down: women always, men for number 2) and the
-Bon Voyage hot spring (6x6; the GameCube's largest hot tub is 3x3).
+"ShowerTub" combinations, "Tub", "Shower"). 38 with the Ultimate Collection: 37 converted; left out
+the Bon Voyage hot spring (6x6; the GameCube's largest hot tub is 3x3).
 
 **The GameCube's plumbing.** Semi-globals `plumbing_toilet_sg`, `plumbing_shower_sg`,
 `plumbing_bathtub_sg`, `plumbing_sink_sg`, `plumbing_hottub_sg`. All are animated objects (a character,
@@ -483,6 +482,7 @@ modes to turn on first, its own GUID tested in its trees).
 | shower / tub | the same bathtubs | a bathtub of the PC's footprint (the GameCube has no combination; its showers are one tile): sims take baths in it |
 | sink (pedestal) | `plumbing_sink_floor_porcelain` (hygiene 0-5), `_floor_ornate` (6-10) | the PC's soapy water and soap ring left out (the base's running water effect) |
 | counter sink | `plumbing_sink_counter_modern` (0-5), `_counter_double_basin` (6-10) | on a counter (GameCube or converted); in a GameCube counter its cut-out plus the sink's flange (`model_flange`); in a converted counter that counter's top with a hole (`sink_hole`); a GameCube counter sink in a converted counter: its own hole (`model_sink_gc`, `sink_shift`) |
+| urinal | `plumbing_toilet_public` + `stand_only = 1`, `route_shift` | on the wall like the PC's (its back at the tile's back edge; the toilets' placement: a wall behind it); men only, standing (below) |
 | hot tub | `plumbing_hottub_japanese` (2x3, `base_parts`) | the 3x3 PC mesh narrowed to 2 tiles; a raised tub draws its sims at the PC water (`seat_offset` 0.905), a sunken one at the base's |
 
 Every converted plumbing object keeps its base's character, state animations and effects
@@ -492,6 +492,28 @@ catalogue preview). Dirty and clogged looks are the PC's own materials (MMAT obj
 base's dirty and clogged states (`state_models`). A material the PC shows only in another state by
 default (a combination's "..._dirty" tub) is replaced by its clean one. Parts the PC moves that the
 base has no node for (a shower's glass door, knobs, a hot tub's access door) stay still.
+
+**The urinal** (Sewage Brothers Resteze Urinal, base game). The GameCube has no urinal, but its
+toilet semi-global keeps the PC's "Interaction - Use Urinal" and its test, and its "Interaction - Use"
+stands men up for number 1 ("Sub - number1": the seat raised, the a2o_toilet1_standinggo animations) and
+sits them down for number 2 ("Sub - number2") and women always. The PC urinal becomes the public toilet
+(no comfort, clog chance 7) with two keys the engine reads for it alone:
+- `stand_only = 1`: its "Interaction - Use" is offered (pie menu) and chosen (autonomy) only where the
+  semi-global's own "Interaction - Use Urinal - TEST" passes as well: a man; by himself only while his
+  bladder is above the tree's number-2 line (constant -50), so a man who needs number 2 walks to a real
+  toilet by himself. Women never get it (they use a toilet). A man sent to it by the player while his
+  bladder is that low still stands: on this object "Sub - number2" runs "Sub - number1". (The GameCube
+  has no children.) Its own "Use Urinal" tree is not used: it floods the floor after every use.
+- `route_shift = 0.428`: where the toilet's user stands (its routing slot: the tile's front edge, facing
+  it) is that much nearer the middle, so he stands at the PC bowl, which hangs on the wall behind where
+  the toilet's bowl is (the converter: the public toilet's bowl front, 0.31, less the PC urinal's front,
+  -0.12); its footprint ends in front of him (definition +0x9A, front inset: the shift and half a
+  person's width), so the front of its tile stays free to walk through.
+The seat, lid and water of the base are not drawn (the PC urinal has no seat: nothing is bound to the
+base's seat node), so raising and lowering the seat shows nothing; the flush sound and the base's
+dirt flies stay. Dirty and clogged states show the PC's dirty materials ("toileturinaldirty",
+"toileturinalmetaldirty"; the PC has no clogged look: the dirty one). Clean, Unclog, Flush and Puke are
+the toilet's, for anyone (a sim kneels at the bowl's height to unclog or be sick).
 
 **Counter sinks and converted counters.** The PC's counter sinks are basins with a faucet and a
 "..._null" plane (the PC's mask for the counter top under them); they go onto counters, as the
@@ -818,9 +840,9 @@ mods nothing is set up and only a palette is read.
 
 One run of every category (`convert_pc_object.bat` with no argument, or `--categories all`) over the
 Ultimate Collection (the base game, 8 expansions, 9 stuff packs) on two cores: 238 s (201 s objects, 36 s
-coverings), 1473 buy-mode objects found, 1373 converted, 100 left out, and 2129 wall and floor coverings,
+coverings), 1473 buy-mode objects found, 1374 converted, 99 left out, and 2129 wall and floor coverings,
 2122 converted, 7 left out (each with its reason in its inventory), 319 MB of mods (39 MB of it the
-coverings); the game reads them in 0.2 s and adds 1373 objects (461 multi-tile) in 0.28 s, 0 skipped, and
+coverings); the game reads them in 0.2 s and adds 1374 objects (461 multi-tile) in 0.28 s, 0 skipped, and
 1477 wall and 645 floor coverings.
 
 | Category | PC tab (sub-sorts) | found | converted | left out | GameCube tabs | folders |
@@ -830,13 +852,13 @@ coverings); the game reads them in 0.2 s and adds 1373 objects (461 multi-tile) 
 | Seating and beds | Comfort | 187 | 181 | 6 | Seating & Beds | `pcc<k>_` |
 | Appliances | Appliances | 54 | 54 | 0 | Appliances | `pca<k>_` |
 | Lighting | Lighting | 145 | 145 | 0 | Lighting | `pcl<k>_` |
-| Plumbing | Plumbing (and two hot tubs) | 38 | 36 | 2 | Plumbing | `pcp<k>_` |
+| Plumbing | Plumbing (and two hot tubs) | 38 | 37 | 1 | Plumbing | `pcp<k>_` |
 | Electronics | Electronics (and the massage table) | 72 | 65 | 7 | Electronics | `pce<k>_` |
 | Hobbies | Hobbies | 70 | 42 | 28 | Skill, Misc, Decorative | `pch<k>_` |
 | Storage | Miscellaneous: Dressers | 45 | 43 | 2 | Misc, Decorative (coat rack) | `pck<k>_` |
 | Kids | Miscellaneous: Kids (and the three RC toys) | 29 | 19 | 10 | Electronics, Decorative | `pck<k>_` |
 | Miscellaneous | Miscellaneous: the rest | 99 | 62 | 37 | Misc, Appliances, Electronics, Decorative | `pcm<k>_` |
-| **All objects** | | **1473** | **1373** | **100** | | |
+| **All objects** | | **1473** | **1374** | **99** | | |
 | Walls | Build: wall coverings (9 sub-sorts) | 1482 | 1477 | 5 | Wallpaper (build mode) | `pcw<k>_<group>` (9 folders) |
 | Floors | Build: floor coverings (8 sub-sorts) | 647 | 645 | 2 | Floors (build mode) | `pcf<k>_<group>` (8 folders) |
 
@@ -919,7 +941,9 @@ ceiling objects), `light` (`x,y,z[:r,g,b[:falloff]]`: a lamp's light), `model_si
 (a counter's top with a hole for a sink; the last for a GameCube sink), `sink_shift` (a counter: how far
 along the PC's y a GameCube sink in it is drawn, -0.5..0.5), `sink_hole` (`narrow` / `wide`: a counter sink's), `model_flange`
 (a counter sink's flange in a GameCube counter), `shader_swaps`, `state_shaders` (a TV's channels; its
-own screen when off), `wall_model` (0 / 1), `route_front`, `same_type` (electronics, hobbies, storage, misc), `prop_nodes` (`2,7,8`: nodes drawn where the base's animation has
+own screen when off), `wall_model` (0 / 1), `route_front`, `route_shift` (tiles: on-tile routing slots that
+much nearer the object's middle, its footprint's front cut to match: the urinal), `stand_only` (a GameCube
+toilet for men only, standing: the urinal), `same_type` (electronics, hobbies, storage, misc), `prop_nodes` (`2,7,8`: nodes drawn where the base's animation has
 them: a hobby object's props, sub-models copied from the base's model), `hide_props` (`0x8C0E134F ...`:
 dress-up props of the base the sim does not wear on this object), `pack` (informational). Mods are read in folder-name order; a GUID
 or resource id given twice keeps the first. A resource id the disc has is never taken from a mod.
@@ -938,7 +962,7 @@ or resource id given twice keeps the first. A resource id the disc has is never 
 | Bar stools at counters | `src/game/countereat.cpp` (`simmy::countereat`), hooks in `TryFindFunctionalObject` / `TryCallFunctionalTree` / `TryCallNamedTree` / `TryElement` 0x60 (objectsim.cpp), `Behavior::GetTree` (treesim.cpp), `ObjectSlotDescriptor` (xrouting.cpp) | A counter with a counter seat facing it offers eating surface entry 0x19 through PC trees (SimAntics bytecode built in code, ids 0x1F00-0x1F03), its eating slots 0x60-0x63 and the pickup from them; nothing runs unless a loaded mod object is a counter seat |
 | Appliances | `CopyDef` (modobjects.cpp: the character and state table kept), `ISimsObjectModel::ModNodes` (isimsobjectmodel.cpp), `GetObjSelector3dDisplayInfo` (pcttarget.cpp), `cXObjectImpl::ApplyModInitData` (modobjects.cpp, from `Reset` / `cXMTObjectImpl::Reset`) | The base's skeleton, animations and effects; the bound model's nodes drawn by their turn from rest about the PC hinges; the still model in the catalogue preview; `init_data` after each init tree. `SIMMY_OBJ_NODE_TRACE`, `SIMMY_OBJ_STATE_TRACE`, `SIMMY_OBJ_STATE_FORCE` (testing.md) |
 | Lamps | `CopyDef` (as appliances: the base's character and on/off state table), `ISimsObjectModel::AnimateLights` (isimsobjectmodel.cpp), `ApplyModInitData` (`\|` / `&` ops) | The model's light (its SimsLightInfo, created by `SetupCharacter` and switched by the state animations as a GameCube lamp's) at `light`'s place with its colour and falloff; the on / off parts in sub-models on the base's on / off nodes, hidden by the state's node flags (`ERModel::DrawHierarchical`); a ceiling lamp's zero extent, layer and inside-only data after its init tree |
-| Plumbing | `CopyDef` (as appliances; up to 48 states: a bathtub has 36), `ModNodes`, `ModSeatOffset` (a sim in a toilet or a hot tub is its container's), `ISimsCounterTopObject::SetObjOrient` (isimsobjectmodel.cpp) | The base's skeleton, states and effects; the seat on its node; a converted counter with a sink on its tile shows its holed top (`model_sink` / `model_sink_wide` by the sink's `sink_hole`; a GameCube sink: `model_sink_gc`, drawn `sink_shift` back by `ISimsObjectModel::ApplyMatrix`), a GameCube counter with a converted sink adds the sink's flange (`model_flange`) as a second sub-object next to its cut-out top; `SIMMY_COUNTER_TRACE=1` logs the choice. `SIMMY_CENSOR_OFF=1` (testing.md) turns the mosaic off for screenshots |
+| Plumbing | `CopyDef` (as appliances; up to 48 states: a bathtub has 36), `ModNodes`, `ModSeatOffset` (a sim in a toilet or a hot tub is its container's), `ISimsCounterTopObject::SetObjOrient` (isimsobjectmodel.cpp), `TreeSimImpl::Gosub` / `RunCheckTree` (treesim.cpp: `stand_only`), `ModRouteFront` (xrouting.cpp) and `CopyDef`'s footprint (`route_shift`) | The base's skeleton, states and effects; the seat on its node; the urinal's Use for men only, standing, at its bowl; a converted counter with a sink on its tile shows its holed top (`model_sink` / `model_sink_wide` by the sink's `sink_hole`; a GameCube sink: `model_sink_gc`, drawn `sink_shift` back by `ISimsObjectModel::ApplyMatrix`), a GameCube counter with a converted sink adds the sink's flange (`model_flange`) as a second sub-object next to its cut-out top; `SIMMY_COUNTER_TRACE=1` logs the choice. `SIMMY_CENSOR_OFF=1` (testing.md) turns the mosaic off for screenshots |
 | Electronics | `CopyDef` (as appliances; `shader_swaps` / `state_shaders`, `wall_model`), `BasePart` (a tile listed twice), `ModRouteFront` (xrouting.cpp; from `TryGotoRoutingSlot`, `TryGotoRelative`, the snap primitive), `TrySetToNext` kind 4 / `TryTestObjectType` (objectsim.cpp: `m_modBaseGuid`) | The base's screens on the PC screen (its shader swaps, its screen nodes); a table phone's caller in front of it; the base's GUID searches find same-type mods |
 | Hobbies | `CopyDef` (as appliances), `ModNodes` (`prop_nodes`: those nodes keep the controller's matrices), `cXPersonImpl::TryChangeSuit` (person.cpp: `hide_props`), `ObjectFolderImpl::AddModObjects` (same_type: each part answers as the base part it copies) | The base's skill trees, states, effects and dress-up props; its canvas, chess pieces and rocket drawn on their nodes over the PC mesh; the wheel round the runner and the punching bag left off; the trees' own GUID tests (the cheap telescope's and bookshelf's skill rates, the air hockey table's and hamster wheel's parts) answered as the base |
 | Fire code | `EIObjectMan::CountObjects` (iobjectman.cpp) | A mod object's model counts at 5/7 of its size: what it would weigh with the disc's fixed-point vertices (16 bytes a vertex against 28) |
@@ -1028,7 +1052,9 @@ file name in a place action may name a mod object, which copies the file: use GU
   (the GameCube does not grade lamps). Multi-tile PC lamps are one tile; lamps on PC fence posts stand on
   the ground; the two-storey chandelier reaches through the ceiling. Recolours: the default only.
 - Plumbing behaves as its GameCube base (comfort, hygiene, bladder and fun gains, clog and break
-  chances are the base tier's). The urinal and the hot spring are left out; shower / tub combinations
+  chances are the base tier's). The hot spring is left out; the urinal is the public toilet for men
+  only (its Clean, Unclog and Puke are the toilet's, for anyone, at a floor toilet's bowl height; its
+  flush handle stays still; a man below the number-2 line does not pick it by himself); shower / tub combinations
   are bathtubs (no shower in them: the GameCube's showers are one tile, its groups one object file);
   the PC hot tubs (3x3) are the GameCube's Japanese hot tub (2x3: the PC mesh narrowed by a third). The
   shower's spray and steam come from where the base's shower head is, not the PC one's; PC moving

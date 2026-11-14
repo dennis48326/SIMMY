@@ -15,7 +15,8 @@ rem   convert_pc_object.bat surfaces            only the Surfaces objects (count
 rem   convert_pc_object.bat seating             only the Seating objects and Beds (chairs, sofas, stools, beds, ...)
 rem   convert_pc_object.bat appliances          only the Appliances (fridges, stoves, microwaves, dishwashers, ...)
 rem   convert_pc_object.bat lighting            only the Lighting (table, floor, wall and ceiling lamps, outdoor lights)
-rem   convert_pc_object.bat plumbing            only the Plumbing (toilets, showers, bathtubs, sinks, hot tubs)
+rem   convert_pc_object.bat plumbing            only the Plumbing (toilets, the urinal, showers, bathtubs, sinks,
+rem                                             hot tubs)
 rem   convert_pc_object.bat electronics         only the Electronics (TVs, computers, stereos, phones, alarms,
 rem                                             arcade and pinball machines, vending machines, ...)
 rem   convert_pc_object.bat hobbies             only the Hobbies (bookcases, easels, instruments, telescopes,
@@ -49,7 +50,8 @@ rem PC lamp's colour, its shade glowing when on, switching on at night by itself
 rem do; ceiling lamps hang from the ceiling, inside only, sims and furniture under them; plumbing: the
 rem GameCube's toilet, shower, bathtub, sink or hot tub of that kind and price, sims sitting, standing and
 rem lying in the PC model, with the PC's dirty and clogged looks; shower / tub combinations are bathtubs,
-rem counter sinks go into counters, also converted ones, which show a hole for them; electronics: the
+rem counter sinks go into counters, also converted ones, which show a hole for them; the urinal is a
+rem toilet for men only, who stand at it; electronics: the
 rem GameCube's TV, computer, stereo, jukebox, DJ booth, arcade or pinball machine, game console, phone,
 rem alarm or vending machine that does the same, the PC TVs and computers showing the GameCube's screens:
 rem channels, games, job search; hobbies: the GameCube's skill object teaching the same skill - bookshelf,

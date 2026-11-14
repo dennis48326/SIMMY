@@ -340,6 +340,15 @@ struct ModObject {
   // caller stands under the phone) put the person on the tile in front, facing it (a PC table phone on a
   // table, made from the wall phone: its tile is the table's).
   bool routeFront = false;
+  // route_shift = 0.43: its routing slots that put a person on its own tile (a toilet's: at the tile's
+  // front edge, facing it) put the person this much nearer its middle (tiles; a wall urinal made from
+  // the GameCube's public toilet: its bowl hangs on the wall behind where the toilet's is).
+  float routeShift = 0.0f;
+  // stand_only = 1 (made from a GameCube toilet, plumbing_toilet_sg): men only, standing. Its "Interaction
+  // - Use" is offered and chosen only where the semi-global's own "Interaction - Use Urinal - TEST" passes
+  // too (a man; by himself only when his bladder is not low enough for number 2), and its "Sub - number2"
+  // runs "Sub - number1" (the standing branch) instead. Trees found by their names; treesim.cpp.
+  bool standOnly = false;
   // same_type = 1: trees looking for the base's GUID (object searches by type, type tests) find this
   // object too: the fire notifies a converted smoke alarm, an incoming call rings a converted phone.
   bool sameType = false;

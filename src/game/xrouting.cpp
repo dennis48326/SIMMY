@@ -164,10 +164,21 @@ const std::vector<RoutingSlot>& ObjectRoutingSlots(cXObjectImpl* object) {
 
 // PC mod: mods (route_front). A routing slot (the object's own or a global one) on the object's own tile (no
 // direction bits) becomes one in front of it (direction bit 0, facing it): a table phone made from the wall
-// phone stands on a table's tile. Nothing changes for other objects.
+// phone stands on a table's tile. route_shift: such a slot's offset from the object (a toilet's: its tile's
+// front edge) is that much shorter (a wall urinal: its user stands at the PC bowl). Nothing changes for other
+// objects.
 void ModRouteFront(cXObjectImpl* object, RoutingSlot& slot) {
   const simmy::ModObject* mo = object && object->m_selector ? object->m_selector->m_modObject : nullptr;
-  if (!mo || !mo->routeFront || !slot.IsOnTopOfObject()) return;
+  if (!mo || !slot.IsOnTopOfObject()) return;
+  if (mo->routeShift > 0.0f) {
+    const float len = std::sqrt(slot.m_x * slot.m_x + slot.m_y * slot.m_y);
+    if (len > 0.0f) {
+      const float k = std::max(0.0f, len - mo->routeShift * 16.0f) / len;
+      slot.m_x *= k;
+      slot.m_y *= k;
+    }
+  }
+  if (!mo->routeFront) return;
   slot.m_flags = (slot.m_flags & ~0xffu) | 0x01u;
   slot.m_facing = RoutingSlot::kFaceTowards;
 }

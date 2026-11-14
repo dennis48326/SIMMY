@@ -4,7 +4,9 @@
 #include "simmy/types_gen.hpp"
 #include "simmy/unported_globals.hpp"
 #include "simmy/countereat.hpp"
+#include "simmy/platform.hpp"
 
+#include <cctype>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -22,6 +24,39 @@ const unsigned char* GlobalFileRow() {
 EREdithTreeSet* AddRefTreeSet(const unsigned char* resFile) {
   const unsigned int id = resFile ? ERQuickdata::U32(resFile, 0xc) : 0;
   return id ? _edithtreesetman.AddRef(id, nullptr, 0) : nullptr;
+}
+
+// PC mod: mods (stand_only). A toilet made for men only, standing (a converted wall urinal on a GameCube
+// toilet): its behaviour's selector carries the mod object. The GameCube toilet semi-global
+// (plumbing_toilet_sg) keeps the PC's urinal test and both of Use's branches; the trees are matched by
+// their names, so another base's trees are left alone.
+constexpr short kTreeNumber1 = 0x2012, kTreeNumber2 = 0x2013, kTreeUseTest = 0x2021, kTreeUrinalTest = 0x2031;
+bool StandOnly(Behavior* behavior) {
+  ObjSelector* owner = behavior ? behavior->GetOwner() : nullptr;
+  return owner && owner->m_modObject && owner->m_modObject->standOnly;
+}
+bool TreeNamed(Behavior* behavior, short id, const char* name) {  // (the disc's names are lower case)
+  const char* n = behavior->GetTreeName(id);
+  if (!n) return false;
+  for (; *n && *name; ++n, ++name)
+    if (std::tolower(static_cast<unsigned char>(*n)) != std::tolower(static_cast<unsigned char>(*name))) return false;
+  return *n == *name;
+}
+// "Sub - number2" (sit down) runs "Sub - number1" (stand) instead on such an object.
+short StandOnlyTree(Behavior* behavior, short tree) {
+  if (tree != kTreeNumber2 || !StandOnly(behavior)) return tree;
+  return TreeNamed(behavior, kTreeNumber2, "Sub - number2") && TreeNamed(behavior, kTreeNumber1, "Sub - number1")
+             ? kTreeNumber1
+             : tree;
+}
+// "Interaction - Use - TEST" also needs "Interaction - Use Urinal - TEST" on such an object (0: not that
+// test or not such an object).
+short StandOnlyCheck(Behavior* behavior, short tree) {
+  if (tree != kTreeUseTest || !StandOnly(behavior)) return 0;
+  return TreeNamed(behavior, kTreeUseTest, "Interaction - Use - TEST") &&
+                 TreeNamed(behavior, kTreeUrinalTest, "Interaction - Use Urinal - TEST")
+             ? kTreeUrinalTest
+             : 0;
 }
 
 std::map<ObjSelector*, Behavior*>& Behaviors() {
@@ -384,6 +419,7 @@ int TreeSimImpl::Gosub(Behavior* behavior, const short* params, short tree) {
   StackElem* caller = m_stack.GetNthFrame(m_stack.GetStackSize() - 1);
   if (!behavior && caller) behavior = caller->m_behavior;
   if (!behavior) return 0;
+  tree = StandOnlyTree(behavior, tree);  // PC mod: mods (stand_only)
   const unsigned char* t = behavior->GetTree(tree);
   if (!t) return 0;
   StackElem frame;
@@ -424,6 +460,9 @@ int TreeSimImpl::Gosub(Behavior* behavior, const short* params, short tree) {
 // error (0x44F). The result: the last transition was "return true".
 int TreeSimImpl::RunCheckTree(Behavior* behavior, short tree, short stackObject, const short* params) {
   if (m_error != 0) return 0;
+  // PC mod: mods (stand_only): a urinal's Use is for men (by themselves: for number 1) only
+  if (const short also = StandOnlyCheck(behavior, tree))
+    if (!RunCheckTree(behavior, also, stackObject, params)) return 0;
   StackElem marker;
   marker.m_primState = 1;
   marker.SetTreeID(-1);

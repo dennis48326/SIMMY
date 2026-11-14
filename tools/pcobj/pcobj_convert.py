@@ -895,6 +895,11 @@ def convert(s, it, base_override=None, write=True):
             Nf = np.tile(np.asarray([[0, 0, 1]], np.float32), (8, 1))
             Uf = np.tile(np.asarray([uv], np.float32), (8, 1))
             flange_j = [(m0[0], 'flange', Pf, Nf, Uf, Tf)]
+        if kind == 'urinal':
+            # on the wall behind where the base's bowl is: its users stand that much nearer (route_shift);
+            # the base's trees stand men up (stand_only)
+            it.route_shift = pcplumb.urinal_shift(meshes, base)
+            it.notes.append(f'men only, standing; stands {it.route_shift:.2f} nearer than the base toilet\'s users')
         if kind in ('toilet', 'stall'):
             sh = pcplumb.seat_height(meshes)
             if sh:
@@ -1246,12 +1251,15 @@ def convert(s, it, base_override=None, write=True):
                 out.append((mat,) + tuple(m[1:]))
             return out
         variant_meshes = {'clean': meshes_j}
-        dirty = looks(meshes_j, [('_clean', '_dirty')])
+        # (the urinal's materials are "...clean" / "...dirty", no underscore)
+        dirty = looks(meshes_j, [('_clean', '_dirty')] + ([('clean', 'dirty')] if kind == 'urinal' else []))
         if any(a[0] != b[0] for a, b in zip(dirty, meshes_j)):
             variant_meshes['dirty'] = dirty
         if pinfo.get('clogged'):
-            clog = looks(variant_meshes.get('dirty', meshes_j), [('water_water', 'water_clogged')])
-            if any(a[0] != b[0] for a, b in zip(clog, meshes_j)):
+            under = variant_meshes.get('dirty', meshes_j)
+            clog = looks(under, [('water_water', 'water_clogged')])
+            # (no clogged look of its own, e.g. a urinal: its states take the dirty model)
+            if any(a[0] != b[0] for a, b in zip(clog, under)):
                 variant_meshes['clogged'] = clog
         for look, ms in variant_meshes.items():
             ps = []
@@ -1571,6 +1579,9 @@ def convert(s, it, base_override=None, write=True):
                 v = it.o.s(pcinstall.W_RATINGS + k)
                 if v > 0:
                     f.write(f'{key} = {min(10, v)}\n')
+            if kind == 'urinal':
+                # men only, the standing (number 1) branch of the base's Use every time; stood at the PC bowl
+                f.write(f'stand_only = 1\nroute_shift = {getattr(it, "route_shift", 0.0):.3f}\n')
             if pinfo.get('hole'):
                 # the hole a converted counter it stands in shows (model_sink / model_sink_wide)
                 f.write(f'sink_hole = {pinfo["hole"]}\n')

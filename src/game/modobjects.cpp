@@ -27,6 +27,8 @@
 #include "simmy/unported_globals.hpp"
 #include "simmy/platform.hpp"
 
+#include <algorithm>
+#include <cmath>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -163,6 +165,14 @@ unsigned char* CopyDef(Tail& tail, const ObjDefinition* from, const simmy::ModOb
   rating(0xaa, m.bladder);
   rating(0xac, m.energy);
   rating(0xae, m.fun);
+  // route_shift: its users stand that much nearer its middle, so its footprint (+0x9A: insets, a nibble
+  // per side in 1/16 tiles, the front's the low one) ends in front of them: the shift and half a
+  // person's width (gPersonWidth 6) off its front (a wall urinal: only its back part is in the way).
+  if (m.routeShift > 0.0f) {
+    const unsigned int insets = static_cast<unsigned short>(ERQuickdata::S16(def, 0x9a));
+    const unsigned int front = std::min(15u, static_cast<unsigned int>(std::ceil(m.routeShift * 16.0f + 3.0f)));
+    if (front > (insets & 0xf)) PutBE16(def + 0x9a, (insets & ~0xfu) | front);
+  }
   if (!withRes) {
     PutPtr(def + 0xc0, nullptr);
     return def;
