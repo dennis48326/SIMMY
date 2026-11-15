@@ -1,4 +1,4 @@
-# PC mod: mods (objects, wallpapers, floors and fences from the PC game)
+# PC mod: mods (objects, wallpapers, floors, fences and doors from the PC game)
 
 Lets the player add objects converted from **their own** copy of The Sims 2 for PC: by default every
 buy-mode **Decorative**, **Surfaces**, **Seating**, **Appliances**, **Lighting**, **Plumbing**, **Electronics**, **Hobbies** and
@@ -50,7 +50,11 @@ on its own) and floors, sell back, count in the lot's value and save with the lo
 floors"). And every **fence** (191: fences, railings, flowerbed borders, pet thresholds and half walls):
 on build mode's Walls tab after the GameCube's three, built straight and diagonally with the wall tool,
 with posts where a run ends or turns, sold back, blocking Sims (the borders they walk over) and saved
-with the lot (see "Fences").
+with the lot (see "Fences"). And every **door and archway** (72: doors, archways, double doors and wide
+archways one and two tiles wide): on build mode's Doors tab next to the GameCube's own, placed into
+walls, cutting the PC door's hole into the wall, opening as sims walk through (the PC leaves swung about
+their own hinges), sold back and saved with the lot; a lot saved with them shows a similar GameCube door
+without their mod (see "Doors").
 Off unless a mod folder exists; with none, nothing in the game changes
 (no extra memory, same determinism hash).
 
@@ -69,6 +73,7 @@ Its PC install and disc paths are set at the top of the file.
 | `convert_pc_object.bat decorative` / `surfaces` / `seating` / `appliances` / `lighting` / `plumbing` / `electronics` / `hobbies` / `storage` / `kids` / `misc` | only that buy-mode category (several may be given: `decorative seating`) |
 | `convert_pc_object.bat walls` / `floors` | only the wall / floor coverings (`walls floors`: both; about 30 s and 40 MB for all packs) |
 | `convert_pc_object.bat fences` | only the fences and half walls (about 30 s and 60 MB for all packs; in the default run too) |
+| `convert_pc_object.bat doors` | only the doors and archways (about 20 s and 22 MB for all packs; in the default run too) |
 | `convert_pc_object.bat list ficus` | PC objects whose name contains "ficus" |
 | `convert_pc_object.bat inventory` | only the inventory (`mods\pcobj_inventory.tsv`) |
 | `convert_pc_object.bat "No-Fuss Ficus"` | one object (name or GUID), base chosen automatically |
@@ -83,7 +88,7 @@ python tools/pcobj/pcobj_convert.py --pc "C:\Games\The Sims 2 Ultimate Collectio
 
 `--pc` is the install folder (every `TSData/Res` under it is a pack); `--gc` the GameCube data the port
 plays (disc image or extracted folder). `--categories decorative,surfaces,seating,appliances,lighting,plumbing,electronics,hobbies,storage,kids,misc`
-(or `all`, which takes `walls`, `floors` and `fences` too; `--categories walls,floors` the coverings alone, `fences` the fences alone; also `--all-decorative`, `--all-surfaces`, `--all-seating`, `--all-appliances`,
+(or `all`, which takes `walls`, `floors`, `fences` and `doors` too; `--categories walls,floors` the coverings alone, `fences` the fences alone, `doors` the doors alone; also `--all-decorative`, `--all-surfaces`, `--all-seating`, `--all-appliances`,
 `--all-lighting`, `--all-plumbing`, `--all-electronics`, `--all-hobbies`, `--all-storage`, `--all-kids`, `--all-misc`) picks the buy-mode
 categories. Other modes: `--object <GUID|name> [--base <GameCube object>]`,
 `--batch list.tsv` (GUIDs in the first column, an optional base in the second), `--list <text>`,
@@ -101,7 +106,8 @@ resource(s); read in n ms` and `[mods] objects: n added (n multi-tile), n skippe
 `SIMMY_MODS_VERBOSE=1`, or 20 objects or fewer, a line per object; a skipped object always says why).
 Wall and floor coverings add `n wall and n floor covering(s)` to the first line and `[mods] coverings: n wall
 and n floor covering(s) added (after the disc's 95 and 67), n skipped`; fences `[mods] n fence(s)` and, when
-build mode first lists them, `[mods] fences: n added to the Walls tab (lot styles 0x30..0xFE)`. The objects are in buy mode on the **Decorative**, **Surfaces**, **Seating & Beds**, **Appliances**, **Lighting**, **Plumbing**, **Electronics**, **Skill** and **Misc** tabs (hobbies, storage and kids: their base's tab) with the PC name, description,
+build mode first lists them, `[mods] fences: n added to the Walls tab (lot styles 0x30..0xFE)`. Doors are
+objects (counted in the `objects` lines). The objects are in buy mode on the **Decorative**, **Surfaces**, **Seating & Beds**, **Appliances**, **Lighting**, **Plumbing**, **Electronics**, **Skill** and **Misc** tabs (hobbies, storage and kids: their base's tab) with the PC name, description,
 price and room rating and a rendered thumbnail. With a mod folder the **C stick** left/right pages that catalogue
 four columns at a time (the GameCube's movie only moves a column at a time; the tab can hold 600+).
 
@@ -109,7 +115,7 @@ four columns at a time (the GameCube's movie only moves a column at a time; the 
 (`SIMMY_MODS_ONLY=1`; the GameCube's own objects stay in the game and on lots, just not for sale; tabs
 without converted objects are empty); with wall or floor coverings in the mods, build mode's Wallpaper and
 Floors tabs list only those (the GameCube's stay on the lot's walls and floors), and with fences the Walls
-tab lists the wall tool and the converted fences only. The bat also gives the game its own memory card
+tab lists the wall tool and the converted fences only; the Doors tab lists only converted doors. The bat also gives the game its own memory card
 (`SIMMY_CARD_DIR=<folder>`: `pc_objects_card` next to simmy.exe, so the player's saves are never touched;
 not in a network session), 999,999 simoleons when buy mode opens (`SIMMY_BUY_FUNDS`) and no fire-code
 limit (`SIMMY_FIRE_CODE_LIMIT=off`, the same as `fire_code_limit=off` in simmy.ini for that run only).
@@ -912,6 +918,81 @@ its GameCube fallback (`lot palette: fence ... is not in the mods; shown as Game
 a style in the converted range with no palette entry becomes the picket; the next save is a plain
 GameCube lot. Lots without converted fences are loaded and saved as they are.
 
+## Doors
+
+**GameCube side.** A door is an object, as on the PC: a group (a lead, the catalogue entry, and a type-8
+part on each side of the wall: sub index (0, 0) and (0, 1)) whose definition gives the wall it stands in a
+style (+0x5C, 3: "a door is here", so the router, the collision map and the wall tool let sims through
+and keep the wall) and a row of the wall models (+0xA2, `g_wallTable`, eroom.cpp: the wall with the
+door's hole, one model per end-cap variant, drawn on each side by the part on that side's tile).
+Placing one dresses the wall (`cXPortalImpl::Place` / `ApplyWallStyle`), lifting or selling it puts the
+plain wall back; the price is charged and refunded as for any object. Its parts with a portal tree
+(function entry 0xF) are the portals sims route through (portal.cpp): a sim walking through runs it,
+the drawing part goes to state 4 (the open animation) and back to 0. The disc has 21 one-tile doors
+(door_plain, door_deco, door_shoji_screen, ...: $100-250, build sub-sort 1, the Doors tab), one leaf on
+node 1 hinged at model +x and turned 90 degrees, and the alien airlocks (a one-tile one and a three-tile
+double door whose middle column is the portal and whose two leaves slide 0.2 apart, nodes 1 and 2).
+No locks, no gates (no doors in fences), no diagonal doors.
+
+**PC side.** Doors are objects too (OBJD type 8, build-mode type 8; their diagonal versions, type 0,
+are what the PC puts on diagonal walls), two parts per tile of width, a model (CRES) with the frame
+(`doorframe_n/_s`) and the leaves (`r_door_*`, `l_door_*`; archways none), and wall masks: per column a
+TXMT `<model>_<x>_0_0_n_wallmask` (64 x 128 alpha picture of one wall tile, 3 m high, the hole in alpha
+0; `tsMirrorWallMask` when drawn mirrored), the far side the same picture mirrored. Found in the
+Ultimate Collection: 94 (base 37, University 7, Nightlife 6, Open for Business 8, Glamour Life 2, Pets 4,
+Seasons 5, H&M 1, Teen Style 1, Bon Voyage 8, Apartment Life 9, Mansion & Garden 6).
+
+**What the converter makes** (`tools/pcobj/pcdoor.py`; `convert_pc_object.bat doors`): an `[object]`
+with `door = 1` per door, its GUIDs the PC's, its model the PC mesh (y mirrored as the converted
+objects, the wall at model y 0). One-tile doors copy a GameCube door chosen by name and price (glass ->
+door_glasspane, shoji / bamboo -> door_shoji_screen, saloon / country -> door_western_plain, security /
+metal -> door_metal_smallwindow, ornate -> door_fancy_detail, ...; the door a lot shows without the mod)
+with door_plain's skeleton and animations (`anim_base`): the PC leaf on node 1, turned about the PC's
+own hinge (`node = 1:x,0,0[:m]`, mirrored when the PC hinge is on the other side). Two-tile doors copy
+the airlock's middle and right columns (`base_tiles`: the middle one is the portal), its sliding nodes
+turning the PC's left and right leaves 90 degrees about their outer edges as they slide open
+(`node = 2:x,0,0:o-90/0.2`). Every part gets the wall its side shows (`wall_cut`): the GameCube's nine
+plain wall end-cap variants with the PC mask's hole cut out of the face and the lower band (the caps
+copied as stored; the hole in rectangles of the mask's pixels, so arches step at 2-3 cm). Gates (they go
+into fences on the PC), garage doors and the two-storey doors are left out (reasons in the inventory).
+Folders `pcd1_doors`, `pcd2_archways`, `pcd3_doubledoors`, `pcd4_doublearchways`; `pcdoor_inventory.tsv`.
+
+```
+[object]
+guid = 0x2C77520C           the PC GUID (lead); tiles: the PC parts' GUIDs
+base = door_plain           the GameCube door it copies (and a lot falls back to)
+door = 1                    a door: its base may be a type-8 portal group
+tiles = 0,0:0x6C77520E 0,1:0xEC77520D
+base_parts = 1
+base_tiles = 1,0 1,1 2,0 2,1    two-tile doors: the airlock part each tile copies
+animated = 1
+anim_base = door_plain      the one-tile doors' skeleton and open / close animations
+anim_model = 0x...          the model the states show (the leaf strips on node 1)
+node = 1:-0.3471,0.0000,0.0000:m      the leaf's hinge (model space); m: hinged on the other side
+node = 2:-0.8700,0,0:o-90/0.2         (two tiles) turned -90 degrees when node 2 has slid 0.2
+wall_cut = 0,0:0xA,0xB,...  the wall models (9 end-cap variants) on tile (0, 0)'s side
+wall_cut = 0,1:0x...        ... and on the other side
+```
+
+**In the game** (`src/game/moddoors.cpp`, `simmy::moddoor`; `AddModObjects` in modobjects.cpp): a door
+mod's base may be a type-8 group (other objects still may not); its parts copy the base parts
+(`base_tiles`), the drawing part keeps the base's (or `anim_base`'s) character and state table, so the
+GameCube's own trees open and close it and route sims through it. `EIWallPart::GetWallModelId`
+(eroom.cpp) shows a converted door's `wall_cut` model for its part's side instead of the base's
+`g_wallTable` row. `ISimsObjectModel::ModNodes` turns the `o` nodes by their slide. Doors keep the
+GameCube's door wall style (3): they take no style of their own, so they never meet the converted
+fences' styles (0x30..0xFE) or the per-lot fence palette. They sell and refund as objects (the PC price),
+count in the lot's value, and save as objects (by GUID).
+
+**Saves.** `ObjectFolderImpl::PrepareForModuleSave` adds the lot's door palette when it holds converted
+doors: 'Arry' 0x4D44: `SMD1`, a count, per converted door type on the lot (lead and parts) its GUID and
+the GameCube type it copies. `PrepareForModuleLoad` reads it before the type table: a saved type the game
+lacks that the palette names gets its GameCube type's GUID in the save id table, so its objects load as
+that GameCube door (`[mods] lot palette: door type ... is not in the mods; loaded as GameCube door_plain`)
+with their data, places and wall styles as they were; the next save is a plain GameCube lot. A two-tile
+door falls back to the airlock's parts it copies (the airlock's three-tile model, drawn off to one side
+of the two tiles). Without a palette nothing changes.
+
 ## All categories
 
 One run of every category (`convert_pc_object.bat` with no argument, or `--categories all`) over the
@@ -938,6 +1019,7 @@ coverings); the game reads them in 0.2 s and adds 1374 objects (461 multi-tile) 
 | Walls | Build: wall coverings (9 sub-sorts) | 1482 | 1477 | 5 | Wallpaper (build mode) | `pcw<k>_<group>` (9 folders) |
 | Floors | Build: floor coverings (8 sub-sorts) | 647 | 645 | 2 | Floors (build mode) | `pcf<k>_<group>` (8 folders) |
 | Fences | Build: fences, railings, borders, half walls | 191 | 191 | 0 | Walls (build mode) | `pcn<k>_<group>` (3 folders) |
+| Doors | Build: doors and archways | 94 | 72 | 22 | Doors (build mode) | `pcd<k>_<group>` (4 folders) |
 
 (In a run of every category the earlier ones take the objects a later one shares: the massage table and
 hot spring go with Electronics and Plumbing, the RC toys with Kids; a category on its own counts them
@@ -953,6 +1035,11 @@ mods/
   pcwall_inventory.tsv      every wall covering found: pack, kind, name, PC id, PC sub-sort, gc_group
   pcfloor_inventory.tsv     (the GameCube tab; floors: the footstep surface), price, status, reason,
                             key, the GameCube base (id, name), material, texture size, scale, folder
+  pcdoor_inventory.tsv      every door found: pack, name, PC id, group, width, price, status, reason,
+                            the GameCube base, the PC model, the leaves' hinges, the hole per column
+  pcd1_doors/               doors: pcd1_doors, pcd2_archways, pcd3_doubledoors, pcd4_doublearchways:
+    mod.ini                 an [object] section per door (door = 1); models_*.res (the door, its
+                            animated copy, the wall cut-outs), shaders_*, textures_*, preview.png
   pcfence_inventory.tsv     every fence found: pack, name, PC id, group, price, status, reason, key, the
                             GameCube fallback, walk, post spacing, half wall, the PC models, models made,
                             textures, folder
@@ -1027,9 +1114,10 @@ along the PC's y a GameCube sink in it is drawn, -0.5..0.5), `sink_hole` (`narro
 (a counter sink's flange in a GameCube counter), `shader_swaps`, `state_shaders` (a TV's channels; its
 own screen when off), `wall_model` (0 / 1), `route_front`, `route_shift` (tiles: on-tile routing slots that
 much nearer the object's middle, its footprint's front cut to match: the urinal), `stand_only` (a GameCube
-toilet for men only, standing: the urinal), `same_type` (electronics, hobbies, storage, misc), `prop_nodes` (`2,7,8`: nodes drawn where the base's animation has
+toilet for men only, standing: the urinal), `same_type` (electronics, hobbies, storage, misc), `door`, `base_tiles`, `wall_cut` (doors, see "Doors"), `prop_nodes` (`2,7,8`: nodes drawn where the base's animation has
 them: a hobby object's props, sub-models copied from the base's model), `hide_props` (`0x8C0E134F ...`:
-dress-up props of the base the sim does not wear on this object), `pack` (informational). `[fence]` keys:
+dress-up props of the base the sim does not wear on this object), `pack` (informational); `node`'s
+`:o<degrees>/<slide>` form (a door leaf turned by how far its base node slides). `[fence]` keys:
 `key`, `name`, `desc`, `price`, `thumbnail`, `model`, `model_diag`, `model_ends`, `model_diag_ends`, `walk`,
 `base`, `group`, `pack` (see "Fences"). Mods are read in folder-name order; a GUID
 or resource id given twice keeps the first. A resource id the disc has is never taken from a mod.
@@ -1054,6 +1142,7 @@ or resource id given twice keeps the first. A resource id the disc has is never 
 | Fire code | `EIObjectMan::CountObjects` (iobjectman.cpp) | A mod object's model counts at 5/7 of its size: what it would weigh with the disc's fixed-point vertices (16 bytes a vertex against 28) |
 | Saves | unchanged | `objt` names types by GUID; a mod object (and each part) saves and loads like any other |
 | Wall and floor coverings | `src/game/modcoverings.cpp` (`simmy::modcov`): `InstallSets` from `EGlobal::SetDefaults` (global.cpp), `AfterWorldLoad` / `AfterWorldSave` from `cFixedWorldImpl::Load` / `Save` (world.cpp), the catalogue's `on_tab_changed_wallpaper` / `_floor`, `enter_wallpaper_mode` / `enter_floor_mode`, `cCellInfo::GetDesc` (pcttarget.cpp), `EFloorShdTblNode::BuildStrip` (ifloor.cpp), `ERQuickdata::ModTailSize` (e_rquickdata.cpp) | The sets copied into the build sets image's tail with the coverings' rows; a pattern number given per covering and lot; the lot's palette saved and mapped back (or to GameCube coverings) on load; floor pictures over several tiles. See "Walls and floors" |
+| Doors | `src/game/moddoors.cpp` (`simmy::moddoor`): `AddModObjects` (modobjects.cpp: type-8 bases for `door`, `base_tiles`, the fallback types), `EIWallPart::GetWallModelId` (eroom.cpp: `wall_cut`), `ISimsObjectModel::ModNodes` (isimsobjectmodel.cpp: `o` nodes), `PrepareForModuleSave` / `PrepareForModuleLoad` / `ObjectSaveTypeTable::DoStream` (objectfolder.cpp: the palette), `filter_object` (pcttarget.cpp: screenshot mode) | Converted doors as copies of GameCube doors with their own wall cut-outs and leaves; the lot's door palette ('Arry' 0x4D44) |
 | Fences | `src/game/modfences.cpp` (`simmy::modfence`): the Walls tab (`on_tab_changed_wall`, `enter_wall_mode`, `GetDesc`, `calc_wall_value` / `WallSellValue` in pcttarget.cpp), `IsFenceStyle` (tilewalls.cpp), `IsFence` (wallmanipulator.cpp), `ERoom::ProcessCell` / `EIFenceWall` (eroom.cpp), `WallPriceForStyle` (world.cpp), `PassableWallStyle` and the near-wall test (xrouting.cpp), `IsMoveBlocked` (collisionmap.cpp), `SectWall` (objectplace.cpp), `AfterWorldLoad` / `AfterWorldSave` from `cFixedWorldImpl::Load` / `Save` | Converted fences as wall styles 0x30..0xFE given per lot; their models, prices, walk-over; the lot's fence palette ('Arry' 0x4D46) |
 
 **Unknown GUIDs (mod removed).** The saved type has no selector, so `ObjectFolderImpl::ReconSelector`
@@ -1095,6 +1184,7 @@ file name in a place action may name a mod object, which copies the file: use GU
 | `pcelec.py` | Electronics: kinds, bases by footprint and tier, the bases' groups, placement changes (wall TVs, speakers, table phones), the screen subset, the base's screens (swap or nodes, uv fit), a monitor stood up |
 | `pcwall.py` | Walls and floors: the coverings of every pack (catpatterns XOBJ), the GameCube's sets (rows, names, pictures' colours), the base by kind / surface and colour, the C8 textures (walls turned, bump baked in; floors mirrored, multi-tile), shaders, mod.ini per sub-sort, preview.png, inventories |
 | `pcfence.py` | Fences: the fences of every pack (catpatterns 0x2CB230B8), rail / diagonal rail / post baked into the GameCube's one-model-per-edge form (posts at both ends, post-less variants for end-post fences), half walls' plaster body, the GameCube fallback by material, thumbnails; `--categories fences` (and `all`) in pcobj_convert.py |
+| `pcdoor.py` | Doors: the doors of every pack (OBJD type 8 in the Doors tab), the GameCube base by name and price (two tiles: the airlock), the leaves on the base's nodes with their PC hinges, the wall masks cut out of the GameCube's plain wall models (`wall_cut`), thumbnails; `--categories doors` (and `all`) in pcobj_convert.py |
 | `pcobj_convert.py` | Inventory, placement, base choice, materials, MODL/shaders, thumbnail, mod.ini; batch with worker processes; `--categories walls,floors` (and `all`) run pcwall.py |
 
 ## Limits
@@ -1219,6 +1309,14 @@ file name in a place action may name a mod object, which copies the file: use GU
   At most 207 different converted fences on a lot (all 191 fit). Models are float (about twice a disc
   fence's size: 60 MB for all). Netplay with converted fences is untested (the style is given on the
   machine that picks it).
+- Doors: one storey and straight walls, as the GameCube's: no diagonal doors, no two-storey doors, no
+  gates in fences, no garage doors. They open as the GameCube's do: the door's own animation (one-tile
+  doors: door_plain's swing, its timing and 90 degrees; two-tile doors: the airlock's slide, 90 degrees
+  for the PC leaves) and to one side only (the GameCube door's), not away from the sim as on the PC; a
+  two-tile door's sims walk through its left column (the airlock's middle one is the portal). No locks
+  (the GameCube has none). The wall cut-out is the PC mask's hole on the GameCube's wall (no jambs: the
+  PC frames cover the cut edges); arches step at the mask's 3 cm pixels. Without its mod a two-tile door
+  falls back to the airlock's parts (its 3-tile model drawn off to one side). PC prices ($80-700; the GameCube's $100-250).
 - Recolours: only the default (the inventory counts the others). Each would be another catalogue entry
   with its own shader/texture and a model copy (the MODL names its shaders): `--recolours` is not done.
 - No LOD, no specular/environment maps (blended glass is flat), one texture per material.

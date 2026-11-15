@@ -848,7 +848,17 @@ void ISimsObjectModel::ModNodes() {
         for (int a = 0; a < 3; ++a)
           for (int b = 0; b < 3; ++b) D[a][b] = delta.r[a][b];
         float slide[3] = {now.t[0] - rest.t[0], now.t[1] - rest.t[1], now.t[2] - rest.t[2]};
-        if (nd.axis) {
+        if (nd.openSlide > 0.0f) {
+          // a door leaf opened by how far the base's leaf node has slid (the airlock's sliding leaves):
+          // turned about model z, no slide
+          const float len = std::sqrt(slide[0] * slide[0] + slide[1] * slide[1] + slide[2] * slide[2]);
+          const float angle = nd.openDeg * 0.017453292f * (len < nd.openSlide ? len / nd.openSlide : 1.0f);
+          const float co = std::cos(angle), si = std::sin(angle);
+          for (int a = 0; a < 3; ++a)
+            for (int b = 0; b < 3; ++b) D[a][b] = a == b ? 1.0f : 0.0f;
+          D[0][0] = co, D[1][1] = co, D[1][0] = -si, D[0][1] = si;
+          slide[0] = slide[1] = slide[2] = 0.0f;
+        } else if (nd.axis) {
           // the base node's turn (its angle) about a model axis of the PC part's own (a toaster oven's
           // door hinged at its foot, where the base's door turns about a vertical hinge); no slide
           const float c = (D[0][0] + D[1][1] + D[2][2] - 1.0f) * 0.5f;

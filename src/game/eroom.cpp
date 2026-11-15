@@ -11,6 +11,7 @@
 #include "simmy/types_gen.hpp"
 #include "simmy/unported_globals.hpp"
 #include "simmy/modfences.hpp"
+#include "simmy/moddoors.hpp"
 #include <cstdint>
 
 #include <cmath>
@@ -1149,6 +1150,8 @@ void EIWallPart::GetWallModelId(CTilePt& tile, TileWalls& walls, TileWallsSegmen
     if (portal) {
       const int row = objdef::WallCutRow(portal->GetDef()) + rowBase;
       m_wallModel = g_wallTable[row * 10 + variant];
+      // PC mod: mods. A converted door's part: the wall cut to the PC door's hole.
+      if (const unsigned int cut = simmy::moddoor::WallCut(portal, variant)) m_wallModel = cut;
       // The row's tenth entry is the portal's type (EInstance::SetPortalType: 1 regular, 2 small, 3
       // large window; its portal lights' reach and height, EIPortalPointLight::SetPortal).
       cXObjectImpl* impl = portal->GetObjectImplementation();

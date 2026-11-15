@@ -5,6 +5,7 @@ rem the GameCube's own objects are not for sale in this mode (the ones already o
 rem With converted wall and floor coverings in the mods folder (convert_pc_object.bat walls floors),
 rem build mode's Wallpaper and Floors tabs likewise list only those (the GameCube's stay on the walls),
 rem and with converted fences (convert_pc_object.bat fences) the Walls tab lists the wall tool and only those.
+rem With converted doors (convert_pc_object.bat doors) the Doors tab lists only those.
 rem
 rem   show_pc_objects.bat                         the disc image from ISO below (or iso= in simmy.ini)
 rem   show_pc_objects.bat "D:\Games\Sims 2.iso"   another disc image
@@ -32,7 +33,7 @@ set SIMMY_MODS_ONLY=1
 set SIMMY_FIRE_CODE_LIMIT=off
 set SIMMY_BUY_FUNDS=999999
 set "SIMMY_CARD_DIR=%BIN%\pc_objects_card"
-echo Starting SIMMY in PC objects screenshot mode (only converted objects in buy mode, converted wallpapers, floors and fences in build mode) ...
+echo Starting SIMMY in PC objects screenshot mode (only converted objects in buy mode, converted wallpapers, floors, fences and doors in build mode) ...
 simmy.exe %ISOARG% --split=gc 2> "%~dp0show_pc_objects_log.txt"
 echo.
 echo simmy.exe exited with code %ERRORLEVEL% (log: show_pc_objects_log.txt)

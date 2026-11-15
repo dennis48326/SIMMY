@@ -49,6 +49,11 @@
 //   same_type = 1              trees looking for the base's GUID find it too (alarms, phones)
 //   route_shift = 0.43         routing slots on its own tile put the person this much (tiles) nearer its
 //                              middle (a wall urinal: stood at its bowl)
+//   door = 1                   a door or archway made from a GameCube door (a type-8 portal group)
+//   base_tiles = 1,0 1,1 ...   (after tiles) per tile, the base part (its place) it copies
+//   wall_cut = 0,1:0xA,...     (after tiles) the wall models (9 end-cap variants) shown on that tile's
+//                              side of the door's wall: the PC door's hole
+//   node = 1:x,y,z:o+90/0.2    a door leaf turned 90 degrees about z when the node has slid 0.2
 //   stand_only = 1             a toilet for men only, standing: "Interaction - Use" also needs the
 //                              semi-global's "Use Urinal - TEST", "Sub - number2" runs "Sub - number1"
 //   [wall] / [floor]           one per wall or floor covering the mod adds (modcoverings.cpp)
@@ -400,6 +405,34 @@ void LoadModIni(const std::string& mod, const std::string& path) {
       ok = v == "0" || v == "1";
     }
     else if (key == "base_parts") cur->baseParts = std::atoi(v.c_str()) != 0;
+    else if (key == "door") cur->door = std::atoi(v.c_str()) != 0;
+    else if (key == "base_tiles") {
+      // (after "tiles") "x,y x,y ...": per tile in order, the base part (its place) it copies
+      size_t i = 0, at = 0;
+      while (ok && at < v.size()) {
+        const size_t end = std::min(v.find_first_of(" \t", at), v.size());
+        if (end > at) {
+          int x = 0, y = 0;
+          ok = i < cur->tiles.size() && std::sscanf(v.substr(at, end - at).c_str(), "%d,%d", &x, &y) == 2 && x >= 0 &&
+               y >= 0 && x < 256 && y < 256;
+          if (ok) cur->tiles[i].baseX = x, cur->tiles[i].baseY = y;
+          ++i;
+        }
+        at = end + 1;
+      }
+    }
+    else if (key == "wall_cut") {
+      // (after "tiles") "x,y:0xA,0xB,..." the tile's wall models, one per end-cap variant (9)
+      int x = 0, y = 0, n = 0;
+      ModTile* t = std::sscanf(v.c_str(), "%d,%d:%n", &x, &y, &n) == 2 ? FindTile(*cur, x, y) : nullptr;
+      ok = t != nullptr;
+      size_t at = static_cast<size_t>(n);
+      for (int k = 0; ok && k < 9; ++k) {
+        const size_t end = std::min(v.find(',', at), v.size());
+        ok = end > at && ParseU32(v.substr(at, end - at), t->cut[k]);
+        at = end + 1;
+      }
+    }
     else if (key == "comfort") cur->comfort = std::atoi(v.c_str());
     else if (key == "energy") cur->energy = std::atoi(v.c_str());
     else if (key == "hygiene") cur->hygiene = std::atoi(v.c_str());
@@ -455,13 +488,17 @@ void LoadModIni(const std::string& mod, const std::string& path) {
     else if (key == "node") {
       // "N:x,y,z[:m]" (a node's pivot in model space; m: its turn mirrored in x)
       ModObject::Node n;
-      char spec[8] = {};
-      const int got = std::sscanf(v.c_str(), "%d:%f,%f,%f:%7s", &n.node, &n.pivot[0], &n.pivot[1], &n.pivot[2], spec);
+      char spec[24] = {};
+      const int got = std::sscanf(v.c_str(), "%d:%f,%f,%f:%23s", &n.node, &n.pivot[0], &n.pivot[1], &n.pivot[2], spec);
       const std::string sp = Lower(spec);
       n.mirror = sp == "m";
       if (sp.size() == 2 && (sp[0] == '+' || sp[0] == '-') && sp[1] >= 'x' && sp[1] <= 'z')
         n.axis = (sp[0] == '-' ? -1 : 1) * (sp[1] - 'x' + 1);
-      ok = got >= 4 && n.node >= 0 && n.node < 256 && (got == 4 || n.mirror || n.axis);
+      // "o+90/0.2": a door leaf opened by the node's slide (degrees about z when slid 0.2)
+      bool open = false;
+      if (sp.size() > 1 && sp[0] == 'o')
+        open = std::sscanf(sp.c_str() + 1, "%f/%f", &n.openDeg, &n.openSlide) == 2 && n.openSlide > 0.0f;
+      ok = got >= 4 && n.node >= 0 && n.node < 256 && (got == 4 || n.mirror || n.axis || open);
       if (ok) cur->nodes.push_back(n);
     }
     else if (key == "tile_model") {

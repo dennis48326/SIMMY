@@ -240,6 +240,12 @@ struct ModTile {
   // part) and per-state models (state, model)
   unsigned int model = 0;
   std::vector<std::pair<int, unsigned int>> states;
+  // Doors (door = 1): the base part this tile copies (base_tiles = x,y ...: a two-tile door made from
+  // the GameCube's three-tile airlock: its middle and right columns), -1: the part at the tile's own
+  // place; and the wall models the wall on this tile's side shows (wall_cut = x,y:id,...: one per
+  // end-cap variant, 9; 0: the base part's g_wallTable row), cut to the PC door's hole.
+  int baseX = -1, baseY = -1;
+  unsigned int cut[9] = {};
 };
 struct ModObject {
   std::string mod;               // the mod's folder name
@@ -304,6 +310,10 @@ struct ModObject {
     float pivot[3] = {};
     bool mirror = false;
     int axis = 0;  // +-1, 2, 3 (node = N:x,y,z:+x ...): the node's turn applied about this model axis
+    // Doors (node = N:x,y,z:o+90/0.2): the node's slide from rest (its length over openSlide, at most
+    // 1: how far open) turns the part this many degrees about model z at the pivot (a PC double door's
+    // hinged leaves on the GameCube airlock's sliding ones); no slide of its own.
+    float openDeg = 0.0f, openSlide = 0.0f;
   };
   // init_data = 4:0x1 ...: object data set after its init tree (each reset), e.g. data 4, the heights it
   // may be placed at (1 the floor, 4/8 tables and counters): a floor espresso cart made from the
@@ -362,6 +372,10 @@ struct ModObject {
   // the person using it that the converted object leaves off (the hamster wheel's spinning wheel, worn
   // by the runner: a converted treadmill shows its own treads).
   std::vector<unsigned int> hideProps;
+  // door = 1: a door or archway made from a GameCube door (a type-8 portal group: the wall it stands in
+  // takes its definition's wall style; sims walk through it by the base's portal trees). Its tiles'
+  // wall_cut models replace the base's wall cut-out; saves name its types' GameCube fallbacks (moddoors.cpp).
+  bool door = false;
 };
 void mods_init();                // once at start-up (main thread), after settings_load
 bool mods_enabled();             // a mod folder was found (also when it holds no mods)

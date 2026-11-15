@@ -7,6 +7,7 @@
 // careers, skills, the thumbnails and the object language (XObjLang).
 #include "simmy/types_gen.hpp"
 #include "simmy/unported_globals.hpp"
+#include "simmy/moddoors.hpp"
 
 #include <algorithm>
 #include <cstdio>
@@ -334,6 +335,8 @@ void ObjectFolderImpl::PrepareForModuleSave(iResFile* file) {
   ObjectSaveTypeTable table;
   table.m_folder = this;
   ReconSaveObject(&table, file, kObjectTypeTableResType, 0, 2);  // GC: id DAT_804FDCC2 (0)
+  // PC mod: mods. Converted doors on the lot: their GameCube types, for a load without their mods.
+  simmy::moddoor::SavePalette(file);
 }
 
 // 800EFDCC
@@ -343,6 +346,7 @@ void ObjectFolderImpl::PrepareForModuleLoad(iResFile* file) {
   for (ObjSelector* chain : m_selectors)
     for (ObjSelector* s = chain; s; s = s->m_next) s->m_saveId = 0;
   m_unknownGuids.clear();
+  simmy::moddoor::LoadPalette(file);  // PC mod: mods (a lot saved with converted doors)
   ObjectSaveTypeTable table;
   table.m_folder = this;
   ReconLoadObject(&table, file, kObjectTypeTableResType, 0, nullptr);  // GC: id DAT_804FDCC2 (0)
@@ -354,6 +358,8 @@ void ObjectFolderImpl::PrepareForModuleLoad(iResFile* file) {
       if (m_saveGuids.size() <= id) m_saveGuids.resize(id + 1u, 0u);
       m_saveGuids[id] = s->GetGUID();
     }
+  // PC mod: mods. Converted door types whose mods are gone load as the GameCube doors they copy.
+  simmy::moddoor::ApplyFallbacks(m_saveGuids);
 }
 
 // 800EC08C
@@ -408,6 +414,8 @@ void ObjectSaveTypeTable::DoStream(ReconBuffer* b, int version) {
       s->m_flags &= ~2u;
     } else if (type == 2) {
       m_folder->m_unknownGuids.push_back(static_cast<unsigned int>(guid));
+    } else {
+      simmy::moddoor::NoteUnknown(static_cast<unsigned int>(guid), saveId);  // PC mod: mods (doors)
     }
     b->Recon32(&guid, 1);
   }

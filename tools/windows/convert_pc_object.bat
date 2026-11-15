@@ -1,5 +1,5 @@
 @echo off
-rem SIMMY PC objects (PC mod: mods): convert objects, wallpapers, floors and fences from YOUR copy of The Sims 2
+rem SIMMY PC objects (PC mod: mods): convert objects, wallpapers, floors, fences and doors from YOUR copy of The Sims 2
 rem (PC) - the base game and every expansion and stuff pack installed under it - into the mods folder
 rem next to simmy.exe.
 rem Needs Python 3 (python.org; tick "Add to PATH") - the first run installs numpy and Pillow for it.
@@ -8,7 +8,7 @@ rem
 rem   convert_pc_object.bat                     every buy-mode object the converter knows - Decorative,
 rem                                             Surfaces, Seating and Beds, Appliances, Lighting, Plumbing,
 rem                                             Electronics, Hobbies and Miscellaneous (Storage, Kids and the
-rem                                             rest) - and every wall and floor covering and fence of
+rem                                             rest) - and every wall and floor covering, fence and door of
 rem                                             every pack found (default: the complete set)
 rem   convert_pc_object.bat decorative          only the Decorative objects
 rem   convert_pc_object.bat surfaces            only the Surfaces objects (counters, tables, desks, ...)
@@ -35,6 +35,8 @@ rem   convert_pc_object.bat floors              only the floor coverings for bui
 rem                                             tile, linoleum, stone, brick, concrete, ...: about 650)
 rem   convert_pc_object.bat fences              only the fences for build mode (fences, flowerbed borders,
 rem                                             railings and half walls: about 190)
+rem   convert_pc_object.bat doors               only the doors for build mode (doors and archways, one and
+rem                                             two tiles wide: about 70)
 rem   convert_pc_object.bat decorative seating  several categories (walls floors: both coverings)
 rem   convert_pc_object.bat list ficus          list PC objects whose name contains "ficus"
 rem   convert_pc_object.bat inventory           write the inventory (mods\pcobj_inventory.tsv) only
@@ -83,6 +85,12 @@ rem wall under the PC top); they build, sell back and save like the GameCube's, 
 rem with posts where a run ends or turns. A lot shows at most 207 different converted fences at once;
 rem delete a folder and lots saved with its fences show a similar GameCube fence instead. They ARE in the
 rem default run too: about 190 fences, half a minute and 60 MB.
+rem Doors: build mode's Doors tab lists them next to the GameCube's own (folders pcd1_doors, pcd2_archways,
+rem pcd3_doubledoors, pcd4_doublearchways); they are placed, sold back and saved like the GameCube's,
+rem open as sims walk through (the PC leaves swung about their own hinges) and cut the PC door's hole into
+rem the wall. Gates, garage doors and two-storey doors are left out. Delete a folder and lots saved with
+rem its doors show a similar GameCube door instead. They ARE in the default run too: about 70 doors,
+rem twenty seconds and 22 MB.
 rem Takes about four minutes for everything of all packs on two cores (progress per object, with the
 rem percentage and the time so far).
 setlocal EnableDelayedExpansion
@@ -106,7 +114,7 @@ if /i "%~1"=="inventory" (
   pause
   exit /b
 )
-rem category arguments: decorative, surfaces, seating, appliances, lighting, plumbing, electronics, hobbies, storage, kids, misc, walls, floors, fences (any of them, in any order)
+rem category arguments: decorative, surfaces, seating, appliances, lighting, plumbing, electronics, hobbies, storage, kids, misc, walls, floors, fences, doors (any of them, in any order)
 set "CATS="
 for %%C in (%*) do (
   if /i "%%~C"=="decorative" set "CATS=!CATS!,decorative"
@@ -131,13 +139,16 @@ for %%C in (%*) do (
   if /i "%%~C"=="fences" set "CATS=!CATS!,fences"
   if /i "%%~C"=="fence" set "CATS=!CATS!,fences"
   if /i "%%~C"=="halfwalls" set "CATS=!CATS!,fences"
+  if /i "%%~C"=="doors" set "CATS=!CATS!,doors"
+  if /i "%%~C"=="door" set "CATS=!CATS!,doors"
+  if /i "%%~C"=="archways" set "CATS=!CATS!,doors"
 )
 if defined CATS (
   echo Converting every %CATS:~1% object of every pack under "%PC%" ...
   python "%TOOL%" --pc "%PC%" --gc "%ISO%" --categories %CATS:~1% --out "%BIN%\mods"
 ) else if "%~1"=="" (
-  echo Converting every buy-mode object ^(Decorative, Surfaces, Seating and Beds, Appliances, Lighting, Plumbing, Electronics, Hobbies, Storage, Kids and Miscellaneous^), every wall and floor covering and every fence of every pack under "%PC%" ...
-  python "%TOOL%" --pc "%PC%" --gc "%ISO%" --categories decorative,surfaces,seating,appliances,lighting,plumbing,electronics,hobbies,storage,kids,misc,walls,floors,fences --out "%BIN%\mods"
+  echo Converting every buy-mode object ^(Decorative, Surfaces, Seating and Beds, Appliances, Lighting, Plumbing, Electronics, Hobbies, Storage, Kids and Miscellaneous^), every wall and floor covering, every fence and every door of every pack under "%PC%" ...
+  python "%TOOL%" --pc "%PC%" --gc "%ISO%" --categories decorative,surfaces,seating,appliances,lighting,plumbing,electronics,hobbies,storage,kids,misc,walls,floors,fences,doors --out "%BIN%\mods"
 ) else if "%~2"=="" (
   python "%TOOL%" --pc "%PC%" --gc "%ISO%" --object "%~1" --out "%BIN%\mods"
 ) else (
@@ -146,11 +157,12 @@ if defined CATS (
 echo.
 echo Done (exit code %ERRORLEVEL%). Start the game: the objects are in buy mode, on every tab -
 echo Decorative, Surfaces, Seating ^& Beds, Appliances, Lighting, Plumbing, Electronics, Skill and Misc -
-echo and the wall and floor coverings and fences in build mode, on the Wallpaper, Floors and Walls tabs
-echo after the GameCube's own (the C stick pages four columns). With no category given this was the
+echo and the wall and floor coverings, fences and doors in build mode, on the Wallpaper, Floors, Walls and
+echo Doors tabs after the GameCube's own (the C stick pages four columns). With no category given this was the
 echo complete set: every PC buy-mode tab the GameCube has a use or a place for, every wall and floor
-echo covering and every fence.
+echo covering, every fence and every door.
 echo The lists are mods\pcwall_inventory.tsv, mods\pcfloor_inventory.tsv, mods\pcfence_inventory.tsv,
+echo mods\pcdoor_inventory.tsv,
 echo mods\pcdeco_inventory.tsv,
 echo mods\pcsurf_inventory.tsv, mods\pcseat_inventory.tsv, mods\pcappl_inventory.tsv,
 echo mods\pclight_inventory.tsv, mods\pcplumb_inventory.tsv, mods\pcelec_inventory.tsv,

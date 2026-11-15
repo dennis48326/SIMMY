@@ -1066,6 +1066,7 @@ bool UpdatePlaceManipulator(int player, float dt) {
 //                         the placement path (Place where legal, then FinalUserPlaceObject: UserPlace)
 //   grab#<id>             the object picked up by the player (UserPickup) and put back (ResetLocation)
 //   sell#<id>             the object picked up and destroyed (buy mode's sell)
+//   sellback#<id>         ... and its value paid back as the catalogue's sell dialog does
 //   wall@x,y,seg          the wall segment deleted (ERoom::DeleteWallAtTile), the rooms and house redone
 //   create:<file>@x,y     an object made and put on the tile as TryCreateObject does (dynamic ones merge)
 //   chain@x,y             the tile's object chain printed (the tile map's object and its siblings)
@@ -1171,6 +1172,20 @@ void PlacementTestTick(int ticks) {
       const int ok = po.GrabExistingObjectInstanceFromId(static_cast<short>(id));
       const int sold = ok ? po.Destroy() : 0;
       std::printf("[place] tick %d sell #%d (%s): %d\n", ticks, id, what.c_str(), sold);
+    } else if (std::strncmp(a, "sellback#", 9) == 0) {
+      // sellback#<id>: sold as the catalogue's sell dialog does (PCTTarget::sell_dialog_selection_callback):
+      // its current value (ObjGetCurrentValue) back to the funds, then picked up and destroyed.
+      PlacementObject po;
+      const int id = std::atoi(a + 9);
+      cXObject* x = Globs_pObjectModule->GetObjectFromID(static_cast<short>(id));
+      cXObjectImpl* o = x ? x->GetObjectImplementation() : nullptr;
+      const std::string what = o ? o->DebugName() : "?";
+      const int value = o ? ObjGetCurrentValue(o) : 0;
+      const int ok = o && po.GrabExistingObjectInstanceFromId(static_cast<short>(id));
+      const int sold = ok ? po.Destroy() : 0;
+      if (sold) SetSimFunds(0, static_cast<int>(GetSimFunds(0)) + value);
+      std::printf("[place] tick %d sellback #%d (%s): %d; sold for %d: funds %d\n", ticks, id, what.c_str(), sold, value,
+                  static_cast<int>(GetSimFunds(0)));
     } else if (std::strncmp(a, "grab#", 5) == 0) {
       PlacementObject po;
       const int ok = po.GrabExistingObjectInstanceFromId(static_cast<short>(std::atoi(a + 5)));

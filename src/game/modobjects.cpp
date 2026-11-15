@@ -26,6 +26,7 @@
 #include "simmy/types_gen.hpp"
 #include "simmy/unported_globals.hpp"
 #include "simmy/platform.hpp"
+#include "simmy/moddoors.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -251,7 +252,7 @@ void ObjectFolderImpl::AddModObjects() {
       continue;
     }
     const Base base = FindBase(this, m);
-    if (!base.selector || objdef::Type(base.lead) == 2 || objdef::Type(base.lead) == 8 || !base.drawing ||
+    if (!base.selector || objdef::Type(base.lead) == 2 || (objdef::Type(base.lead) == 8) != m.door || !base.drawing ||
         !objdef::ResData(base.drawing)) {
       std::fprintf(stderr, "[mods] %s: base object \"%s\" (%08X) not found or not usable; skipped\n", what.c_str(),
                    m.baseFile.c_str(), m.baseGuid);
@@ -307,7 +308,7 @@ void ObjectFolderImpl::AddModObjects() {
           // tile listed twice: the base's second part there)
           int which = 0;
           for (const simmy::ModTile* o = m.tiles.data(); o != &t; ++o) which += o->x == t.x && o->y == t.y;
-          from = BasePart(this, base.selector, t.x, t.y, which);
+          from = BasePart(this, base.selector, t.baseX >= 0 ? t.baseX : t.x, t.baseY >= 0 ? t.baseY : t.y, which);
           if (!from) {
             partsOk = false;
             break;
@@ -357,6 +358,12 @@ void ObjectFolderImpl::AddModObjects() {
       // init tree and the hamster wheel's trees find their parts by the base parts' GUIDs)
       if (m.sameType) part->m_modBaseGuid = m.baseParts && i < partBase.size() ? partBase[i] : s->m_modBaseGuid;
       part->m_modSurface = m.tiles[i].surface > 0.0f ? m.tiles[i].surface : m.surface;
+    }
+    // doors: what a lot saved with it falls back to without the mod (each part: the base part it copies)
+    if (m.door) {
+      simmy::moddoor::Register(m.guid, static_cast<unsigned int>(objdef::GUID(base.lead)));
+      for (size_t i = 0; i < parts.size() && i < partBase.size(); ++i)
+        simmy::moddoor::Register(static_cast<unsigned int>(objdef::GUID(reinterpret_cast<ObjDefinition*>(parts[i]))), partBase[i]);
     }
     s->m_modName = m.name;
     s->m_modDesc = m.desc;
