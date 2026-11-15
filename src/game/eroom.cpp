@@ -10,6 +10,7 @@
 // windows: ObjectIterator), the outside light at the second point, shadows and the wall fading.
 #include "simmy/types_gen.hpp"
 #include "simmy/unported_globals.hpp"
+#include "simmy/modfences.hpp"
 #include <cstdint>
 
 #include <cmath>
@@ -390,7 +391,7 @@ bool ERoom::PreviewWallBuild(bool fences) {
       for (int seg = walls.First(); seg; seg = walls.Next(seg)) {
         if (static_cast<unsigned int>(seg - 1) <= 1) continue;  // segments 1 and 2 are the neighbours'
         const int style = walls.GetStyle(seg);
-        if (style == 2 || style == 0xc || style == 0xd || style == 0xe) ++count;
+        if (style == 2 || style == 0xc || style == 0xd || style == 0xe || simmy::modfence::IsModStyle(style)) ++count;
       }
     }
   return count < 100;
@@ -875,7 +876,7 @@ void ERoom::ProcessCell(std::vector<ERoomWall*>& list, ERoomWall*& current, CTil
   bool fence = false;
   if (hasWall) {
     const int style = walls.GetStyle(segment);
-    fence = style == 2 || style == 0xc || style == 0xd || style == 0xe;
+    fence = style == 2 || style == 0xc || style == 0xd || style == 0xe || simmy::modfence::IsModStyle(style);
   }
   if (!hasWall && !fence) {
     if (!current) return;
@@ -1517,7 +1518,10 @@ EIFenceWall::EIFenceWall(TileWallsSegment& segment, CTilePt& tile, WallStyle sty
     case 0xd: model = diagonal ? 0x53fc260c : 0x3e9e686e; break;
     case 2:
     case 0xe: model = diagonal ? 0xbc6b00f6 : 0xd40a4b23; break;
-    default: break;
+    default:
+      // PC mod: mods. A converted fence: its model, with posts where its run ends or turns.
+      model = simmy::modfence::Model(static_cast<int>(style), static_cast<int>(segment), tile);
+      break;
   }
   SetModel(model, false, nullptr, nullptr);
   m_shadowModel = nullptr;

@@ -2,6 +2,7 @@
 // control, SAnimator2::CheckCollision). The world's frame is used throughout (x = tile y, y = tile x);
 // the object test works in tile axes and swaps back.
 #include "simmy/types_gen.hpp"
+#include "simmy/modfences.hpp"
 #include "simmy/unported_globals.hpp"
 
 #include <algorithm>
@@ -98,7 +99,8 @@ int CollisionMap::IsMoveBlocked(int x, int y, bool ghost, TileWallsSegment segme
   if (!walls.HasWall(segment)) return 0;
   const int style = walls.GetStyle(segment);
   const bool portal = style == 3 || style == 5 || style == 6 || style == 0xf || style == 0x17;
-  return portal ? 0 : 1;
+  // PC mod: mods. A converted fence Sims walk over (a flowerbed border) does not block either.
+  return portal || simmy::modfence::Walk(style) ? 0 : 1;
 }
 
 // 800221BC

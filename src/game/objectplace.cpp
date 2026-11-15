@@ -9,6 +9,7 @@
 // (SetSupportFlag), wall adjacency (UpdateWallAdjacency), TestIntersection's "allow intersection" trees
 // (entry 5). Not ported: the zero-extent override's 0x437 objects.
 #include "simmy/types_gen.hpp"
+#include "simmy/modfences.hpp"
 #include "simmy/unported_globals.hpp"
 #include "simmy/classes/placement.hpp"
 #include "simmy/roomresolve.hpp"
@@ -584,6 +585,7 @@ int SectWall(const int rect[4], int level) {
       for (int seg = walls.First(); seg != 0; seg = walls.Next(seg)) {
         const int s = walls.GetStyle(seg);
         if (s == 3 || s == 5 || s == 6 || s == 0xf || s == 0x17) continue;
+        if (simmy::modfence::Walk(s)) continue;  // PC mod: mods (a converted border Sims walk over)
         int v, a, b;
         if (seg == 2) v = y << 4, a = rect[2], b = rect[0];
         else if (seg == 1) v = x << 4, a = rect[3], b = rect[1];

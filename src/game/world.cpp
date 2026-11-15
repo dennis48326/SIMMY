@@ -10,6 +10,7 @@
 #include <cstring>
 #include <vector>
 #include "simmy/modcoverings.hpp"
+#include "simmy/modfences.hpp"
 
 cFixedWorldImpl* Globs_pFixedWorld = nullptr;  // 804FDBF8 Globs::pFixedWorld
 
@@ -474,6 +475,7 @@ int cFixedWorldImpl::Save(iResFile* file, int) {
   }
   // PC mod: mods. The wall and floor coverings the lot shows (its palette; only with coverings).
   if (r == 0) simmy::modcov::AfterWorldSave(this, file);
+  if (r == 0) simmy::modfence::AfterWorldSave(this, file);  // (and the converted fences)
   return r;
 }
 
@@ -499,6 +501,7 @@ int cFixedWorldImpl::Load(iResFile* file, int) {
   // PC mod: mods. A lot saved with wall or floor coverings: its palette maps them to their patterns
   // now (or, their mods gone, to GameCube coverings). Nothing for a lot without one.
   simmy::modcov::AfterWorldLoad(this, file);
+  simmy::modfence::AfterWorldLoad(this, file);  // (and the converted fences: their styles)
   return 0;
 }
 
@@ -1029,6 +1032,8 @@ namespace {
 // GetWallPrice (8014C444): a fence style (2, 0xC, 0xD, 0xE) costs its FenceSet row's price less a fifth;
 // any other wall 1.
 int WallPriceForStyle(int style) {
+  // PC mod: mods. A converted fence: its price less a fifth, as the disc's.
+  if (const int mod = simmy::modfence::Price(style); mod >= 0) return static_cast<int>(static_cast<float>(mod) * 0.8f);
   if (style != 2 && style != 0xc && style != 0xd && style != 0xe) return 1;
   const void* set = _globals.m_fenceSet;  // EGlobal +0xDC
   const unsigned char* rows = set ? static_cast<const unsigned char*>(ERQuickdata::Ptr(set, 0)) : nullptr;

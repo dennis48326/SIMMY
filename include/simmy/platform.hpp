@@ -398,6 +398,24 @@ const std::vector<ModCovering>& mods_coverings();
 // The bytes the build sets quickdata image (0x19A16F2D: "WallSet", "FloorSet") keeps after its cells
 // for the coverings' rows (modcoverings.cpp); 0 without coverings.
 unsigned int mods_coverings_tail_bytes();
+// Fences ([fence] sections; the game side is src/game/modfences.cpp): build mode's Walls tab lists them
+// after the GameCube's three. On a lot a fence is a wall style byte (the disc's fences: 2, 0xC, 0xD): a
+// converted fence gets one of the styles 0x30..0xFE while the lot uses it, and saves name it by `key`.
+struct ModFence {
+  std::string mod;                  // the mod's folder name
+  std::string key;                  // what saves call it (unique; e.g. pcfence_8d0db64c)
+  std::u16string name, desc;        // catalogue texts
+  int price = 0;                    // per tile edge
+  unsigned int thumbnail = 0;       // the catalogue picture's shader
+  unsigned int model = 0;           // a tile edge's model (posts at both ends; x -0.5..0.5, as the disc's)
+  unsigned int modelDiag = 0;       // a diagonal's (from (-0.5, 0.5) to (0.5, -0.5)); default `model`
+  unsigned int ends[3] = {};        // posts only where a run ends or turns: the edge without posts, with
+  unsigned int diagEnds[3] = {};    // the -x one, with the +x one (0: always `model` / `modelDiag`)
+  bool walk = false;                // Sims walk over it (flowerbed borders): not an obstacle
+  int base = 2;                     // the GameCube fence (style 2, 0xC or 0xD) a lot shows without the mod
+  std::string pack, group;          // where it came from (informational)
+};
+const std::vector<ModFence>& mods_fences();
 
 // ---- Widescreen (pc_splitscreen.cpp, pc_hud.cpp; settings in pc_settings.cpp) ----
 // aspect=16:9 (single player): the frame fills the window (aurora's "stretch" viewport policy) and

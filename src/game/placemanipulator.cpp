@@ -30,6 +30,7 @@
 #include <cstring>
 #include <string>
 #include "simmy/modcoverings.hpp"
+#include "simmy/modfences.hpp"
 
 // ---------------------------------------------------------------------------------------------------
 // game/interactorutils.cpp (InteractorModule::)
@@ -1073,9 +1074,18 @@ bool UpdatePlaceManipulator(int player, float dt) {
 //                         i may be a wall covering's key (a mod's: its pattern is given as the catalogue does)
 //   floorroom@x,y,i       the room at the tile floored with FloorSet entry i (or a floor covering's key),
 //                         floorpainter.cpp
+//   fencesell@x,y,dir,n   the sell tool's line (wallmanipulator.cpp: the edges deleted, each style sold at
+//                         its price as the catalogue's callback values them) and the funds paid back
+//   fenceline@x,y,dir,n,s n tile edges of fence (or wall) style s (a number, or a converted fence's key:
+//                         its style is given as the catalogue does) from the tile on along direction dir
+//                         (0..3 along the edges, 4..7 the diagonals; TileWalls::DirToWallSeg), free
 //   probe:<guid>@x,y,dir|...  the first legal spot of the list (tested only); try:<guid>@... puts it there
 void WallPainterRoomTest(int x, int y, int index, bool sell);  // wallpainter.cpp
 void FloorPainterRoomTest(int x, int y, int index);             // floorpainter.cpp
+std::vector<BuildSellCount> WallToolSellLineTest(int x, int y, int dir, int n);  // wallmanipulator.cpp
+int WallSellValue(const std::vector<BuildSellCount>& sells);     // pcttarget.cpp
+RET_UNKNOWN GetSimFunds(unsigned int player);                     // pcttarget.cpp
+bool SetSimFunds(unsigned int player, int funds);                 // pcttarget.cpp
 int TestCreateObjectAt(const char* fileName, int x, int y);     // objectsim.cpp
 void PlacementTestTick(int ticks) {
   static const char* spec = std::getenv("SIMMY_PLACE_TEST");
@@ -1086,13 +1096,42 @@ void PlacementTestTick(int ticks) {
     if (!a) continue;
     ++a;
     int x = 0, y = 0, z = 0;
-    int at = 0;
+    int at = 0, dirN = 0, style = 0;
     if (std::strncmp(a, "paperroom@", 10) == 0 && std::sscanf(a + 10, "%d,%d,%n", &x, &y, &at) == 2 && at > 0 &&
         (z = simmy::modcov::PatternFromText(false, a + 10 + at)) >= 0) {
       WallPainterRoomTest(x, y, z, std::strstr(a, ",sell") != nullptr && std::strstr(a, ",sell") < (std::strchr(a, ';') ? std::strchr(a, ';') : a + std::strlen(a)));
     } else if (std::strncmp(a, "floorroom@", 10) == 0 && std::sscanf(a + 10, "%d,%d,%n", &x, &y, &at) == 2 && at > 0 &&
                (z = simmy::modcov::PatternFromText(true, a + 10 + at)) >= 0) {
       FloorPainterRoomTest(x, y, z);
+    } else if (std::strncmp(a, "fenceline@", 10) == 0 &&
+               std::sscanf(a + 10, "%d,%d,%d,%d,%n", &x, &y, &z, &dirN, &at) == 4 && at > 0 &&
+               (style = simmy::modfence::StyleFromText(a + 10 + at)) > 0) {
+      // PC mod: mods (test aid). The edges added as the wall tool's AddWallAtTile does, nothing paid.
+      const int seg = TileWalls::DirToWallSeg(z);
+      CTilePt t(x, y, 1);
+      int added = 0;
+      for (int i = 0; i < dirN && !Globs_pFixedWorld->OutOfBounds(t); ++i) {
+        TileWalls walls = Globs_pFixedWorld->GetWall(t);
+        if (walls.CanAdd(seg)) {
+          walls.AddWall(seg);
+          walls.SetStyle(WallStyle{style}, seg);
+          walls.SetPattern(0, seg, 0);
+          Globs_pFixedWorld->SetWall(t, walls);
+          ++added;
+        }
+        t += CTilePt::sDirections[z & 7];
+        t.m_level = 1;
+      }
+      Globs_pFixedWorld->ComputeRooms(0);
+      _globals.RecalcHouse();
+      std::printf("[place] tick %d fenceline %d,%d dir %d style 0x%X: %d of %d edges\n", ticks, x, y, z, style, added, dirN);
+    } else if (std::strncmp(a, "fencesell@", 10) == 0 && std::sscanf(a + 10, "%d,%d,%d,%d", &x, &y, &z, &dirN) == 4) {
+      const std::vector<BuildSellCount> sold = WallToolSellLineTest(x, y, z, dirN);
+      const int value = WallSellValue(sold);
+      SetSimFunds(0, static_cast<int>(GetSimFunds(0)) + value);
+      std::printf("[place] tick %d fencesell %d,%d dir %d n %d:", ticks, x, y, z, dirN);
+      for (const BuildSellCount& c : sold) std::printf(" style 0x%X x%d", c.id, c.count);
+      std::printf("; sold for %d: funds %d\n", value, static_cast<int>(GetSimFunds(0)));
     } else if (std::strncmp(a, "create:", 7) == 0 && std::strchr(a, '@')) {
       const char* at = std::strchr(a, '@');
       const std::string name(a + 7, at);

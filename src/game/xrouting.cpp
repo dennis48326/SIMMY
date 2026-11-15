@@ -3,6 +3,7 @@
 // object location's +0x68, [1] +0x6C; the tile is CTilePt([1] >> 4, [0] >> 4)); "tile axes" X = [1] / 16,
 // Y = [0] / 16. Directions are eighths of a turn: 0 toward -[0], 2 toward +[1], 4 +[0], 6 -[1].
 #include "simmy/types_gen.hpp"
+#include "simmy/modfences.hpp"
 #include "simmy/perf.hpp"
 #include "simmy/classes/placement.hpp"
 #include "simmy/countereat.hpp"
@@ -443,6 +444,7 @@ bool PersonCanStandAt(cXObject* person, cXObject* near, const int pos[2]) {
           if (!walls.HasWall(TileWallsSegment(seg))) return false;
           const int style = walls.GetStyle(TileWallsSegment(seg));
           if (style == 3 || style == 5 || style == 6 || style == 0xf || style == 0x17) return false;
+          if (simmy::modfence::Walk(style)) return false;  // PC mod: mods (a border Sims walk over)
           return SegmentDistance(X, Y, ax, ay, bx, by) < radius;
         };
         if (edge(1, x0, y0, x0, y1) || edge(4, x1, y0, x1, y1) || edge(2, x0, y0, x1, y0) || edge(8, x0, y1, x1, y1))
@@ -494,7 +496,10 @@ bool TileInRoom(int x, int y, unsigned short room) {
   return in;
 }
 // A wall segment doors and windows let people through (styles 3, 5, 6, 0xF, 0x17).
-bool PassableWallStyle(int style) { return style == 3 || style == 5 || style == 6 || style == 0xf || style == 0x17; }
+// (PC mod: mods: and a converted fence Sims walk over, a flowerbed border)
+bool PassableWallStyle(int style) {
+  return style == 3 || style == 5 || style == 6 || style == 0xf || style == 0x17 || simmy::modfence::Walk(style);
+}
 }  // namespace
 
 // 80153500
@@ -573,7 +578,8 @@ void BuildRoomPartition(unsigned short room, std::vector<PenaltyRect>* rects, bo
       if (walls.HasWall(TileWallsSegment(4)) && !PassableWallStyle(walls.GetStyle(TileWallsSegment(4))) &&
           TileInRoom(x + 1, y, room))
         push16(x + 1, y, x + 1, y + 1);
-      if (walls.HasDiagonal()) {
+      // (PC mod: mods: a diagonal border Sims walk over blocks nothing)
+      if (walls.HasDiagonal() && !simmy::modfence::Walk(walls.GetStyle(TileWallsSegment(walls.HasWall(TileWallsSegment(0x10)) ? 0x10 : 0x20)))) {
         PenaltyRect a(x, y, x + 1, y + 1, PenaltyRect::kBlocked);
         a.left <<= 4, a.top <<= 4, a.right <<= 4, a.bottom <<= 4;
         PenaltyRect b = a, c = a;

@@ -61,6 +61,19 @@
 //   sound = 11                 a floor's footstep surface (default: the base's)
 //   scale = 2                  a floor: its picture spans 2 x 2 tiles (1..8)
 //   pack = ..., group = ...    informational
+//   [fence]                    one per fence the mod adds (modfences.cpp)
+//   key = pcfence_8d0db64c     what saves call it (letters, digits, '_', '-'; unique)
+//   name = ..., desc = ...     catalogue texts
+//   price = 40                 per tile edge
+//   thumbnail = 0x12345678     the catalogue picture's shader
+//   model = 0x...              a tile edge's model, posts at both ends (x -0.5..0.5 along the edge, z up)
+//   model_diag = 0x...         a diagonal's (from (-0.5, 0.5) to (0.5, -0.5)); default: model
+//   model_ends = 0xA 0xB 0xC   posts only where a run ends, turns or meets another: the edge's model
+//   model_diag_ends = ...      without posts, with the -x end's, with the +x end's
+//   walk = 1                   Sims walk over it (a flowerbed border): no obstacle
+//   base = 0xC                 the GameCube fence (style 2 picket, 0xC friendship arch, 0xD Japanese) a
+//                              lot saved with it shows without the mod
+//   pack = ..., group = ...    informational
 // Resource files next to it: "<manager>_<8 hex digits>.res", e.g. "models_9A3F0C12.res". Only their
 // names are read at start-up; a resource is read from its file each time the game loads it.
 #include "pc_settings.hpp"
@@ -91,6 +104,7 @@ namespace {
 bool g_modsEnabled = false;
 std::vector<ModObject> g_modObjects;
 std::vector<ModCovering> g_modCoverings;
+std::vector<ModFence> g_modFences;
 // (manager name lower-case, id) -> the resource's file.
 std::map<std::pair<std::string, unsigned int>, std::string> g_modResources;
 
@@ -199,6 +213,8 @@ void LoadModIni(const std::string& mod, const std::string& path) {
   std::string text(raw.begin(), raw.end());
   ModObject* cur = nullptr;
   ModCovering* cov = nullptr;
+  ModFence* fen = nullptr;
+  std::vector<ModFence> fences;
   size_t pos = 0;
   int lineNo = 0;
   std::vector<ModObject> objects;
@@ -213,6 +229,7 @@ void LoadModIni(const std::string& mod, const std::string& path) {
     if (line[0] == '[') {
       cur = nullptr;
       cov = nullptr;
+      fen = nullptr;
       const std::string section = Lower(line);
       if (section == "[object]") {
         objects.emplace_back();
@@ -223,13 +240,59 @@ void LoadModIni(const std::string& mod, const std::string& path) {
         cov = &coverings.back();
         cov->mod = mod;
         cov->floor = section == "[floor]";
+      } else if (section == "[fence]") {
+        fences.emplace_back();
+        fen = &fences.back();
+        fen->mod = mod;
       }
       continue;
     }
     const size_t eq = line.find('=');
-    if ((!cur && !cov) || eq == std::string::npos) continue;
+    if ((!cur && !cov && !fen) || eq == std::string::npos) continue;
     const std::string key = Lower(Trim(line.substr(0, eq))), v = Trim(line.substr(eq + 1));
     bool ok = true;
+    if (fen) {
+      // "0xA 0xB 0xC": three model ids
+      auto three = [&](unsigned int (&out)[3]) {
+        unsigned int got[3] = {};
+        int n = 0;
+        for (size_t at = 0; at < v.size() && n <= 3;) {
+          while (at < v.size() && (v[at] == ' ' || v[at] == '\t' || v[at] == ',')) ++at;
+          if (at >= v.size()) break;
+          size_t end = v.find_first_of(" \t,", at);
+          if (end == std::string::npos) end = v.size();
+          if (n == 3 || !ParseU32(v.substr(at, end - at), got[n])) return false;
+          ++n;
+          at = end;
+        }
+        if (n != 3) return false;
+        for (int i = 0; i < 3; ++i) out[i] = got[i];
+        return true;
+      };
+      if (key == "key") {
+        fen->key = v;
+        for (char c : v) ok = ok && (std::isalnum(static_cast<unsigned char>(c)) || c == '_' || c == '-');
+        ok = ok && !v.empty() && v.size() < 64;
+      } else if (key == "name") fen->name = Utf16(v);
+      else if (key == "desc") fen->desc = Utf16(v);
+      else if (key == "price") {
+        fen->price = std::atoi(v.c_str());
+        ok = fen->price >= 0 && fen->price < 100000;
+      } else if (key == "thumbnail") ok = ParseU32(v, fen->thumbnail);
+      else if (key == "model") ok = ParseU32(v, fen->model);
+      else if (key == "model_diag") ok = ParseU32(v, fen->modelDiag);
+      else if (key == "model_ends") ok = three(fen->ends);
+      else if (key == "model_diag_ends") ok = three(fen->diagEnds);
+      else if (key == "walk") fen->walk = std::atoi(v.c_str()) != 0;
+      else if (key == "base") {
+        unsigned int b = 0;
+        ok = ParseU32(v, b) && (b == 2 || b == 0xc || b == 0xd);
+        if (ok) fen->base = static_cast<int>(b);
+      } else if (key == "pack") fen->pack = v;
+      else if (key == "group") fen->group = v;
+      if (!ok) std::fprintf(stderr, "[mods] %s:%d: bad value \"%s\"\n", path.c_str(), lineNo, v.c_str());
+      continue;
+    }
     if (cov) {
       if (key == "key") {
         cov->key = v;
@@ -429,6 +492,18 @@ void LoadModIni(const std::string& mod, const std::string& path) {
     }
     g_modCoverings.push_back(std::move(c));
   }
+  for (ModFence& f : fences) {
+    if (f.key.empty() || !f.model) {
+      std::fprintf(stderr, "[mods] %s: a [fence] without key or model is skipped\n", path.c_str());
+      continue;
+    }
+    if (std::any_of(g_modFences.begin(), g_modFences.end(), [&](const ModFence& o) { return o.key == f.key; })) {
+      std::fprintf(stderr, "[mods] %s: fence key %s is already given by another mod; skipped\n", path.c_str(), f.key.c_str());
+      continue;
+    }
+    if (!f.modelDiag) f.modelDiag = f.model;
+    g_modFences.push_back(std::move(f));
+  }
 }
 
 // "<manager>_<8 hex>.res" files of one mod folder.
@@ -491,6 +566,7 @@ void mods_init() {
                  static_cast<size_t>(std::count_if(g_modCoverings.begin(), g_modCoverings.end(), [](const ModCovering& c) { return !c.floor; })),
                  static_cast<size_t>(std::count_if(g_modCoverings.begin(), g_modCoverings.end(), [](const ModCovering& c) { return c.floor; })),
                  g_modResources.size(), static_cast<double>(SDL_GetTicksNS() - start) / 1e6);
+  if (!g_modFences.empty()) std::fprintf(stderr, "[mods] %zu fence(s)\n", g_modFences.size());
 }
 
 bool mods_enabled() { return g_modsEnabled; }
@@ -508,6 +584,7 @@ bool mods_only() {
 
 const std::vector<ModObject>& mods_objects() { return g_modObjects; }
 const std::vector<ModCovering>& mods_coverings() { return g_modCoverings; }
+const std::vector<ModFence>& mods_fences() { return g_modFences; }
 
 bool mods_resource(const char* manager, unsigned int id, std::vector<unsigned char>& out) {
   if (!g_modsEnabled || !manager) return false;

@@ -3,9 +3,13 @@
 // Still unported: GenerateRotationLookups (RotateSegment computes the table's entries), Rotate,
 // RotateDiagonal.
 #include "simmy/types_gen.hpp"
+#include "simmy/modfences.hpp"
 
 namespace {
-bool IsFenceStyle(int style) { return style == 2 || style == 0xc || style == 0xd || style == 0xe; }
+// (PC mod: mods. Converted fences take the styles simmy::modfence::kFirstStyle.. on a lot.)
+bool IsFenceStyle(int style) {
+  return style == 2 || style == 0xc || style == 0xd || style == 0xe || simmy::modfence::IsModStyle(style);
+}
 }  // namespace
 
 // 80145DA0

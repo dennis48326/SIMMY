@@ -1,5 +1,5 @@
 @echo off
-rem SIMMY PC objects (PC mod: mods): convert objects, wallpapers and floors from YOUR copy of The Sims 2
+rem SIMMY PC objects (PC mod: mods): convert objects, wallpapers, floors and fences from YOUR copy of The Sims 2
 rem (PC) - the base game and every expansion and stuff pack installed under it - into the mods folder
 rem next to simmy.exe.
 rem Needs Python 3 (python.org; tick "Add to PATH") - the first run installs numpy and Pillow for it.
@@ -8,8 +8,8 @@ rem
 rem   convert_pc_object.bat                     every buy-mode object the converter knows - Decorative,
 rem                                             Surfaces, Seating and Beds, Appliances, Lighting, Plumbing,
 rem                                             Electronics, Hobbies and Miscellaneous (Storage, Kids and the
-rem                                             rest) - and every wall and floor covering of every pack
-rem                                             found (default: the complete set)
+rem                                             rest) - and every wall and floor covering and fence of
+rem                                             every pack found (default: the complete set)
 rem   convert_pc_object.bat decorative          only the Decorative objects
 rem   convert_pc_object.bat surfaces            only the Surfaces objects (counters, tables, desks, ...)
 rem   convert_pc_object.bat seating             only the Seating objects and Beds (chairs, sofas, stools, beds, ...)
@@ -33,6 +33,8 @@ rem   convert_pc_object.bat walls               only the wall coverings for buil
 rem                                             paneling, tile, stone, brick, siding, ...: about 1480)
 rem   convert_pc_object.bat floors              only the floor coverings for build mode (carpet, wood,
 rem                                             tile, linoleum, stone, brick, concrete, ...: about 650)
+rem   convert_pc_object.bat fences              only the fences for build mode (fences, flowerbed borders,
+rem                                             railings and half walls: about 190)
 rem   convert_pc_object.bat decorative seating  several categories (walls floors: both coverings)
 rem   convert_pc_object.bat list ficus          list PC objects whose name contains "ficus"
 rem   convert_pc_object.bat inventory           write the inventory (mods\pcobj_inventory.tsv) only
@@ -75,6 +77,12 @@ rem and save like the GameCube's. A lot shows at most 160 different converted wa
 rem once (the GameCube keeps a pattern number per wall side and floor tile); delete a folder and lots
 rem saved with its coverings show similar GameCube ones instead. They ARE in the default run: about 2100
 rem coverings take only half a minute and 40 MB (the objects about three and a half minutes and 280 MB).
+rem Fences: build mode's Walls tab lists them after the GameCube's three (folders pcn1_fences,
+rem pcn2_borders: flowerbed borders and thresholds sims walk over, pcn3_halfwalls: half walls, a plain
+rem wall under the PC top); they build, sell back and save like the GameCube's, straight and diagonal,
+rem with posts where a run ends or turns. A lot shows at most 207 different converted fences at once;
+rem delete a folder and lots saved with its fences show a similar GameCube fence instead. They ARE in the
+rem default run too: about 190 fences, half a minute and 60 MB.
 rem Takes about four minutes for everything of all packs on two cores (progress per object, with the
 rem percentage and the time so far).
 setlocal EnableDelayedExpansion
@@ -98,7 +106,7 @@ if /i "%~1"=="inventory" (
   pause
   exit /b
 )
-rem category arguments: decorative, surfaces, seating, appliances, lighting, plumbing, electronics, hobbies, storage, kids, misc, walls, floors (any of them, in any order)
+rem category arguments: decorative, surfaces, seating, appliances, lighting, plumbing, electronics, hobbies, storage, kids, misc, walls, floors, fences (any of them, in any order)
 set "CATS="
 for %%C in (%*) do (
   if /i "%%~C"=="decorative" set "CATS=!CATS!,decorative"
@@ -120,13 +128,16 @@ for %%C in (%*) do (
   if /i "%%~C"=="walls" set "CATS=!CATS!,walls"
   if /i "%%~C"=="wallpaper" set "CATS=!CATS!,walls"
   if /i "%%~C"=="floors" set "CATS=!CATS!,floors"
+  if /i "%%~C"=="fences" set "CATS=!CATS!,fences"
+  if /i "%%~C"=="fence" set "CATS=!CATS!,fences"
+  if /i "%%~C"=="halfwalls" set "CATS=!CATS!,fences"
 )
 if defined CATS (
   echo Converting every %CATS:~1% object of every pack under "%PC%" ...
   python "%TOOL%" --pc "%PC%" --gc "%ISO%" --categories %CATS:~1% --out "%BIN%\mods"
 ) else if "%~1"=="" (
-  echo Converting every buy-mode object ^(Decorative, Surfaces, Seating and Beds, Appliances, Lighting, Plumbing, Electronics, Hobbies, Storage, Kids and Miscellaneous^) and every wall and floor covering of every pack under "%PC%" ...
-  python "%TOOL%" --pc "%PC%" --gc "%ISO%" --categories decorative,surfaces,seating,appliances,lighting,plumbing,electronics,hobbies,storage,kids,misc,walls,floors --out "%BIN%\mods"
+  echo Converting every buy-mode object ^(Decorative, Surfaces, Seating and Beds, Appliances, Lighting, Plumbing, Electronics, Hobbies, Storage, Kids and Miscellaneous^), every wall and floor covering and every fence of every pack under "%PC%" ...
+  python "%TOOL%" --pc "%PC%" --gc "%ISO%" --categories decorative,surfaces,seating,appliances,lighting,plumbing,electronics,hobbies,storage,kids,misc,walls,floors,fences --out "%BIN%\mods"
 ) else if "%~2"=="" (
   python "%TOOL%" --pc "%PC%" --gc "%ISO%" --object "%~1" --out "%BIN%\mods"
 ) else (
@@ -135,10 +146,12 @@ if defined CATS (
 echo.
 echo Done (exit code %ERRORLEVEL%). Start the game: the objects are in buy mode, on every tab -
 echo Decorative, Surfaces, Seating ^& Beds, Appliances, Lighting, Plumbing, Electronics, Skill and Misc -
-echo and the wall and floor coverings in build mode, on the Wallpaper and Floors tabs after the
-echo GameCube's own (the C stick pages four columns). With no category given this was the complete set:
-echo every PC buy-mode tab the GameCube has a use or a place for, and every wall and floor covering.
-echo The lists are mods\pcwall_inventory.tsv, mods\pcfloor_inventory.tsv, mods\pcdeco_inventory.tsv,
+echo and the wall and floor coverings and fences in build mode, on the Wallpaper, Floors and Walls tabs
+echo after the GameCube's own (the C stick pages four columns). With no category given this was the
+echo complete set: every PC buy-mode tab the GameCube has a use or a place for, every wall and floor
+echo covering and every fence.
+echo The lists are mods\pcwall_inventory.tsv, mods\pcfloor_inventory.tsv, mods\pcfence_inventory.tsv,
+echo mods\pcdeco_inventory.tsv,
 echo mods\pcsurf_inventory.tsv, mods\pcseat_inventory.tsv, mods\pcappl_inventory.tsv,
 echo mods\pclight_inventory.tsv, mods\pcplumb_inventory.tsv, mods\pcelec_inventory.tsv,
 echo mods\pchobby_inventory.tsv, mods\pcstorage_inventory.tsv, mods\pckids_inventory.tsv and

@@ -13,6 +13,8 @@ install (base game and every expansion and stuff pack found) into a SIMMY mod fo
     pcobj_convert.py --pc "<install>" --categories all --inventory inv.tsv         list, no output
     pcobj_convert.py ... --categories walls,floors   build mode's wall and floor coverings (pcwall.py; "all"
                                                      takes them too): <out>/pcw<k>_<group>/, pcf<k>_<group>/
+    pcobj_convert.py ... --categories fences         build mode's fences and half walls (pcfence.py; "all"
+                                                     takes them too): <out>/pcn<k>_<group>/
 
 Each object becomes <out>/pc<k>_<name>_<guid>/ (surfaces: pcs<k>_..., seating: pcc<k>_..., appliances: pca<k>_...,
 lighting: pcl<k>_..., plumbing: pcp<k>_..., electronics: pce<k>_..., hobbies: pch<k>_..., storage and kids:
@@ -44,7 +46,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import rcol, sg, gcdata, gctex, pcmesh, pcinstall, pcsurf, pcseat, pcappl, pclight, pcplumb, pcelec, pchobby, pckids, pcmisc  # noqa: E402
-import pcwall  # noqa: E402
+import pcwall, pcfence  # noqa: E402
 from pcinstall import (W_PRICE, W_ROOMSORT, W_FUNCSORT, W_SUBSORT, W_RATINGS, SUBSORTS, F_DECORATIVE)  # noqa: E402
 
 # ---------------------------------------------------------------------------------------------------
@@ -1773,6 +1775,8 @@ def _work(args):
 
 # Build mode's wall and floor coverings (pcwall.py): --categories walls,floors (in "all" too)
 COVERINGS = {'walls': 'wall', 'floors': 'floor'}
+# Build mode's fences (pcfence.py): --categories fences (in "all" too)
+FENCES = 'fences'
 CATEGORIES = {'decorative': decorative_guids, 'surfaces': pcsurf.surface_guids, 'seating': pcseat.seating_guids,
               'appliances': pcappl.appliance_guids, 'lighting': pclight.lighting_guids, 'plumbing': pcplumb.plumbing_guids,
               'electronics': pcelec.electronics_guids, 'hobbies': pchobby.hobby_guids,
@@ -1800,8 +1804,8 @@ def main():
                     'remote-control toys')
     ap.add_argument('--all-misc', action='store_true', help='every other buy-mode Miscellaneous object (bars, party '
                     'objects, trash cans, booths, pet furniture...)')
-    ap.add_argument('--categories', help='comma-separated categories: build mode\'s walls and floors (wall and floor '
-                    'coverings, pcwall.py) and the buy-mode decorative, surfaces, seating, appliances, '
+    ap.add_argument('--categories', help='comma-separated categories: build mode\'s walls and floors (wall and floor coverings, pcwall.py), fences (pcfence.py) '
+                    'and the buy-mode decorative, surfaces, seating, appliances, '
                     'lighting, plumbing, electronics, hobbies, storage, kids, misc (or all)')
     ap.add_argument('--batch', help='a list of GUIDs (first column; optional second column: base)')
     ap.add_argument('--packs', help='only objects whose home pack is one of these (codes: base, ep1..ep8, sp1..sp9)')
@@ -1830,24 +1834,33 @@ def main():
             raise SystemExit('refusing to write converted PC game data into the source tree')
     cats = []
     covers = []  # wall / floor coverings (pcwall.py)
+    fences = False  # fences (pcfence.py)
     if a.categories:
-        cats = list(CATEGORIES) + list(COVERINGS) if a.categories.strip().lower() == 'all' else \
+        cats = list(CATEGORIES) + list(COVERINGS) + [FENCES] if a.categories.strip().lower() == 'all' else \
             [c.strip().lower() for c in a.categories.split(',') if c.strip()]
-        bad = [c for c in cats if c not in CATEGORIES and c not in COVERINGS]
+        bad = [c for c in cats if c not in CATEGORIES and c not in COVERINGS and c != FENCES]
         if bad:
             raise SystemExit(f'unknown categor{"y" if len(bad) == 1 else "ies"}: {", ".join(bad)} '
-                             f'(known: {", ".join(list(CATEGORIES) + list(COVERINGS))})')
+                             f'(known: {", ".join(list(CATEGORIES) + list(COVERINGS) + [FENCES])})')
         covers = [COVERINGS[c] for c in cats if c in COVERINGS]
-        cats = [c for c in cats if c not in COVERINGS]
-        if covers and not cats and not (a.object or a.batch):
-            # only coverings
+        fences = FENCES in cats
+        cats = [c for c in cats if c not in COVERINGS and c != FENCES]
+        if (covers or fences) and not cats and not (a.object or a.batch):
+            # only coverings and / or fences
+            packs_only = set(a.packs.split(',')) if a.packs else None
             if a.inventory:
-                pcwall.run(a.pc, None, None, tuple(covers), set(a.packs.split(',')) if a.packs else None, a.jobs,
-                           log=s.log, inventory_only=a.inventory)
+                if covers:
+                    pcwall.run(a.pc, None, None, tuple(covers), packs_only, a.jobs, log=s.log, inventory_only=a.inventory)
+                if fences:
+                    inv = os.path.splitext(a.inventory)[0] + '_fences.tsv' if covers else a.inventory
+                    pcfence.run(a.pc, None, None, packs_only, log=s.log, inventory_only=inv)
             else:
                 if not (a.out and a.gc):
                     raise SystemExit('--gc and --out are needed to convert')
-                pcwall.run(a.pc, a.gc, a.out, tuple(covers), set(a.packs.split(',')) if a.packs else None, a.jobs, log=s.log)
+                if covers:
+                    pcwall.run(a.pc, a.gc, a.out, tuple(covers), packs_only, a.jobs, log=s.log)
+                if fences:
+                    pcfence.run(a.pc, a.gc, a.out, packs_only, log=s.log)
             return
     if a.all_decorative and 'decorative' not in cats:
         cats.append('decorative')
@@ -1980,6 +1993,9 @@ def main():
             inv = os.path.splitext(a.inventory)[0] + '_coverings.tsv'
             pcwall.run(a.pc, None, None, tuple(covers), set(a.packs.split(',')) if a.packs else None, a.jobs,
                        log=s.log, inventory_only=inv)
+        if fences:
+            pcfence.run(a.pc, None, None, set(a.packs.split(',')) if a.packs else None, log=s.log,
+                        inventory_only=os.path.splitext(a.inventory)[0] + '_fences.tsv')
         return
     if not (a.out and a.gc):
         raise SystemExit('--gc and --out are needed to convert')
@@ -2037,6 +2053,8 @@ def main():
           (f'; inventory: {", ".join(written)}' if written else ''))
     if covers and not a.object:
         pcwall.run(a.pc, a.gc, a.out, tuple(covers), packs, a.jobs, log=s.log)
+    if fences and not a.object:
+        pcfence.run(a.pc, a.gc, a.out, packs, log=s.log)
 
 
 if __name__ == '__main__':

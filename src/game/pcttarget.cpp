@@ -13,6 +13,7 @@
 #include <cstring>
 #include <string>
 #include "simmy/modcoverings.hpp"
+#include "simmy/modfences.hpp"
 
 PCTTarget* PCTTarget::s_placing = nullptr;
 int g_unlockAllCheat = 0;     // DAT_8047618C
@@ -336,6 +337,12 @@ int PCTTarget__cCellInfo::GetName(unsigned short* out) const {
 
 // 801D22FC
 int PCTTarget__cCellInfo::GetDesc(unsigned short* out) const {
+  // PC mod: mods. A converted fence's description (the GameCube's have none).
+  if (m_type == 2 && out && m_data)
+    if (const unsigned short* desc = simmy::modfence::Desc(m_data)) {
+      CopyText(out, desc);
+      return 1;
+    }
   // PC mod: mods. A wall or floor covering's description (the GameCube's have none).
   if ((m_type == 3 || m_type == 4) && out && m_data)
     if (const unsigned short* desc = simmy::modcov::CoveringDesc(m_data)) {
@@ -852,9 +859,17 @@ int PCTTarget::on_tab_changed_wall() {
   m_cells.emplace_back();
   m_cells.back().Init(-1, &WallBuilder());
   int i = 1;
+  // PC mod: mods. With converted fences: the disc's, then every converted one (cell id kModCell | n: its
+  // style is given when it is picked); screenshot mode (SIMMY_MODS_ONLY) only the converted ones.
+  const bool modFences = simmy::modfence::Active();
   for (const PCTFenceData& f : Fences()) {
+    if (modFences && simmy::mods_only()) break;
     m_cells.emplace_back();
     m_cells.back().Init(i++, &f);
+  }
+  for (int n = 0; n < simmy::modfence::Count(); ++n) {
+    m_cells.emplace_back();
+    m_cells.back().Init(static_cast<int>(simmy::modfence::kModCell | static_cast<unsigned int>(n)), simmy::modfence::Data(n));
   }
   if (m_sort == 1)
     std::stable_sort(m_cells.begin() + 1, m_cells.end(), [](const PCTTarget__cCellInfo& a, const PCTTarget__cCellInfo& b) {
@@ -1447,6 +1462,13 @@ int PCTTarget::enter_wall_mode(PCTTarget__cCellInfo* cell, bool placed) {
     params.fence = 0;
   } else {
     if (cell->m_type != 2 || !cell->m_data) return 0;
+    // PC mod: mods. A converted fence: the lot's style for it (given now if it has none).
+    if (simmy::modfence::Active() && (cell->m_id & simmy::modfence::kModCell) &&
+        simmy::modfence::Slot(static_cast<int>(cell->m_id & ~simmy::modfence::kModCell)) < 0) {
+      play_sound(0x3804219f);  // PCT_SndError
+      set_dialog_visible(true);
+      return 0;
+    }
     params.data = cell->m_data;
     params.index = static_cast<int>(cell->m_id);
     params.fence = 1;
@@ -1525,23 +1547,32 @@ int PCTTarget::WallManipulatorCallback(InteractorModule__Interactor__CallbackDat
 // 801D7CAC
 // Selling: each sold style at its price (walls 1, a fence's FenceData price); placing: the stock used
 // at the selection's price.
+// (PC: the selling half as a function of its own, also for the test aid SIMMY_PLACE_TEST fencesell.)
+int WallSellValue(const std::vector<BuildSellCount>& sells) {
+  int value = 0;
+  for (const BuildSellCount& c : sells) {
+    int price = 0;
+    if (c.id == 1) {
+      price = 1;
+    } else if (const int mod = simmy::modfence::Price(c.id); mod >= 0) {
+      price = mod;  // PC mod: mods (a converted fence)
+    } else {
+      for (const PCTFenceData& f : Fences())
+        if (f.style == c.id) {
+          price = f.price;
+          break;
+        }
+    }
+    value += price * c.count;
+  }
+  return value;
+}
+
 int PCTTarget::calc_wall_value(InteractorModule__Interactor__CallbackData* data) {
   if (!data) return 0;
   int value = 0;
   if (!m_placeMode) {
-    for (const BuildSellCount& c : data->m_sells) {
-      int price = 0;
-      if (c.id == 1) {
-        price = 1;
-      } else {
-        for (const PCTFenceData& f : Fences())
-          if (f.style == c.id) {
-            price = f.price;
-            break;
-          }
-      }
-      value += price * c.count;
-    }
+    value = WallSellValue(data->m_sells);
   } else {
     const int v = data->m_count * m_price;
     value = v < 0 ? -v : v;

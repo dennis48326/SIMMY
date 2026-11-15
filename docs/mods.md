@@ -1,4 +1,4 @@
-# PC mod: mods (objects, wallpapers and floors from the PC game)
+# PC mod: mods (objects, wallpapers, floors and fences from the PC game)
 
 Lets the player add objects converted from **their own** copy of The Sims 2 for PC: by default every
 buy-mode **Decorative**, **Surfaces**, **Seating**, **Appliances**, **Lighting**, **Plumbing**, **Electronics**, **Hobbies** and
@@ -47,7 +47,10 @@ And every **wall covering** (about 1480: paint, wallpaper, paneling, tile, stone
 and **floor covering** (about 650: carpet, wood, tile, linoleum, stone, brick, concrete) of build mode:
 they are on build mode's Wallpaper and Floors tabs next to the GameCube's own, paint walls (each side
 on its own) and floors, sell back, count in the lot's value and save with the lot (see "Walls and
-floors").
+floors"). And every **fence** (191: fences, railings, flowerbed borders, pet thresholds and half walls):
+on build mode's Walls tab after the GameCube's three, built straight and diagonally with the wall tool,
+with posts where a run ends or turns, sold back, blocking Sims (the borders they walk over) and saved
+with the lot (see "Fences").
 Off unless a mod folder exists; with none, nothing in the game changes
 (no extra memory, same determinism hash).
 
@@ -62,9 +65,10 @@ Its PC install and disc paths are set at the top of the file.
 
 | | |
 |---|---|
-| `convert_pc_object.bat` | every Decorative, Surfaces, Seating (beds included), Appliances, Lighting, Plumbing, Electronics, Hobbies, Storage, Kids and Miscellaneous object and every wall and floor covering of every pack (the complete set) under the install, into `mods` next to simmy.exe (progress per object with the percentage and time; about four minutes for every pack of the Ultimate Collection on two cores: three and a half for the objects, half a minute for the coverings) |
+| `convert_pc_object.bat` | every Decorative, Surfaces, Seating (beds included), Appliances, Lighting, Plumbing, Electronics, Hobbies, Storage, Kids and Miscellaneous object, every wall and floor covering and every fence of every pack (the complete set) under the install, into `mods` next to simmy.exe (progress per object with the percentage and time; about four and a half minutes for every pack of the Ultimate Collection on two cores: three and a half for the objects, half a minute each for the coverings and the fences) |
 | `convert_pc_object.bat decorative` / `surfaces` / `seating` / `appliances` / `lighting` / `plumbing` / `electronics` / `hobbies` / `storage` / `kids` / `misc` | only that buy-mode category (several may be given: `decorative seating`) |
 | `convert_pc_object.bat walls` / `floors` | only the wall / floor coverings (`walls floors`: both; about 30 s and 40 MB for all packs) |
+| `convert_pc_object.bat fences` | only the fences and half walls (about 30 s and 60 MB for all packs; in the default run too) |
 | `convert_pc_object.bat list ficus` | PC objects whose name contains "ficus" |
 | `convert_pc_object.bat inventory` | only the inventory (`mods\pcobj_inventory.tsv`) |
 | `convert_pc_object.bat "No-Fuss Ficus"` | one object (name or GUID), base chosen automatically |
@@ -79,7 +83,7 @@ python tools/pcobj/pcobj_convert.py --pc "C:\Games\The Sims 2 Ultimate Collectio
 
 `--pc` is the install folder (every `TSData/Res` under it is a pack); `--gc` the GameCube data the port
 plays (disc image or extracted folder). `--categories decorative,surfaces,seating,appliances,lighting,plumbing,electronics,hobbies,storage,kids,misc`
-(or `all`, which takes `walls` and `floors` too; `--categories walls,floors` the coverings alone; also `--all-decorative`, `--all-surfaces`, `--all-seating`, `--all-appliances`,
+(or `all`, which takes `walls`, `floors` and `fences` too; `--categories walls,floors` the coverings alone, `fences` the fences alone; also `--all-decorative`, `--all-surfaces`, `--all-seating`, `--all-appliances`,
 `--all-lighting`, `--all-plumbing`, `--all-electronics`, `--all-hobbies`, `--all-storage`, `--all-kids`, `--all-misc`) picks the buy-mode
 categories. Other modes: `--object <GUID|name> [--base <GameCube object>]`,
 `--batch list.tsv` (GUIDs in the first column, an optional base in the second), `--list <text>`,
@@ -96,14 +100,16 @@ Start the game. The mod folder is `mods=` in simmy.ini (relative to the ini), el
 resource(s); read in n ms` and `[mods] objects: n added (n multi-tile), n skipped; rows ...` (with
 `SIMMY_MODS_VERBOSE=1`, or 20 objects or fewer, a line per object; a skipped object always says why).
 Wall and floor coverings add `n wall and n floor covering(s)` to the first line and `[mods] coverings: n wall
-and n floor covering(s) added (after the disc's 95 and 67), n skipped`. The objects are in buy mode on the **Decorative**, **Surfaces**, **Seating & Beds**, **Appliances**, **Lighting**, **Plumbing**, **Electronics**, **Skill** and **Misc** tabs (hobbies, storage and kids: their base's tab) with the PC name, description,
+and n floor covering(s) added (after the disc's 95 and 67), n skipped`; fences `[mods] n fence(s)` and, when
+build mode first lists them, `[mods] fences: n added to the Walls tab (lot styles 0x30..0xFE)`. The objects are in buy mode on the **Decorative**, **Surfaces**, **Seating & Beds**, **Appliances**, **Lighting**, **Plumbing**, **Electronics**, **Skill** and **Misc** tabs (hobbies, storage and kids: their base's tab) with the PC name, description,
 price and room rating and a rendered thumbnail. With a mod folder the **C stick** left/right pages that catalogue
 four columns at a time (the GameCube's movie only moves a column at a time; the tab can hold 600+).
 
 **Screenshot mode** (`tools/windows/show_pc_objects.bat`): buy mode lists only the mods' objects
 (`SIMMY_MODS_ONLY=1`; the GameCube's own objects stay in the game and on lots, just not for sale; tabs
 without converted objects are empty); with wall or floor coverings in the mods, build mode's Wallpaper and
-Floors tabs list only those (the GameCube's stay on the lot's walls and floors). The bat also gives the game its own memory card
+Floors tabs list only those (the GameCube's stay on the lot's walls and floors), and with fences the Walls
+tab lists the wall tool and the converted fences only. The bat also gives the game its own memory card
 (`SIMMY_CARD_DIR=<folder>`: `pc_objects_card` next to simmy.exe, so the player's saves are never touched;
 not in a network session), 999,999 simoleons when buy mode opens (`SIMMY_BUY_FUNDS`) and no fire-code
 limit (`SIMMY_FIRE_CODE_LIMIT=off`, the same as `fire_code_limit=off` in simmy.ini for that run only).
@@ -836,6 +842,76 @@ mods; shown as GameCube wall 52`), an unknown number as the bare wall / grass; t
 plain GameCube lot. A save without a palette (every lot made without coverings) is loaded as it is; without
 mods nothing is set up and only a palette is read.
 
+## Fences
+
+**GameCube side.** A fence is a wall style: the byte TileWalls keeps per tile edge (bytes 2 / 3 of the
+world's 8-byte wall entry: segment 1's and segment 2's style, a diagonal's in byte 3) is 1 for a wall, 2
+/ 0xC / 0xD / 0xE for the fences (Picket $10, Friendship Arch $45, Japanese $100; 0xE a hidden picket),
+3, 5, 6, 0xF, 0x17 for walls with a door or window. The build sets' "FenceSet" (3 FenceData rows: +0
+catalogue shader, +4 price, +8 name, +0xC style) is the Walls tab after the wall tool. The wall tool
+builds a line of edges in the fence's style (straight or diagonal), charging its price per edge, and sells
+fences back at their price (other styles by their FenceData price); the lot value counts a fence at its
+price less a fifth. `ERoom::ProcessCell` makes an `EIFenceWall` per fence edge: ONE model by style
+(straight: x -0.5..0.5 along the edge, z up, about 1-1.2 high; diagonal: from (-0.5, 0.5) to (0.5,
+-0.5)), no separate posts, no wallpaper, turned and moved onto the edge by its segment. Fences do not
+divide rooms; the router and the collision map treat every style but the door / window ones as a
+wall (fences block; the GameCube has no gates). The fence meter counts fence edges (100 at most).
+
+**PC side.** Every pack's `catpatterns.bundle.package` holds the fences as property sets (type 0x2CB230B8,
+`type = fence`): GUID, name, description, cost, and three models: `rail` (one tile between two posts, x
+0..1), `diagrail` (x 0..1.41) and `post` (on the tile corners; none for walls such as the rock walls);
+`posttilespacing` 0 puts posts only where a run ends, turns or meets another; `maywalkover` lets Sims step
+over it (flowerbed borders, pet thresholds); `ishalfwall` marks a half wall, whose models are only what
+stands above a 1 m wall the PC builds itself (wallpapered). Gates are not fences on the PC: they are
+door objects (buy / build mode's doors) put into a fence, and are not converted (the GameCube has no
+door objects in fences). Half walls and railings are fence products and are converted.
+
+**What the converter makes** (`tools/pcobj/pcfence.py`; `convert_pc_object.bat fences`): per fence the
+GameCube's one-model-per-edge form: the rail moved to x -0.5..0.5 (y mirrored as the converted objects),
+with the post at both ends (`model`), the diagonal rail turned onto the GameCube's diagonal with its posts
+(`model_diag`), and for a fence with posts only at its ends also the variants without posts (`model_ends`:
+none, the -x one, the +x one; `model_diag_ends`). A half wall gets a plain plaster body (0.15 thick) under
+its PC top; a fence without a diagonal rail (the greenhouse walls) its straight rail stretched.
+Materials as the objects' (CMPR / RGB5A3, alpha-tested pickets and blended glass); a rendered thumbnail
+(two tiles of fence) is its catalogue picture. The GameCube fence a lot falls back to (`base`): Japanese
+for bamboo, ties and logs, Picket for wood, pickets and walk-over borders, Friendship Arch for the rest.
+Folders `pcn1_fences`, `pcn2_borders` (walk over), `pcn3_halfwalls`; `pcfence_inventory.tsv`.
+
+```
+[fence]
+key = pcfence_6d0b3239      what saves call it
+name = Nouvelle Fence in "The New Black" by I. Ron Smith
+desc = If good fences make good neighbors, ...
+price = 125                 per tile edge
+thumbnail = 0x...           the catalogue picture (a shader)
+model = 0x...               an edge with a post at both ends (x -0.5..0.5, z up)
+model_diag = 0x...          the diagonal (from (-0.5, 0.5) to (0.5, -0.5)); default: model
+model_ends = 0xA 0xB 0xC    optional: posts only where a run ends or turns - the edge's model without
+model_diag_ends = ...       posts, with the -x end's post, with the +x end's
+walk = 1                    optional: Sims walk over it (no obstacle)
+base = 0x2                  the GameCube fence (2, 0xC, 0xD) a lot saved with it shows without the mod
+group = fences              informational, as pack =
+```
+
+**In the game** (`src/game/modfences.cpp`, `simmy::modfence`): converted fences take the wall styles
+0x30..0xFE on a lot. The Walls tab lists the wall tool, the disc's fences, then every converted fence
+(cell id `0x40000000 | n`; screenshot mode only the converted ones); picking one gives it a free style for
+this lot, which the wall tool then builds like a disc fence. `IsFenceStyle` (tilewalls.cpp), the wall
+tool's `IsFence`, `ERoom::ProcessCell` and the fence meter take these styles as fences; `EIFenceWall` draws
+a converted fence's model (posts at a corner unless exactly one other edge of the same fence continues
+straight there); the sell-back (`calc_wall_value`) and the lot value (`WallPriceForStyle`) use its price;
+a `walk` fence is no obstacle for the router (`PassableWallStyle`, the near-wall test, a diagonal's
+blocking squares) and the collision map. The description shows under the price. At most **207
+different converted fences on one lot** (all 191 fit; when all are taken a style the lot no longer shows
+is reused, else the error sound).
+
+**Saves.** `cFixedWorldImpl::Save` adds the lot's fence palette when it shows converted fences: 'Arry'
+0x4D46: `SMF1`, a count, per fence its style, its GameCube fallback style and its key. `Load` maps it back:
+a fence the mods have gets a style again (bytes renumbered when it changed), one they do not have becomes
+its GameCube fallback (`lot palette: fence ... is not in the mods; shown as GameCube fence style 0x2`), and
+a style in the converted range with no palette entry becomes the picket; the next save is a plain
+GameCube lot. Lots without converted fences are loaded and saved as they are.
+
 ## All categories
 
 One run of every category (`convert_pc_object.bat` with no argument, or `--categories all`) over the
@@ -861,6 +937,7 @@ coverings); the game reads them in 0.2 s and adds 1374 objects (461 multi-tile) 
 | **All objects** | | **1473** | **1374** | **99** | | |
 | Walls | Build: wall coverings (9 sub-sorts) | 1482 | 1477 | 5 | Wallpaper (build mode) | `pcw<k>_<group>` (9 folders) |
 | Floors | Build: floor coverings (8 sub-sorts) | 647 | 645 | 2 | Floors (build mode) | `pcf<k>_<group>` (8 folders) |
+| Fences | Build: fences, railings, borders, half walls | 191 | 191 | 0 | Walls (build mode) | `pcn<k>_<group>` (3 folders) |
 
 (In a run of every category the earlier ones take the objects a later one shares: the massage table and
 hot spring go with Electronics and Plumbing, the RC toys with Kids; a category on its own counts them
@@ -876,6 +953,13 @@ mods/
   pcwall_inventory.tsv      every wall covering found: pack, kind, name, PC id, PC sub-sort, gc_group
   pcfloor_inventory.tsv     (the GameCube tab; floors: the footstep surface), price, status, reason,
                             key, the GameCube base (id, name), material, texture size, scale, folder
+  pcfence_inventory.tsv     every fence found: pack, name, PC id, group, price, status, reason, key, the
+                            GameCube fallback, walk, post spacing, half wall, the PC models, models made,
+                            textures, folder
+  pcn1_fences/              fences: pcn1_fences, pcn2_borders (Sims walk over them), pcn3_halfwalls:
+    mod.ini                 a [fence] section per fence; models_*.res (an edge with posts, the
+    models_9A3F0C12.res     diagonal, the post-less variants), shaders_*, textures_*, the thumbnail
+    preview.png             (for the user; not read)
   pcw2_wallpaper/           one folder per PC sub-sort: walls pcw1_paint, 2 wallpaper, 3 paneling,
     mod.ini                 4 tile, 5 masonry, 6 brick, 7 siding, 8 poured, 9 other; floors
     shaders_6A3E19C2.res    pcf1_carpet, 2 wood, 3 tile, 4 lino, 5 stone, 6 brick, 7 poured, 8 other:
@@ -945,7 +1029,9 @@ own screen when off), `wall_model` (0 / 1), `route_front`, `route_shift` (tiles:
 much nearer the object's middle, its footprint's front cut to match: the urinal), `stand_only` (a GameCube
 toilet for men only, standing: the urinal), `same_type` (electronics, hobbies, storage, misc), `prop_nodes` (`2,7,8`: nodes drawn where the base's animation has
 them: a hobby object's props, sub-models copied from the base's model), `hide_props` (`0x8C0E134F ...`:
-dress-up props of the base the sim does not wear on this object), `pack` (informational). Mods are read in folder-name order; a GUID
+dress-up props of the base the sim does not wear on this object), `pack` (informational). `[fence]` keys:
+`key`, `name`, `desc`, `price`, `thumbnail`, `model`, `model_diag`, `model_ends`, `model_diag_ends`, `walk`,
+`base`, `group`, `pack` (see "Fences"). Mods are read in folder-name order; a GUID
 or resource id given twice keeps the first. A resource id the disc has is never taken from a mod.
 
 ## How it works
@@ -968,6 +1054,7 @@ or resource id given twice keeps the first. A resource id the disc has is never 
 | Fire code | `EIObjectMan::CountObjects` (iobjectman.cpp) | A mod object's model counts at 5/7 of its size: what it would weigh with the disc's fixed-point vertices (16 bytes a vertex against 28) |
 | Saves | unchanged | `objt` names types by GUID; a mod object (and each part) saves and loads like any other |
 | Wall and floor coverings | `src/game/modcoverings.cpp` (`simmy::modcov`): `InstallSets` from `EGlobal::SetDefaults` (global.cpp), `AfterWorldLoad` / `AfterWorldSave` from `cFixedWorldImpl::Load` / `Save` (world.cpp), the catalogue's `on_tab_changed_wallpaper` / `_floor`, `enter_wallpaper_mode` / `enter_floor_mode`, `cCellInfo::GetDesc` (pcttarget.cpp), `EFloorShdTblNode::BuildStrip` (ifloor.cpp), `ERQuickdata::ModTailSize` (e_rquickdata.cpp) | The sets copied into the build sets image's tail with the coverings' rows; a pattern number given per covering and lot; the lot's palette saved and mapped back (or to GameCube coverings) on load; floor pictures over several tiles. See "Walls and floors" |
+| Fences | `src/game/modfences.cpp` (`simmy::modfence`): the Walls tab (`on_tab_changed_wall`, `enter_wall_mode`, `GetDesc`, `calc_wall_value` / `WallSellValue` in pcttarget.cpp), `IsFenceStyle` (tilewalls.cpp), `IsFence` (wallmanipulator.cpp), `ERoom::ProcessCell` / `EIFenceWall` (eroom.cpp), `WallPriceForStyle` (world.cpp), `PassableWallStyle` and the near-wall test (xrouting.cpp), `IsMoveBlocked` (collisionmap.cpp), `SectWall` (objectplace.cpp), `AfterWorldLoad` / `AfterWorldSave` from `cFixedWorldImpl::Load` / `Save` | Converted fences as wall styles 0x30..0xFE given per lot; their models, prices, walk-over; the lot's fence palette ('Arry' 0x4D46) |
 
 **Unknown GUIDs (mod removed).** The saved type has no selector, so `ObjectFolderImpl::ReconSelector`
 gives the placeholder (GUID 0x3C08965F); `ObjectModuleImpl::DoStream` reads the object's stream and
@@ -977,6 +1064,8 @@ next save no longer has it. Things that stood on a removed surface are on the fl
 
 **Development aids** (testing.md): `SIMMY_PLACE_TEST` `paperroom@x,y,<pattern or covering key>` (a room
 papered, as the wallpaper tool's room fill), `floorroom@x,y,<pattern or covering key>` (a room floored),
+`fenceline@x,y,dir,n,<style or fence key>` (n edges of a fence or wall style along a direction, free),
+`fencesell@x,y,dir,n` (the sell tool's line: the edges deleted, the styles sold and paid back),
 `probe:<guid>@x,y,dir|...` (first legal spot,
 nothing placed), `try:<guid>@...` (placed there), `info#<guid>` (an object's placement data),
 `sell#<id>` (an object sold, e.g. to put a converted table where the lot's own stood; note that an object
@@ -1005,6 +1094,7 @@ file name in a place action may name a mod object, which copies the file: use GU
 | `pckids.py` | Storage and kids: the inventory (Miscellaneous sub-sorts, the remote-control toys), kinds, the dresser / wardrobe by width, what is left out or made a decoration, the mesh over the base (turned, centred) |
 | `pcelec.py` | Electronics: kinds, bases by footprint and tier, the bases' groups, placement changes (wall TVs, speakers, table phones), the screen subset, the base's screens (swap or nodes, uv fit), a monitor stood up |
 | `pcwall.py` | Walls and floors: the coverings of every pack (catpatterns XOBJ), the GameCube's sets (rows, names, pictures' colours), the base by kind / surface and colour, the C8 textures (walls turned, bump baked in; floors mirrored, multi-tile), shaders, mod.ini per sub-sort, preview.png, inventories |
+| `pcfence.py` | Fences: the fences of every pack (catpatterns 0x2CB230B8), rail / diagonal rail / post baked into the GameCube's one-model-per-edge form (posts at both ends, post-less variants for end-post fences), half walls' plaster body, the GameCube fallback by material, thumbnails; `--categories fences` (and `all`) in pcobj_convert.py |
 | `pcobj_convert.py` | Inventory, placement, base choice, materials, MODL/shaders, thumbnail, mod.ini; batch with worker processes; `--categories walls,floors` (and `all`) run pcwall.py |
 
 ## Limits
@@ -1117,7 +1207,18 @@ file name in a place action may name a mod object, which copies the file: use GU
   one height: PC pictures made for other proportions (11 of 256 x 768) are squeezed. The catalogue has no
   sub-groups: the PC sub-sort only orders the coverings (sorted by price or name as the GameCube's).
   Converted coverings cost the PC's prices (up to 16 a wall side, 22 a floor tile; the GameCube's 1-5).
-  Diagonal walls and half tiles take them as the GameCube's. No PC terrain paints, roofs or fences.
+  Diagonal walls and half tiles take them as the GameCube's. No PC terrain paints or roofs.
+- Fences: one model per tile edge, as the GameCube's (posts baked in at the edge's ends; fences whose
+  posts stand only at run ends get them from the neighbouring edges when the house is rebuilt). No
+  gates: the PC's are door objects in the fence (the GameCube has none; build a gap, or use a walk-over
+  border). Half walls are fences with a plain plaster body under the PC top (no wallpaper on them, no
+  half-height walls on the GameCube); they block like fences, objects do not go against them. Walk-over
+  borders let Sims through but still count as fences for building (no wall or fence on the same edge).
+  The fence meter counts converted fences as the GameCube's (100 edges). PC prices (1-300 an edge; the
+  GameCube's 10-100); railings meant for stairs and decks are ordinary fences here (no stairs or decks).
+  At most 207 different converted fences on a lot (all 191 fit). Models are float (about twice a disc
+  fence's size: 60 MB for all). Netplay with converted fences is untested (the style is given on the
+  machine that picks it).
 - Recolours: only the default (the inventory counts the others). Each would be another catalogue entry
   with its own shader/texture and a model copy (the MODL names its shaders): `--recolours` is not done.
 - No LOD, no specular/environment maps (blended glass is flat), one texture per material.

@@ -17,6 +17,7 @@
 #include "simmy/classes/buildtools.hpp"
 
 #include <cmath>
+#include "simmy/modfences.hpp"
 #include <cstdio>
 #include <cstdlib>
 
@@ -25,7 +26,10 @@ extern int g_freeBuildBuyCheat;    // DAT_80476188
 
 namespace {
 cFixedWorldImpl* World() { return Globs_pFixedWorld; }
-bool IsFence(int style) { return style == 2 || style == 0xc || style == 0xd || style == 0xe; }
+// (PC mod: mods: and the converted fences' styles, modfences.cpp)
+bool IsFence(int style) {
+  return style == 2 || style == 0xc || style == 0xd || style == 0xe || simmy::modfence::IsModStyle(style);
+}
 bool IsPortalStyle(int style) { return style == 3 || style == 5 || style == 6 || style == 0xf || style == 0x17; }
 // GC 80424A40 m_wallToolHeight.
 const float kWallToolHeight = 3.0f;
@@ -850,3 +854,20 @@ EVec3& InteractorModule__WallManipulator::GetAnchorPos() { return m_anchor; }
 EVec3& InteractorModule__WallManipulator::GetAnchorDrawPos() { return m_anchorDraw; }
 // 80224040
 double InteractorModule__WallManipulator::GetWallHeight() { return kWallToolHeight; }
+
+// PC development aid (SIMMY_PLACE_TEST fencesell@x,y,dir,n): the sell (destruct) tool's line from the
+// tile along `dir` for n tiles, deleted as HandleDeleteLine does; the styles sold.
+std::vector<BuildSellCount> WallToolSellLineTest(int x, int y, int dir, int n) {
+  InteractorModule__WallManipulator tool;
+  BuildToolParams params;
+  params.id = 3;
+  params.sell = 1;
+  tool.Start(params);
+  CTilePt from(x, y, 1), to = from;
+  for (int i = 0; i < n; ++i) to = Step(to, dir);
+  TilePtDir d{dir};
+  tool.HandleDeleteLine(from, to, d, 0);  // (the sell tool counts walls as style 1 too)
+  World()->ComputeRooms(0);
+  _globals.RecalcHouse();
+  return tool.m_fenceSells;
+}
