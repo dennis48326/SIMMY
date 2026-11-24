@@ -112,6 +112,8 @@ std::vector<ModCovering> g_modCoverings;
 std::vector<ModFence> g_modFences;
 // (manager name lower-case, id) -> the resource's file.
 std::map<std::pair<std::string, unsigned int>, std::string> g_modResources;
+std::string g_modRoot;                // the mod folder (PC mod: network play: the fingerprint)
+std::vector<std::string> g_modNames;  // its mods' folder names, sorted
 
 std::string Lower(std::string s) {
   for (char& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
@@ -585,6 +587,8 @@ void mods_init() {
   }
   if (entries) SDL_free(entries);
   std::sort(mods.begin(), mods.end());  // a fixed order (GUID and id clashes: the first mod wins)
+  g_modRoot = dir;
+  g_modNames = mods;
   for (const std::string& m : mods) {
     LoadModIni(m, dir + "/" + m + "/mod.ini");
     LoadModResources(m, dir + "/" + m);
@@ -622,6 +626,60 @@ bool mods_only() {
 const std::vector<ModObject>& mods_objects() { return g_modObjects; }
 const std::vector<ModCovering>& mods_coverings() { return g_modCoverings; }
 const std::vector<ModFence>& mods_fences() { return g_modFences; }
+
+// PC mod: network play: the mod set's identity (see platform.hpp). Resource contents are not read (a
+// converter run writes them together with mod.ini, whose bytes are hashed; their sizes are too).
+const ModsFingerprint& mods_fingerprint() {
+  static ModsFingerprint fp;
+  static bool done = false;
+  if (done) return fp;
+  done = true;
+  if (!g_modsEnabled) return fp;
+  const Uint64 start = SDL_GetTicksNS();
+  auto fnv = [](unsigned long long h, const void* data, size_t n) {
+    const unsigned char* p = static_cast<const unsigned char*>(data);
+    for (size_t i = 0; i < n; ++i) h = (h ^ p[i]) * 1099511628211ull;
+    return h;
+  };
+  auto fnvStr = [&](unsigned long long h, const std::string& s) { return fnv(h, s.c_str(), s.size() + 1); };
+  auto fnvU64 = [&](unsigned long long h, unsigned long long v) {
+    unsigned char b[8];
+    for (int k = 0; k < 8; ++k) b[k] = static_cast<unsigned char>(v >> (8 * k));
+    return fnv(h, b, 8);
+  };
+  fp.enabled = true;
+  fp.modsOnly = mods_only();
+  for (const ModObject& o : g_modObjects) ++(o.door ? fp.doors : fp.objects);
+  for (const ModCovering& c : g_modCoverings) ++(c.floor ? fp.floors : fp.walls);
+  fp.fences = static_cast<unsigned>(g_modFences.size());
+  unsigned long long total = fnvStr(1469598103934665603ull, fp.modsOnly ? "mods-only" : "mods");
+  for (const std::string& m : g_modNames) {
+    const std::string dir = g_modRoot + "/" + m;
+    unsigned long long h = fnvStr(1469598103934665603ull, m);
+    std::vector<unsigned char> ini;
+    if (LoadFile(dir + "/mod.ini", ini)) h = fnv(h, ini.data(), ini.size());
+    h = fnvU64(h, ini.size());
+    int count = 0;
+    char** names = SDL_GlobDirectory(dir.c_str(), "*.res", SDL_GLOB_CASEINSENSITIVE, &count);
+    std::vector<std::string> files;
+    for (int i = 0; names && i < count; ++i) files.push_back(Lower(names[i]));
+    if (names) SDL_free(names);
+    std::sort(files.begin(), files.end());
+    for (const std::string& f : files) {
+      SDL_PathInfo info;
+      h = fnvStr(h, f);
+      h = fnvU64(h, SDL_GetPathInfo((dir + "/" + f).c_str(), &info) ? static_cast<unsigned long long>(info.size) : ~0ull);
+    }
+    fp.mods.emplace_back(m, h);
+    total = fnvStr(total, m);
+    total = fnvU64(total, h);
+  }
+  fp.total = total ? total : 1;
+  std::fprintf(stderr, "[mods] fingerprint %016llx: %zu mod(s), %u object(s), %u door(s), %u wall and %u floor covering(s), %u fence(s)%s; %.0f ms\n",
+               fp.total, fp.mods.size(), fp.objects, fp.doors, fp.walls, fp.floors, fp.fences, fp.modsOnly ? ", mods only" : "",
+               static_cast<double>(SDL_GetTicksNS() - start) / 1e6);
+  return fp;
+}
 
 bool mods_resource(const char* manager, unsigned int id, std::vector<unsigned char>& out) {
   if (!g_modsEnabled || !manager) return false;

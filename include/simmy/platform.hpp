@@ -430,6 +430,17 @@ struct ModFence {
   std::string pack, group;          // where it came from (informational)
 };
 const std::vector<ModFence>& mods_fences();
+// PC mod: network play: what both PCs' mod sets must agree on (converted mods change the game). Per mod
+// folder a hash of its name, its mod.ini's bytes and its resource files' names and sizes (not their
+// contents: cheap at start-up, ~0.1 s for 1400 mods); `total` hashes them all with the mods-only switch
+// (0: no mod folder). The counts are for messages. Computed on the first call (a session's handshake).
+struct ModsFingerprint {
+  unsigned long long total = 0;
+  bool enabled = false, modsOnly = false;
+  unsigned objects = 0, doors = 0, walls = 0, floors = 0, fences = 0;
+  std::vector<std::pair<std::string, unsigned long long>> mods;  // folder name, hash (sorted by name)
+};
+const ModsFingerprint& mods_fingerprint();
 
 // ---- Widescreen (pc_splitscreen.cpp, pc_hud.cpp; settings in pc_settings.cpp) ----
 // aspect=16:9 (single player): the frame fills the window (aurora's "stretch" viewport policy) and

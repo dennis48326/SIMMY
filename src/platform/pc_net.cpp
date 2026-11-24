@@ -44,6 +44,11 @@
 // draws one extra simulation random number at that tick (a deliberate desync), SIMMY_NET_FAKE_BUILD /
 // _FAKE_MATH / _FAKE_ISO change what this PC reports in the handshake, SIMMY_NET_ON_END=quit,
 // SIMMY_NET_DIR=<folder> (the session folder), SIMMY_NET_TRACE=1 (per-tick log).
+//
+// --net-status <file> (SimmyLauncher passes it): how the session went, for the launcher's message, as
+// "key=value" lines: result= connecting | playing | refused | failed | cancelled | left | lost | timeout |
+// desync | quit, role= host | client, tick=, folder= (the session folder: desync files), and one
+// message= line per line of the plain-words reason. Rewritten at each change (written to .tmp, renamed).
 #include "simmy/types_gen.hpp"
 #include "simmy/perf.hpp"
 #include "simmy/platform.hpp"
@@ -53,6 +58,7 @@
 #include "pc_settings.hpp"
 
 #include <SDL3/SDL_filesystem.h>
+#include <SDL3/SDL_iostream.h>
 #include <SDL3/SDL_messagebox.h>
 #include <SDL3/SDL_video.h>
 #include <aurora/aurora.h>
@@ -116,7 +122,7 @@ double MsSince(Clock::time_point t) { return std::chrono::duration<double, std::
 
 constexpr int kDefaultPort = 27450;
 constexpr unsigned kMagic = 0x504E4D53u;  // "SMNP"
-constexpr unsigned kProtocol = 1;
+constexpr unsigned kProtocol = 2;  // 2: the mods' fingerprint in Hello; --net-status
 
 // ---- options ([net] in simmy.ini, then the command line) ----------------------------------------
 struct Options {
@@ -125,6 +131,7 @@ struct Options {
   int port = -1, delay = -1, hashEvery = -1, timeoutSec = -1, onEnd = -1, skipIntro = -1;
 };
 Options g_ini, g_cli;
+std::string g_statusPath;  // --net-status <file>
 
 bool ParseBool(const std::string& v, bool& out) {
   std::string l;
@@ -322,7 +329,9 @@ class TcpStream final : public Stream {
 
 // ---- messages: [u32 size][u8 type][payload], with the test lag on the way out --------------------
 enum Msg : unsigned char {
-  kHello = 1,    // u32 magic, u32 protocol, u8 slot, str build, u64 math, u64 data, str data description, str game id
+  kHello = 1,    // u32 magic, u32 protocol, u8 slot, str build, u64 math, u64 data, str data description, str game id,
+                 // mods: u64 total, u8 flags (1 enabled, 2 mods only), u32 objects, doors, walls, floors, fences,
+                 // u32 count, (str folder, u64 hash) per mod
   kRefuse = 2,   // str reason
   kSession = 3,  // str settings ("key=value" lines), u32 files, (str name, bytes data) per file
   kReady = 4,    // (client: the session is set up)
@@ -503,6 +512,7 @@ struct Session {
   Slot ring[kRing];
   Input local = Neutral();  // this PC's input sampled in the tick running now
   std::string dir;          // the session folder
+  std::string statusPath;   // --net-status
   std::string clientCardDir;
   std::deque<Check> mine;   // this PC's last checks (with their dumps)
   std::map<int, Check> theirs;  // the partner's checks not compared yet
@@ -544,6 +554,28 @@ void ShowError(const std::string& title, const std::string& text) {
   std::fprintf(stderr, "[net] %s: %s\n", title.c_str(), text.c_str());
   if (!platform_headless() && !dev_options().offscreen)
     SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, ("SIMMY - " + title).c_str(), text.c_str(), aurora_get_window());
+}
+
+std::string AbsoluteDir(const std::string& dir);
+// --net-status: how the session went, for SimmyLauncher (see the top of this file).
+void WriteStatus(const char* result, const std::string& message) {
+  Session& s = N();
+  if (s.statusPath.empty()) return;
+  std::string text = std::string("result=") + result + "\nrole=" + Role(s.slot) + "\ntick=" + std::to_string(s.lastTick) +
+                     "\nfolder=" + AbsoluteDir(s.dir) + "\n";
+  size_t pos = 0;
+  while (pos <= message.size() && !message.empty()) {
+    size_t nl = message.find('\n', pos);
+    if (nl == std::string::npos) nl = message.size();
+    text += "message=" + message.substr(pos, nl - pos) + "\n";
+    pos = nl + 1;
+  }
+  const std::string tmp = s.statusPath + ".tmp";
+  if (SDL_IOStream* io = SDL_IOFromFile(tmp.c_str(), "wb")) {
+    const bool ok = SDL_WriteIO(io, text.data(), text.size()) == text.size();
+    if (SDL_CloseIO(io) && ok && SDL_RenamePath(tmp.c_str(), s.statusPath.c_str())) return;
+  }
+  std::fprintf(stderr, "[net] cannot write %s: %s\n", s.statusPath.c_str(), SDL_GetError());
 }
 
 // ---- what both PCs must have in common -------------------------------------------------------------
@@ -604,6 +636,12 @@ FILE* OpenUtf8(const fs::path& p, const char* mode) {
 #endif
 }
 
+std::string AbsoluteDir(const std::string& dir) {
+  std::error_code ec;
+  const fs::path p = fs::absolute(U8Path(dir), ec);
+  return ec ? dir : PathU8(p);
+}
+
 std::string Hex(unsigned long long v) {
   char buf[24];
   std::snprintf(buf, sizeof buf, "%016llx", v);
@@ -621,6 +659,9 @@ bool LocalOnlySwitch(const std::string& name) {
       "SIMMY_LOG",        "SIMMY_DATA",     "SIMMY_IO_STATS",   "SIMMY_GPU",       "SIMMY_GX_",        "SIMMY_WIN2",
       "SIMMY_FAKE_PADS",  "SIMMY_DET",      "SIMMY_SKIP_INTRO", "SIMMY_PORTRAIT",  "SIMMY_WAV",
       "SIMMY_PERF",       "SIMMY_DISC_CACHE", "SIMMY_DRAWS_BLOCKING"};  // (SIMMY_FRAME: _STATS, _PACING)
+  // Mods: the mod folder's place is each PC's own (the handshake compares the mod sets themselves);
+  // SIMMY_CARD_DIR is ignored in a session.
+  if (name == "SIMMY_MODS" || name == "SIMMY_MODS_VERBOSE" || name == "SIMMY_CARD_DIR") return true;
   for (const char* p : kLocal)
     if (name.rfind(p, 0) == 0 && !(std::strcmp(p, "SIMMY_DET") == 0 && name.rfind("SIMMY_DET_SPEED", 0) == 0) &&
         !(std::strcmp(p, "SIMMY_DET") == 0 && name.rfind("SIMMY_DET_SEED", 0) == 0))
@@ -856,7 +897,8 @@ std::unique_ptr<Stream> Connect(const std::string& target, int defaultPort, int 
   }
   error = "no answer from " + std::string(shown) + ":" + std::to_string(port) + " in " + std::to_string(timeoutSec) +
           " s" + (last.empty() ? std::string() : " (" + last + ")") +
-          ". Is the host's game started with --host, the address right, and the port allowed through its firewall?";
+          ". Has the host started hosting (\"Host a game\" in SimmyLauncher, or --host), is the address right, and is the port "
+          "allowed through the host's firewall?";
   return nullptr;
 }
 
@@ -889,6 +931,7 @@ struct Hello {
   unsigned magic = 0, protocol = 0, slot = 0;
   std::string build, dataDesc, gameId;
   unsigned long long math = 0, data = 0;
+  ModsFingerprint mods;  // (PC mod: mods) the mod set
 };
 
 Hello LocalHello(int slot) {
@@ -902,6 +945,19 @@ Hello LocalHello(int slot) {
   if (Env("SIMMY_NET_FAKE_ISO")) h.data ^= 0x1234567812345678ull;
   h.dataDesc = data_source_description();
   h.gameId = GameId();
+  h.mods = mods_fingerprint();
+  if (const char* v = Env("SIMMY_NET_FAKE_MODS")) {  // tests: pretend some mods are missing / extra
+    const int drop = std::atoi(v);
+    if (drop > 0 && static_cast<size_t>(drop) <= h.mods.mods.size()) {
+      h.mods.mods.resize(h.mods.mods.size() - static_cast<size_t>(drop));
+      h.mods.objects = h.mods.objects > static_cast<unsigned>(drop) ? h.mods.objects - static_cast<unsigned>(drop) : 0;
+    } else {
+      h.mods.mods.emplace_back("fake_extra_mod", 1);
+      ++h.mods.objects;
+      h.mods.enabled = true;
+    }
+    h.mods.total ^= 0x77u;
+  }
   std::fprintf(stderr, "[net] this PC: %s, mathcheck %s, game data %s (%s), %.0f ms\n", h.build.c_str(), Hex(h.math).c_str(),
                Hex(h.data).c_str(), h.dataDesc.c_str(), MsSince(t0));
   return h;
@@ -911,7 +967,80 @@ void SendHello(Channel& ch, const Hello& h) {
   Writer w;
   w.u32(h.magic), w.u32(h.protocol), w.u8(h.slot);
   w.str(h.build), w.u64(h.math), w.u64(h.data), w.str(h.dataDesc), w.str(h.gameId);
+  const ModsFingerprint& m = h.mods;
+  w.u64(m.total), w.u8((m.enabled ? 1u : 0u) | (m.modsOnly ? 2u : 0u));
+  w.u32(m.objects), w.u32(m.doors), w.u32(m.walls), w.u32(m.floors), w.u32(m.fences);
+  w.u32(static_cast<unsigned>(m.mods.size()));
+  for (const auto& kv : m.mods) w.str(kv.first), w.u64(kv.second);
   ch.Send(kHello, w);
+}
+
+// "1373 converted objects, 72 doors, 1480 wall coverings, 650 floor coverings and 191 fences" / "no mods".
+std::string ModsText(const ModsFingerprint& m) {
+  if (!m.enabled || m.mods.empty()) return "no mods";
+  std::vector<std::string> parts;
+  auto add = [&](unsigned n, const char* one, const char* many) {
+    if (n) parts.push_back(std::to_string(n) + " " + (n == 1 ? one : many));
+  };
+  add(m.objects, "converted object", "converted objects");
+  add(m.doors, "door", "doors");
+  add(m.walls, "wall covering", "wall coverings");
+  add(m.floors, "floor covering", "floor coverings");
+  add(m.fences, "fence", "fences");
+  if (parts.empty()) parts.push_back(std::to_string(m.mods.size()) + " mod folder(s) with nothing in them");
+  std::string out;
+  for (size_t i = 0; i < parts.size(); ++i) out += (i == 0 ? "" : i + 1 == parts.size() ? " and " : ", ") + parts[i];
+  if (m.modsOnly) out += " (SIMMY_MODS_ONLY screenshot mode)";
+  return out;
+}
+
+// Converted mods change the game (new objects, coverings and fences, their trees and slots), so both
+// PCs need the same mod set. The message says what each has and which folders differ.
+std::string CompareMods(const Hello& mine, const Hello& theirs) {
+  const ModsFingerprint &a = mine.mods, &b = theirs.mods;
+  const bool aOn = a.enabled && !a.mods.empty(), bOn = b.enabled && !b.mods.empty();
+  if (!aOn && !bOn) return "";
+  if (aOn && bOn && a.total == b.total && a.modsOnly == b.modsOnly) return "";
+  const std::string other = theirs.slot == 0 ? "the host" : "player 2's PC";
+  std::string why = "Different mods: this PC has " + ModsText(a) + "; " + other + " has " + ModsText(b) + ".";
+  std::vector<std::string> kinds;
+  if (a.objects != b.objects) kinds.push_back("objects");
+  if (a.doors != b.doors) kinds.push_back("doors");
+  if (a.walls != b.walls) kinds.push_back("wall coverings");
+  if (a.floors != b.floors) kinds.push_back("floor coverings");
+  if (a.fences != b.fences) kinds.push_back("fences");
+  if (aOn && bOn && !kinds.empty()) {
+    why += " Different counts of: ";
+    for (size_t i = 0; i < kinds.size(); ++i) why += (i ? ", " : "") + kinds[i];
+    why += ".";
+  }
+  if (aOn && bOn) {
+    // Folders only on one PC, or different on the two (both lists are sorted by name).
+    std::vector<std::string> onlyMine, onlyTheirs, differ;
+    size_t i = 0, j = 0;
+    while (i < a.mods.size() || j < b.mods.size()) {
+      if (j >= b.mods.size() || (i < a.mods.size() && a.mods[i].first < b.mods[j].first)) onlyMine.push_back(a.mods[i++].first);
+      else if (i >= a.mods.size() || b.mods[j].first < a.mods[i].first) onlyTheirs.push_back(b.mods[j++].first);
+      else {
+        if (a.mods[i].second != b.mods[j].second) differ.push_back(a.mods[i].first);
+        ++i, ++j;
+      }
+    }
+    auto list = [](const std::vector<std::string>& v) {
+      std::string out;
+      for (size_t k = 0; k < v.size() && k < 3; ++k) out += (k ? ", " : "") + v[k];
+      if (v.size() > 3) out += ", ...";
+      return out;
+    };
+    if (!onlyTheirs.empty())
+      why += " " + std::to_string(onlyTheirs.size()) + " mod folder(s) only on " + other + " (" + list(onlyTheirs) + ").";
+    if (!onlyMine.empty()) why += " " + std::to_string(onlyMine.size()) + " only on this PC (" + list(onlyMine) + ").";
+    if (!differ.empty()) why += " " + std::to_string(differ.size()) + " converted differently (" + list(differ) + ").";
+    if (a.modsOnly != b.modsOnly) why += " SIMMY_MODS_ONLY is on for one PC only.";
+  }
+  why += " Both PCs need the same mods folder: copy the host's \"mods\" folder (next to simmy.exe) to the other PC, "
+         "or play without mods on both.\n";
+  return why;
 }
 
 // Both PCs check the same things and so refuse together (each also sends why).
@@ -935,20 +1064,38 @@ std::string Compare(const Hello& mine, const Hello& theirs) {
   if (theirs.data != mine.data)
     why += "The game data differs (" + Hex(mine.data) + " here from the " + mine.dataDesc + ", " + Hex(theirs.data) +
            " there from the " + theirs.dataDesc + "): both need the same disc image of The Sims 2 (USA).\n";
+  why += CompareMods(mine, theirs);
   if (!why.empty() && why.back() == '\n') why.pop_back();
   return why;
 }
 
-bool Handshake(Session& s, std::string& error) {
+bool Handshake(Session& s, std::string& error, bool& refused) {
   Channel& ch = *s.ch;
   const Hello mine = LocalHello(s.slot);
   SendHello(ch, mine);
   std::vector<unsigned char> msg;
-  if (!Expect(ch, kHello, msg, 60, error)) return false;
+  if (!Expect(ch, kHello, msg, 60, error)) {
+    refused = error.rfind("the other PC refused: ", 0) == 0;
+    return false;
+  }
   Reader r(msg, 1);
   Hello theirs;
   theirs.magic = r.u32(), theirs.protocol = r.u32(), theirs.slot = r.u8();
   theirs.build = r.str(), theirs.math = r.u64(), theirs.data = r.u64(), theirs.dataDesc = r.str(), theirs.gameId = r.str();
+  if (theirs.protocol == kProtocol) {
+    ModsFingerprint& m = theirs.mods;
+    m.total = r.u64();
+    const unsigned flags = r.u8();
+    m.enabled = flags & 1u, m.modsOnly = (flags & 2u) != 0;
+    m.objects = r.u32(), m.doors = r.u32(), m.walls = r.u32(), m.floors = r.u32(), m.fences = r.u32();
+    const unsigned n = r.u32();
+    for (unsigned k = 0; k < n && !r.bad; ++k) {
+      std::string name = r.str();
+      const unsigned long long h = r.u64();
+      m.mods.emplace_back(std::move(name), h);
+    }
+    if (r.bad) theirs.magic = 0;  // cut short: "not SIMMY"
+  }
   std::fprintf(stderr, "[net] the other PC: %s, mathcheck %s, game data %s (%s)\n", theirs.build.c_str(),
                Hex(theirs.math).c_str(), Hex(theirs.data).c_str(), theirs.dataDesc.c_str());
   const std::string why = Compare(mine, theirs);
@@ -958,6 +1105,7 @@ bool Handshake(Session& s, std::string& error) {
     ch.Send(kRefuse, w);
     ch.Flush(500);
     error = why;
+    refused = true;
     return false;
   }
   const std::string folder = s.dir;
@@ -968,6 +1116,8 @@ bool Handshake(Session& s, std::string& error) {
     Writer w;
     std::string settings;
     settings += "seed=" + std::to_string(sim_rand_state()) + "\n";
+    // (The effective value: SIMMY_FIRE_CODE_LIMIT included; from now on it is graphics_settings' on both.)
+    graphics_settings().fireCodeLimit = settings_fire_code_limit();
     settings += "fire_code_limit=" + std::string(graphics_settings().fireCodeLimit ? "1" : "0") + "\n";
     settings += "delay=" + std::to_string(s.delay) + "\n";
     settings += "hash_every=" + std::to_string(s.hashEvery) + "\n";
@@ -1207,6 +1357,8 @@ void EndSession(End why, const std::string& text) {
   s.ch.reset();
   SocketsShutdown();
   std::fflush(nullptr);  // the session's record (net_*.rec) and logs
+  WriteStatus(why == End::Left ? "left" : why == End::Lost ? "lost" : why == End::Timeout ? "timeout"
+              : why == End::Desync ? "desync" : "quit", why == End::LocalQuit ? std::string() : text);
   if (why == End::LocalQuit) return;
   SetNotice(text + (s.quitOnEnd ? "" : " You can go on playing on this PC alone (save from the pause menu)."), 0);
   SetTitle("network play ended");
@@ -1242,6 +1394,10 @@ bool net_parse_arg(int argc, char** argv, int& i) {
   }
   if (std::strcmp(a, "--net-port") == 0) {
     if (const char* p = next(false)) ParseInt(p, 1, 65535, g_cli.port);
+    return true;
+  }
+  if (std::strcmp(a, "--net-status") == 0) {  // SimmyLauncher: how the session went (WriteStatus)
+    if (const char* p = next(false)) g_statusPath = p;
     return true;
   }
   if (std::strcmp(a, "--net-delay") == 0) {
@@ -1304,7 +1460,9 @@ int net_start_session() {
   s.quitOnEnd = o.onEnd == 1 || (Env("SIMMY_NET_ON_END") && std::strcmp(Env("SIMMY_NET_ON_END"), "quit") == 0);
   s.skipIntro = o.skipIntro != 0;
   s.dir = SessionFolder();
+  s.statusPath = g_statusPath;
   const int port = o.port > 0 ? o.port : kDefaultPort;
+  WriteStatus("connecting", s.slot == 0 ? "hosting on port " + std::to_string(port) : "joining " + o.join);
   if (const char* v = Env("SIMMY_NET_STALL"))
     for (const char* p = v; *p;) {
       char* end = nullptr;
@@ -1328,24 +1486,29 @@ int net_start_session() {
   }
   if (Env("SIMMY_DET_REPLAY")) {
     ShowError("network play", "SIMMY_DET_REPLAY cannot be used in a network session.");
+    WriteStatus("failed", "SIMMY_DET_REPLAY cannot be used in a network session.");
     return 3;
   }
   if (!SocketsInit()) {
     ShowError("network play", "The network could not be started (WSAStartup failed).");
+    WriteStatus("failed", "The network could not be started (WSAStartup failed).");
     return 3;
   }
   std::string error;
   std::unique_ptr<Stream> stream = s.slot == 0 ? Listen(port, error) : Connect(o.join, port, 60, error);
   if (!stream) {
     if (error != "cancelled") ShowError("network play", error);
+    WriteStatus(error == "cancelled" ? "cancelled" : "failed", error);
     SocketsShutdown();
     return error == "cancelled" ? -1 : 3;
   }
   s.ch = std::make_unique<Channel>(std::move(stream));
   SetNotice("Connected: checking that both PCs can play together ...", 0);
-  if (!Handshake(s, error)) {
+  bool refused = false;
+  if (!Handshake(s, error, refused)) {
     if (error != "cancelled")
       ShowError("network play refused", error);
+    WriteStatus(error == "cancelled" ? "cancelled" : refused ? "refused" : "failed", error);
     s.ch.reset();
     SocketsShutdown();
     return error == "cancelled" ? -1 : 3;
@@ -1360,6 +1523,7 @@ int net_start_session() {
     if (!f && !Env("SIMMY_DET_RECORD")) std::fprintf(stderr, "[net] cannot write %s\n", rec.c_str());
     det_net_enable(f, rec);
   }
+  WriteStatus("playing", "");
   SetNotice(std::string("Network play: you are ") + PlayerName(s.slot) + ".", 6);
   SetTitle(std::string("network play, ") + PlayerName(s.slot));
   std::fprintf(stderr, "[net] session started: this PC is %s (pad slot %d)\n", PlayerName(s.slot), s.slot + 1);

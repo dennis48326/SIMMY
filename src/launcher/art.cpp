@@ -356,6 +356,28 @@ void draw_icon(Canvas& c, Icon icon, Vec2 p, float s, Color col) {
     c.roundRect(Rect{p.x - h * 0.6f, p.y - h * 0.6f, h * 1.2f, h * 1.2f}, h * 0.2f, col);
     break;
   }
+  case Icon::Network: {
+    // Two screens, one up-left and one down-right, joined by a cable.
+    const float w = h * 1.12f, sh = h * 0.8f, t = h * 0.17f;
+    const Rect a{p.x - h * 1.15f, p.y - h * 1.0f, w, sh}, b{p.x + h * 0.03f, p.y + h * 0.05f, w, sh};
+    for (const Rect& r : {a, b}) {
+      c.roundRect(r, h * 0.12f, col);
+      c.roundRect(Rect{r.x + t, r.y + t, r.w - 2 * t, r.h - 2 * t}, h * 0.05f, withAlpha(col, 0.25f));
+    }
+    c.line(Vec2{a.cx(), a.y + a.h}, Vec2{a.cx(), b.cy()}, h * 0.16f, col);
+    c.line(Vec2{a.cx(), b.cy()}, Vec2{b.x, b.cy()}, h * 0.16f, col);
+    break;
+  }
+  case Icon::Erase: {
+    const Vec2 pts[5] = {{p.x - h * 0.95f, p.y}, {p.x - h * 0.42f, p.y - h * 0.6f}, {p.x + h * 0.9f, p.y - h * 0.6f},
+                         {p.x + h * 0.9f, p.y + h * 0.6f}, {p.x - h * 0.42f, p.y + h * 0.6f}};
+    for (int i = 0; i < 5; ++i) c.line(pts[i], pts[(i + 1) % 5], h * 0.15f, col);
+    const Vec2 m{p.x + h * 0.26f, p.y};
+    const float x = h * 0.27f;
+    c.line(Vec2{m.x - x, m.y - x}, Vec2{m.x + x, m.y + x}, h * 0.15f, col);
+    c.line(Vec2{m.x - x, m.y + x}, Vec2{m.x + x, m.y - x}, h * 0.15f, col);
+    break;
+  }
   case Icon::None: break;
   }
 }

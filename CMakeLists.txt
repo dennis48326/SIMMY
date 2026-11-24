@@ -135,6 +135,8 @@ else ()
   target_compile_options(simmy_launcher PRIVATE -Wall -Wextra)
 endif ()
 if (WIN32)
+  # (net_info.cpp: the Network play page's LAN addresses: Winsock and GetAdaptersAddresses)
+  target_link_libraries(simmy_launcher PRIVATE ws2_32 iphlpapi)
   aurora_copy_runtime_dlls(simmy_launcher)
 endif ()
 

@@ -149,6 +149,13 @@ work if you keep them). The launcher:
   two 4:3 halves, GameCube original) and starts `simmy.exe --iso "<disc>" --split=<layout>`.
   *Quick co-op start* (on by default, like the old co-op batch file) adds `SIMMY_TWO_PLAYER=1`,
   `SIMMY_CAS_ACCEPT=300` and `SIMMY_SKIP_INTRO=1`.
+- **Network play** (two PCs): *Host a game* shows this PC's LAN address and the port to tell your
+  friend and starts `simmy.exe --iso "<disc>" --split=gc --host <port>`; *Join game* takes the host's
+  address (typed, or with the on-screen keys on a controller; remembered as `net_join` in `[launcher]`)
+  and starts `... --join <address>:<port>`. The port (default 27450) is `[net] port` in `simmy.ini`.
+  When the session ends because the PCs could not play together (different build, disc or mods), the
+  host could not be reached, the friend left or the games went out of step, the launcher says so in
+  plain words (and opens the session folder with the files to send for an out-of-step report).
 - **Options** edits the `simmy.ini` settings below (screen mode, window size, aspect, HUD, V-Sync,
   frame rate, render resolution, anti-aliasing, texture filtering, scaling filter, graphics API)
   plus *Skip intro movies* (`SIMMY_SKIP_INTRO=1`). Its own settings live in a `[launcher]` section
@@ -161,9 +168,11 @@ work if you keep them). The launcher:
   diagnostic switches such as `SIMMY_WATCHDOG`) other than `SIMMY_INI` from the game's environment,
   unless `SIMMY_LAUNCHER_KEEP_ENV=1`.
 
-Mouse, keyboard (arrows, Enter, Esc) and controllers (D-pad / stick, A, B) all work. Test switches:
-`--screenshot out.bmp [--page home|coop|options|playing|error] [--frames N] [--scale S]`,
-`--test-iso <file>`, `--game-exe <file>`, `--fake-pads N`, `--auto-launch play|coop`,
+Mouse, keyboard (arrows, Enter, Esc) and controllers (D-pad / stick, A, B; X erases on the Network
+play page) all work. Test switches:
+`--screenshot out.bmp [--page home|coop|options|net|playing|hosting|joining|error] [--frames N] [--scale S]`,
+`--test-iso <file>`, `--game-exe <file>`, `--fake-pads N`, `--auto-launch play|coop|host|join:<address>`,
+`--net-addr <text>`, `--show-status <net_status.txt>`,
 `--write-icon <dir>` (renders the plumbob icon; `src/launcher/res/simmy_launcher.ico` is made from it),
 `--version` (prints the port's version and exits; the version is set in `include/simmy/version.hpp`,
 see [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md#port-version)).
@@ -184,10 +193,14 @@ Development options:
 
 ### Network play (PC mod)
 
-Two PCs play the two-player game together over a LAN (or the internet with a forwarded port). Player 1
+Two PCs play the two-player game together over a LAN (or the internet with a forwarded port). The easy
+way: SimmyLauncher's **Network play** page on both PCs (player 1 *Host a game*, player 2 types the
+address it shows and presses *Join game*). By hand: player 1
 hosts: `simmy.exe --iso "<disc image>" --host`; player 2 joins with the host's address:
 `simmy.exe --iso "<disc image>" --join 192.168.1.20` (or `tools\windows\run_net_host.bat` /
-`run_net_join.bat` next to `build_simmy.bat`). Both need the same SIMMY build and disc image; allow
+`run_net_join.bat` next to `build_simmy.bat`). Both need the same SIMMY build, disc image and mods
+(the converted objects, coverings, fences and doors change the game: the PCs compare their mod folders
+when they connect); allow
 simmy.exe through the Windows firewall on the host (private networks). Each PC shows its own player's
 view; the host's memory card is used (the joining PC plays on a copy). TCP port 27450; `[net]` in
 simmy.ini. Details, and what to send if the PCs ever go out of step: [docs/netplay.md](docs/netplay.md).

@@ -24,8 +24,9 @@ void draw_controller(Canvas& c, float cx, float cy, float width, bool connected,
 // The co-op layouts: 0 gc, 1 4x3, 2 wide, 3 windows (as pc_settings' split values).
 void draw_layout_picture(Canvas& c, Rect area, int split, float highlight);
 
-// Small pictograms for buttons (white, centred on c): play, people, gear, disc, back, power, folder.
-enum class Icon { Play, People, Gear, Disc, Back, Power, Folder, Stop, None };
+// Small pictograms for buttons (white, centred on c): play, people, gear, disc, back, power, folder,
+// stop, network (two screens linked), erase (a backspace key).
+enum class Icon { Play, People, Gear, Disc, Back, Power, Folder, Stop, Network, Erase, None };
 void draw_icon(Canvas& c, Icon icon, Vec2 center, float size, Color col);
 
 }  // namespace launcher

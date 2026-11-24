@@ -120,8 +120,41 @@ std::string IniFile::get(const std::string& key) const {
   const std::vector<Parsed> p = parse();
   std::string value;
   for (size_t i = 0; i < p.size(); ++i)
-    if (p[i].active && p[i].key == k && p[i].section != "launcher" && p[i].section != "keys") value = ValueOf(lines_[i]);
+    if (p[i].active && p[i].key == k && p[i].section != "launcher" && p[i].section != "keys" && p[i].section != "net")
+      value = ValueOf(lines_[i]);
   return value;
+}
+
+std::string IniFile::getSection(const std::string& section, const std::string& key) const {
+  const std::string k = normalizeKey(key), sec = Lower(section);
+  const std::vector<Parsed> p = parse();
+  std::string value;
+  for (size_t i = 0; i < p.size(); ++i)
+    if (p[i].active && p[i].key == k && p[i].section == sec) value = ValueOf(lines_[i]);
+  return value;
+}
+
+void IniFile::setSection(const std::string& section, const std::string& name, const std::string& value,
+                         const std::string& comment) {
+  const std::string k = normalizeKey(name), sec = Lower(section);
+  std::vector<Parsed> p = parse();
+  int last = -1, header = -1;
+  bool found = false;
+  for (size_t i = 0; i < p.size(); ++i) {
+    if (p[i].section != sec) continue;
+    if (p[i].header) header = static_cast<int>(i);
+    if (p[i].active && p[i].key == k) replaceValue(i, value), found = true;
+    if (!Trim(lines_[i]).empty()) last = static_cast<int>(i);
+  }
+  if (found) return;
+  if (header >= 0) {
+    lines_.insert(lines_.begin() + (last + 1), name + " = " + value);
+    return;
+  }
+  if (!lines_.empty() && !Trim(lines_.back()).empty()) lines_.push_back("");
+  lines_.push_back("[" + sec + "]");
+  if (!comment.empty()) lines_.push_back("; " + comment);
+  lines_.push_back(name + " = " + value);
 }
 
 std::string IniFile::getLauncher(const std::string& key) const {
@@ -163,7 +196,7 @@ void IniFile::setGraphics(const std::string& name, const std::string& value, boo
   bool found = false;
   int commented = -1;
   for (size_t i = 0; i < p.size(); ++i) {
-    if (p[i].key != k || p[i].section == "launcher" || p[i].section == "keys") continue;
+    if (p[i].key != k || p[i].section == "launcher" || p[i].section == "keys" || p[i].section == "net") continue;
     if (p[i].active) replaceValue(i, value), found = true;
     else if (p[i].commented && commented < 0) commented = static_cast<int>(i);
   }
@@ -178,7 +211,8 @@ void IniFile::setGraphics(const std::string& name, const std::string& value, boo
     lines_.push_back("; SIMMY settings (written by SimmyLauncher). See simmy.ini.example.");
     lines_.push_back("");
     lines_.push_back("[graphics]");
-  } else if (firstHeader(p, false) < 0 || (!p.empty() && (p.back().section == "launcher" || p.back().section == "keys"))) {
+  } else if (firstHeader(p, false) < 0 ||
+             (!p.empty() && (p.back().section == "launcher" || p.back().section == "keys" || p.back().section == "net"))) {
     if (!Trim(lines_.back()).empty()) lines_.push_back("");
     lines_.push_back("[graphics]");
   }

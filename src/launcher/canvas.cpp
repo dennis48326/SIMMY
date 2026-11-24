@@ -536,6 +536,16 @@ float Canvas::textWrapped(FontId f, float x, float y, float width, const std::st
   std::string line, word;
   auto flushWord = [&]() {
     if (word.empty()) return;
+    // A word wider than the line (a long path): broken where it reaches the edge (not inside a
+    // UTF-8 sequence).
+    while (textWidth(f, word) > width && word.size() > 1) {
+      size_t cut = word.size() - 1;
+      while (cut > 1 && (textWidth(f, word.substr(0, cut)) > width || (static_cast<unsigned char>(word[cut]) & 0xC0) == 0x80)) --cut;
+      if (!line.empty()) lines.push_back(line);
+      lines.push_back(word.substr(0, cut));
+      line.clear();
+      word.erase(0, cut);
+    }
     const std::string trial = line.empty() ? word : line + " " + word;
     if (!line.empty() && textWidth(f, trial) > width) {
       lines.push_back(line);

@@ -6,6 +6,9 @@
 //   [launcher]        the launcher's own settings (skip_intro, quick_coop, coop_display, sounds); the
 //                     section goes before [graphics], so keys the game appends land in [graphics]
 //   [keys]            player 1's key bindings (the game's): left alone, never taken for a setting
+//   [net] port        the network play port (the game reads [net] too; the launcher writes only port,
+//                     never host= or join=, which would start a session at every launch). A new [net]
+//                     section goes at the end of the file (the game never appends its keys into [net]).
 //   [graphics] keys   window, fullscreen, p1_input, ... written like the game's own F1 "Save" does
 //                     (pc_settings.cpp SaveNames): every active line of the key gets the new value; a
 //                     key without one replaces its commented-out example line, else it is appended. A
@@ -27,10 +30,14 @@ class IniFile {
   std::string get(const std::string& key) const;
   // A key in [launcher].
   std::string getLauncher(const std::string& key) const;
+  // A key in another named section ("net").
+  std::string getSection(const std::string& section, const std::string& key) const;
 
   void setGraphics(const std::string& name, const std::string& value, bool isDefault);
   void setTopLevel(const std::string& name, const std::string& value, const std::string& comment);
   void setLauncher(const std::string& name, const std::string& value);
+  // A key in a named section other than [launcher] (created at the end of the file with `comment`).
+  void setSection(const std::string& section, const std::string& name, const std::string& value, const std::string& comment);
 
   bool save(std::string& message);
 

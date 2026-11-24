@@ -3,13 +3,18 @@
 // simmy.ini, and come back when the game ends (with a friendly report if it crashed).
 //
 //   SimmyLauncher [--test-iso <file>] [--game-exe <file>] [--version]
-//   Tests: --screenshot <out.bmp> [--page home|coop|options|playing|error] [--frames N] [--scale S]
-//          [--fake-pads N] [--focus N] [--mouse X,Y] [--auto-launch play|coop] [--write-icon <dir>]
+//   Tests: --screenshot <out.bmp> [--page home|coop|options|net|playing|hosting|joining|error] [--frames N]
+//          [--scale S] [--fake-pads N] [--focus N] [--mouse X,Y] [--auto-launch play|coop|host|join:<address>]
+//          [--net-addr <text>] [--show-status <net_status.txt>] [--write-icon <dir>]
 //
 // What a launch does (the old batch files' behaviour):
 //   simmy.exe --iso "<disc>" --split=gc                         Play (one player)
 //   simmy.exe --iso "<disc>" --split=<windows|wide|4x3|gc>      Co-op
 //     + SIMMY_TWO_PLAYER=1 SIMMY_CAS_ACCEPT=300 SIMMY_SKIP_INTRO=1 with "Quick co-op start"
+//   simmy.exe --iso "<disc>" --split=gc --host <port> --net-status <launcher dir>/net_status.txt
+//   simmy.exe --iso "<disc>" --split=gc --join <address>:<port> --net-status ...    Network play
+//     (each PC shows only its own player's view, full window: split= does not matter in a session; gc
+//     keeps the one-window size and aspect settings; the port is simmy.ini's [net] port, default 27450)
 //   SIMMY_SKIP_INTRO=1 also with "Skip intro movies". The game's output goes to game_out.txt and
 //   game_log.txt next to the launcher; the working directory is the launcher's folder.
 #include <SDL3/SDL.h>
@@ -20,10 +25,12 @@
 #include "game_process.hpp"
 #include "gcm_disc.hpp"
 #include "launcher_ini.hpp"
+#include "net_info.hpp"
 #include "sfx.hpp"
 #include "simmy/version.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -219,9 +226,12 @@ std::vector<Setting> MakeSettings() {
 
 // ---- the app --------------------------------------------------------------------------------------
 
-enum class Page { Home, Coop, Options, Playing };
+enum class Page { Home, Coop, Options, Net, Playing };
 enum class Style { Green, Blue, Ghost, Orange };
-enum class Kind { Button, Cycler, Toggle };
+enum class Kind { Button, Cycler, Toggle, Field };
+enum class Mode { Play, Coop, Host, Join };
+
+constexpr int kDefaultNetPort = 27450;  // the game's (pc_net.cpp)
 
 struct Item {
   int id;
@@ -238,6 +248,8 @@ enum : int {
   kIdSetting0 = 300,  // +setting index
   kIdOptionsBack = 400, kIdOptionsReset,
   kIdForceQuit = 500,
+  kIdNet = 600, kIdNetBack, kIdNetHost, kIdNetJoin, kIdNetAddr, kIdNetPort,
+  kIdNetKey0 = 620,  // + the on-screen key's index (kNetKeys)
   kIdErrorFolder = 900, kIdErrorOk,
 };
 
@@ -250,7 +262,22 @@ struct ErrorReport {
   bool open = false;
   std::string title, body, excerpt;
   bool offerFolder = true;
+  std::string detail;       // wrapped text in the box instead of the excerpt (network play's reasons)
+  std::string folder;       // the folder the button opens ("" the launcher's, with the logs)
+  std::string folderLabel;  // its label ("" "Open log folder")
 };
+
+// The Network play page's on-screen keys (for controllers): what each types ("\b" erase, "\x7f" clear).
+struct NetKey {
+  const char* label;
+  const char* text;
+  int col, row, span;
+};
+const NetKey kNetKeys[] = {{"1", "1", 0, 0, 1}, {"2", "2", 1, 0, 1}, {"3", "3", 2, 0, 1}, {"", "\b", 3, 0, 1},
+                           {"4", "4", 0, 1, 1}, {"5", "5", 1, 1, 1}, {"6", "6", 2, 1, 1}, {".", ".", 3, 1, 1},
+                           {"7", "7", 0, 2, 1}, {"8", "8", 1, 2, 1}, {"9", "9", 2, 2, 1}, {":", ":", 3, 2, 1},
+                           {"0", "0", 0, 3, 2}, {"Clear", "\x7f", 2, 3, 2}};
+constexpr int kNetKeyCount = static_cast<int>(sizeof kNetKeys / sizeof kNetKeys[0]);
 
 struct Options {
   std::string screenshot;
@@ -263,6 +290,9 @@ struct Options {
   std::string testIso, gameExe, autoLaunch, writeIcon;
   std::string choose;               // as if picked in the file dialog (remembered in simmy.ini)
   std::vector<std::string> sets;    // name=value, as if changed on the Options page
+  std::string netAddr;              // --net-addr: typed into the Network play page's address field
+  bool netAddrSet = false;
+  std::string showStatus;           // --show-status: report this net_status.txt as after a session
 };
 
 Uint32 g_dialogEvent = 0;
@@ -307,8 +337,9 @@ class App {
   void closePads();
 
   // Launching.
-  void launch(bool coop);
+  void launch(Mode mode);
   void pollGame();
+  bool reportNetStatus(const std::string& path, int code, bool fresh);
   void showError(const std::string& title, const std::string& body, const std::string& excerpt, bool folder);
 
   // Drawing.
@@ -316,6 +347,7 @@ class App {
   void drawHome();
   void drawCoop();
   void drawOptions();
+  void drawNet();
   void drawPlaying();
   void drawError();
   void drawToast();
@@ -327,6 +359,12 @@ class App {
               FontId font = kFontButton, const std::string& sub = std::string());
   void settingRow(int id, Rect r, Setting& s);
   bool layoutCard(int id, Rect r, int split, const char* title, const char* help, bool selected);
+  void textField(int id, Rect r, const std::string& text, const std::string& placeholder, FontId font);
+  // Network play: typing into the address or port field (editField_); "\b" erases, "\x7f" clears.
+  void netType(const std::string& text);
+  void netLeave();      // saves the port and the address
+  int netPort() const;  // the port field's value, 0 if not a port
+  void refreshLan();
   void reg(int id, Rect r, Kind kind);
   float hover(int id);
   void setPage(Page p, int focus);
@@ -381,6 +419,19 @@ class App {
 
   std::vector<SDL_Gamepad*> pads_;
   bool padsActive_ = true;
+
+  // Network play.
+  std::string netAddr_, netPortText_ = std::to_string(kDefaultNetPort);
+  int editField_ = kIdNetAddr;   // the field typing goes to
+  std::string netMessage_;       // the address check's complaint
+  float netMessageTime_ = 0;
+  std::vector<LanAddress> lan_;
+  float lanAge_ = 1e9f;
+  bool textInput_ = false;
+  int activatedBy_ = 0, pendingActivatedBy_ = 0;  // 0 mouse, 1 keyboard, 2 controller
+  Mode runMode_ = Mode::Play;
+  std::string netInfo_, netInfo2_;  // the Playing page's lines in network play
+  std::string statusPath_;          // --net-status of the running game
 
   GameProcess game_;
   bool coopRunning_ = false;
@@ -511,6 +562,12 @@ void App::loadIni() {
     }
   }
   sfx_enable(flag("sounds"));
+  // Network play: the port ([net] port, the game's too) and the last address joined ([launcher] net_join).
+  {
+    const std::string port = Trim(ini_.getSection("net", "port"));
+    netPortText_ = port.empty() || port.size() > 5 ? std::to_string(kDefaultNetPort) : port;
+    netAddr_ = Trim(ini_.getLauncher("net_join"));
+  }
   const std::string coop = Canonical("coopdisplay", ini_.getLauncher("coop_display"));
   if (coop == "gc" || coop == "4x3" || coop == "wide" || coop == "windows") {
     coopDisplay_ = coop;
@@ -638,10 +695,11 @@ void App::back() {
     sfx_play(Sfx::Back);
     return;
   }
-  if (page_ == Page::Coop || page_ == Page::Options) {
+  if (page_ == Page::Coop || page_ == Page::Options || page_ == Page::Net) {
     if (page_ == Page::Options) saveSettings(false);
+    if (page_ == Page::Net) netLeave();
     sfx_play(Sfx::Back);
-    setPage(Page::Home, page_ == Page::Coop ? kIdCoop : kIdOptions);
+    setPage(Page::Home, page_ == Page::Coop ? kIdCoop : page_ == Page::Net ? kIdNet : kIdOptions);
   }
 }
 
@@ -701,6 +759,7 @@ void App::handleEvent(SDL_Event& e) {
     for (const Item& it : prevItems_)
       if (it.r.contains(mx_, my_) && it.id == pressId_) {
         pendingActivate_ = it.id;
+        pendingActivatedBy_ = 0;
         clickX_ = mx_;
         focus_ = it.id;
       }
@@ -724,16 +783,41 @@ void App::handleEvent(SDL_Event& e) {
       sfx_play(Sfx::Hover);
       break;
     }
+    case SDLK_SPACE:
+      if (page_ == Page::Net && (focus_ == kIdNetAddr || focus_ == kIdNetPort)) break;  // (typing)
+      [[fallthrough]];
     case SDLK_RETURN:
     case SDLK_KP_ENTER:
-    case SDLK_SPACE:
-      if (!e.key.repeat) pendingActivate_ = focus_, clickX_ = -1;
+      if (!e.key.repeat) pendingActivate_ = focus_, pendingActivatedBy_ = 1, clickX_ = -1;
       break;
-    case SDLK_ESCAPE:
     case SDLK_BACKSPACE:
+      // On the Network play page Backspace erases (Esc goes back); it repeats while held.
+      if (page_ == Page::Net && !error_.open) {
+        if (focus_ != kIdNetAddr && focus_ != kIdNetPort) focus_ = editField_;
+        netType((e.key.mod & SDL_KMOD_CTRL) ? "\x7f" : "\b");
+        break;
+      }
       if (!e.key.repeat) pendingBack_ = true;
       break;
+    case SDLK_ESCAPE:
+      if (!e.key.repeat) pendingBack_ = true;
+      break;
+    case SDLK_V:
+      if ((e.key.mod & SDL_KMOD_CTRL) && page_ == Page::Net && !error_.open)
+        if (char* clip = SDL_GetClipboardText()) {
+          if (focus_ != kIdNetAddr && focus_ != kIdNetPort) focus_ = editField_;
+          netType(clip);
+          SDL_free(clip);
+        }
+      break;
     default: break;
+    }
+    break;
+  case SDL_EVENT_TEXT_INPUT:
+    // Typing on the Network play page goes into the address (or port) field, wherever the focus is.
+    if (page_ == Page::Net && !error_.open && e.text.text) {
+      if (focus_ != kIdNetAddr && focus_ != kIdNetPort) focus_ = editField_;
+      netType(e.text.text);
     }
     break;
   case SDL_EVENT_GAMEPAD_ADDED:
@@ -759,7 +843,10 @@ void App::handleEvent(SDL_Event& e) {
     case SDL_GAMEPAD_BUTTON_DPAD_LEFT: heldDx_ = -1, heldDy_ = 0, heldTime_ = heldNext_ = 0; break;
     case SDL_GAMEPAD_BUTTON_DPAD_RIGHT: heldDx_ = 1, heldDy_ = 0, heldTime_ = heldNext_ = 0; break;
     case SDL_GAMEPAD_BUTTON_SOUTH:
-    case SDL_GAMEPAD_BUTTON_START: pendingActivate_ = focus_, clickX_ = -1; break;
+    case SDL_GAMEPAD_BUTTON_START: pendingActivate_ = focus_, pendingActivatedBy_ = 2, clickX_ = -1; break;
+    case SDL_GAMEPAD_BUTTON_WEST:  // X: erase a character on the Network play page
+      if (page_ == Page::Net && !error_.open) netType("\b");
+      break;
     case SDL_GAMEPAD_BUTTON_EAST:
     case SDL_GAMEPAD_BUTTON_BACK: pendingBack_ = true; break;
     default: break;
@@ -799,12 +886,39 @@ void App::showError(const std::string& title, const std::string& body, const std
   error_.body = body;
   error_.excerpt = excerpt;
   error_.offerFolder = folder;
+  error_.detail.clear();
+  error_.folder.clear();
+  error_.folderLabel.clear();
   focus_ = folder ? kIdErrorFolder : kIdErrorOk;
   sfx_play(Sfx::Error);
 }
 
-void App::launch(bool coop) {
+void App::launch(Mode mode) {
   if (!disc_.ok() || game_.running()) return;
+  const bool coop = mode == Mode::Coop, net = mode == Mode::Host || mode == Mode::Join;
+  // Network play: the port and (joining) the host's address, checked before anything starts.
+  int port = netPort();
+  std::string joinHost;
+  if (net) {
+    if (!port) {
+      netMessage_ = "The port must be a number from 1 to 65535";
+      netMessageTime_ = 0;
+      focus_ = editField_ = kIdNetPort;
+      sfx_play(Sfx::Error);
+      return;
+    }
+    if (mode == Mode::Join) {
+      const std::string why = check_address(netAddr_, joinHost, port);
+      if (!why.empty()) {
+        netMessage_ = why;
+        netMessageTime_ = 0;
+        focus_ = editField_ = kIdNetAddr;
+        sfx_play(Sfx::Error);
+        return;
+      }
+    }
+    netLeave();  // remembers the port and the address
+  }
   saveSettings(true);
   LaunchRequest r;
 #ifdef _WIN32
@@ -822,6 +936,15 @@ void App::launch(bool coop) {
   r.args = {"--iso", disc_.path};
   const bool quick = coop && flag("quick_coop");
   r.args.push_back(std::string("--split=") + (coop ? coopDisplay_ : std::string("gc")));
+  statusPath_.clear();
+  if (net) {
+    // The game reports how the session went (refused, no answer, left, out of step) in this file.
+    statusPath_ = baseDir_ + "net_status.txt";
+    SDL_RemovePath(statusPath_.c_str());
+    if (mode == Mode::Host) r.args.insert(r.args.end(), {"--host", std::to_string(port)});
+    else r.args.insert(r.args.end(), {"--join", joinHost + ":" + std::to_string(port)});
+    r.args.insert(r.args.end(), {"--net-status", statusPath_});
+  }
   r.workingDir = gameDir_ = DirName(r.exe);
   r.stdoutPath = baseDir_ + "game_out.txt";
   r.stderrPath = baseDir_ + "game_log.txt";
@@ -866,12 +989,24 @@ void App::launch(bool coop) {
     return;
   }
   coopRunning_ = coop;
+  runMode_ = mode;
   runningMode_ = coop ? std::string("Co-op \xC2\xB7 ") +
                             (coopDisplay_ == "windows" ? "Two windows"
                              : coopDisplay_ == "wide"  ? "One wide window"
                              : coopDisplay_ == "4x3"   ? "Two 4:3 halves"
                                                        : "GameCube split")
                       : std::string("One player");
+  netInfo_.clear(), netInfo2_.clear();
+  if (mode == Mode::Host) {
+    runningMode_ = "Network play \xC2\xB7 Hosting \xC2\xB7 Player 1";
+    netInfo_ = (lan_.empty() ? std::string("Tell your friend this PC's address") : "Tell your friend: " + lan_.front().address) +
+               "  \xC2\xB7  port " + std::to_string(port);
+    netInfo2_ = "The game shows \xE2\x80\x9CWaiting for player 2 to join\xE2\x80\x9D until your friend presses Join.";
+  } else if (mode == Mode::Join) {
+    runningMode_ = "Network play \xC2\xB7 Joining \xC2\xB7 Player 2";
+    netInfo_ = "Joining " + joinHost + "  \xC2\xB7  port " + std::to_string(port);
+    netInfo2_ = "The game keeps trying for a minute, so it doesn't matter who starts first.";
+  }
   sfx_play(Sfx::Launch);
   setPage(Page::Playing, kIdForceQuit);
   if (window_) {
@@ -927,8 +1062,13 @@ void App::pollGame() {
   }
   openPads();
   loadIni();  // the game's F1 options may have saved changes
-  setPage(Page::Home, kIdPlay);
+  const bool net = runMode_ == Mode::Host || runMode_ == Mode::Join;
+  setPage(net ? Page::Net : Page::Home, net ? (runMode_ == Mode::Host ? kIdNetHost : kIdNetJoin) : kIdPlay);
   afterGameFrames_ = 0;
+
+  // Network play: the game's own account of the session (refused, no answer, partner left, out of
+  // step) explains the end better than an exit code. A crash report still wins.
+  if (net && report.empty() && !forceQuit_ && reportNetStatus(statusPath_, code, true)) return;
 
   // A clean exit (code 0, no crash report) or the player's own "Force quit": no message.
   if (report.empty() && (code == 0 || forceQuit_)) return;
@@ -971,6 +1111,74 @@ void App::pollGame() {
   body += " Please send these files with your report: " + files + " (the button below opens their folder).";
   if (gameDir_ != baseDir_ && (!report.empty() || haveDump)) body += " The crash files are in " + gameDir_ + ".";
   showError("Uh-oh! Something went wrong", body, excerpt, true);
+}
+
+// Network play: net_status.txt (the game's --net-status file, written during this run when `fresh`):
+// "key=value" lines: result=, role=, tick=, folder=, message= (one per line). Shows what happened in
+// plain words; true if that was the whole story (nothing more to say about the exit).
+bool App::reportNetStatus(const std::string& path, int code, bool fresh) {
+  SDL_Time t = 0;
+  if (path.empty() || !FileExists(path, &t) || (fresh && t < launchTime_)) return false;
+  size_t size = 0;
+  void* data = SDL_LoadFile(path.c_str(), &size);
+  if (!data) return false;
+  const std::string text(static_cast<const char*>(data), size);
+  SDL_free(data);
+  std::string result, role, folder, message, tick;
+  size_t start = 0;
+  while (start < text.size()) {
+    size_t end = text.find('\n', start);
+    if (end == std::string::npos) end = text.size();
+    std::string l = text.substr(start, end - start);
+    start = end + 1;
+    if (!l.empty() && l.back() == '\r') l.pop_back();
+    const size_t eq = l.find('=');
+    if (eq == std::string::npos) continue;
+    const std::string k = l.substr(0, eq), v = l.substr(eq + 1);
+    if (k == "result") result = v;
+    else if (k == "role") role = v;
+    else if (k == "folder") folder = v;
+    else if (k == "tick") tick = v;
+    else if (k == "message") message += (message.empty() ? "" : "\n") + v;
+  }
+  if (SDL_IOStream* log = SDL_IOFromFile((baseDir_ + "simmy_launcher_log.txt").c_str(), "ab")) {
+    SDL_IOprintf(log, "    network play: %s (%s, tick %s)%s%s\n", result.c_str(), role.c_str(), tick.c_str(),
+                 message.empty() ? "" : ": ", message.c_str());
+    SDL_CloseIO(log);
+  }
+  const bool host = role == "host";
+  const std::string friendName = host ? "Your friend (player 2)" : "Your friend (player 1, the host)";
+  // Over: this PC quit, or the player closed the waiting window; or the game ended while still playing.
+  if (result == "quit" || result == "cancelled" || result == "playing" || result == "connecting") return code == 0;
+  auto show = [&](const std::string& title, const std::string& body, const std::string& folderPath, const char* label) {
+    showError(title, body, "", !folderPath.empty());
+    error_.detail = message;
+    error_.folder = folderPath;
+    error_.folderLabel = label ? label : "";
+  };
+  if (result == "refused") {
+    show("Can't play together", "The two games checked each other when they connected. This is different:", "", nullptr);
+  } else if (result == "failed") {
+    if (host)
+      show("Couldn't start hosting", "The game couldn't wait for your friend on this PC:", "", nullptr);
+    else
+      show("Couldn't reach the host",
+           "Check the address, that your friend pressed \xE2\x80\x9CHost a game\xE2\x80\x9D first, and that their firewall lets simmy.exe in.",
+           "", nullptr);
+  } else if (result == "left") {
+    show("Network play ended", friendName + " left the game.", "", nullptr);
+  } else if (result == "lost" || result == "timeout") {
+    show("The connection was lost", "The connection to " + std::string(host ? "player 2" : "the host") + " broke off, so network play ended.", "", nullptr);
+  } else if (result == "desync") {
+    show("The games went out of step",
+         "The two PCs stopped agreeing on what happens in the game (at tick " + tick +
+             "), so network play stopped. That's a bug: please send the files in the session folder from BOTH PCs with your report.",
+         folder, "Open session folder");
+    if (!folder.empty()) error_.detail = "Session folder: " + folder + "\n(desync_*.txt, net_*.rec, and game_log.txt next to the launcher)";
+  } else {
+    return false;
+  }
+  return true;
 }
 
 // ---- widgets --------------------------------------------------------------------------------------
@@ -1125,6 +1333,94 @@ bool App::layoutCard(int id, Rect r, int split, const char* title, const char* h
   return !blocked_ && activated_ == id;
 }
 
+// A one-line text field (the Network play page's address and port): white, the text in dark blue, a
+// caret while typing goes here (editField_), green edge then.
+void App::textField(int id, Rect r, const std::string& text, const std::string& placeholder, FontId font) {
+  reg(id, r, Kind::Field);
+  const float hv = hover(id);
+  const bool target = editField_ == id;
+  float& t = toggleAnim_[id];
+  t = Approach(t, target ? 1.0f : 0.0f, 0.3f);
+  canvas_.pushZoom(r.cx(), r.cy(), 1.0f + 0.015f * hv);
+  if (hv > 0.01f) canvas_.roundRectGlow(r, 14, 14, rgb(0xFFFFFF, 0.5f * hv));
+  canvas_.roundRect(r, 14, rgb(0xFFFFFF, 0.97f), rgb(0xE4F0FC, 0.97f));
+  canvas_.roundRect(Rect{r.x + 3, r.y + 3, r.w - 6, 6}, 3, rgb(0x0B2F6B, 0.10f), rgb(0x0B2F6B, 0.0f));  // inset shade
+  canvas_.roundRectStroke(r, 14, 1.5f + 1.5f * t, mix(rgb(0x9CC6F0), rgb(0x46C42F), t));
+  const float pad = 18;
+  const std::string shown = canvas_.ellipsize(font, text, r.w - 2 * pad - 8);
+  if (text.empty())
+    canvas_.textMid(font, r.x + pad, r.cy(), canvas_.ellipsize(font, placeholder, r.w - 2 * pad), rgb(0x8AA6C8));
+  else
+    canvas_.textMid(font, r.x + pad, r.cy(), shown, rgb(0x163F7A));
+  if (target && std::fmod(time_, 1.0f) < 0.6f) {
+    const float cx = r.x + pad + (text.empty() ? 0.0f : canvas_.textWidth(font, shown)) + 2;
+    const float ch = canvas_.capHeight(font) * 1.35f;
+    canvas_.rect(Rect{cx, r.cy() - ch * 0.55f, 2.2f, ch * 1.1f}, rgb(0x2C7AD6), rgb(0x2C7AD6));
+  }
+  canvas_.pop();
+  if (!blocked_ && activated_ == id) {
+    editField_ = id;
+    sfx_play(Sfx::Click);
+    if (id == kIdNetAddr && activatedBy_ == 1) launch(Mode::Join);  // Enter in the address field: join
+    else if (activatedBy_ == 2) focus_ = kIdNetKey0;                // A on a controller: to the keys
+  }
+}
+
+void App::netType(const std::string& text) {
+  std::string& f = editField_ == kIdNetPort ? netPortText_ : netAddr_;
+  const size_t maxLen = editField_ == kIdNetPort ? 5 : 64;
+  bool changed = false;
+  for (char ch : text) {
+    if (ch == '\b') {
+      if (!f.empty()) f.pop_back(), changed = true;
+    } else if (ch == '\x7f') {
+      if (!f.empty()) f.clear(), changed = true;
+    } else if (f.size() < maxLen) {
+      const unsigned char c = static_cast<unsigned char>(ch);
+      const bool ok = editField_ == kIdNetPort ? std::isdigit(c) != 0
+                                               : (std::isalnum(c) || ch == '.' || ch == ':' || ch == '-');
+      if (ok) f += ch, changed = true;
+    }
+  }
+  if (changed) {
+    netMessage_.clear();
+    sfx_play(Sfx::Hover);
+  }
+}
+
+int App::netPort() const {
+  if (netPortText_.empty() || netPortText_.size() > 5) return 0;
+  const long v = std::strtol(netPortText_.c_str(), nullptr, 10);
+  return v >= 1 && v <= 65535 ? static_cast<int>(v) : 0;
+}
+
+void App::netLeave() {
+  // The port: simmy.ini [net] port (the game reads it too), written once it is not the default or is
+  // already there; the last address typed: [launcher] net_join.
+  bool changed = false;
+  const int port = netPort();
+  ini_.load(iniPath_);
+  if (port && (port != kDefaultNetPort || !ini_.getSection("net", "port").empty()) &&
+      ini_.getSection("net", "port") != std::to_string(port)) {
+    ini_.setSection("net", "port", std::to_string(port), "Network play (docs/netplay.md). The port both PCs use; SimmyLauncher's Network play page sets it.");
+    changed = true;
+  }
+  if (Trim(netAddr_) != ini_.getLauncher("net_join")) {
+    ini_.setLauncher("net_join", Trim(netAddr_));
+    changed = true;
+  }
+  std::string message;
+  if (changed && !ini_.save(message)) toast_ = Toast{message, 0};
+}
+
+void App::refreshLan() {
+  lan_ = lan_ipv4_addresses();
+  lanAge_ = 0;
+  std::string list;
+  for (const LanAddress& l : lan_) list += " " + l.address + (l.adapter.empty() ? "" : " (" + l.adapter + ")") + (l.primary ? "*" : "");
+  std::fprintf(stderr, "[launcher] LAN addresses:%s\n", list.empty() ? " none" : list.c_str());
+}
+
 void App::panel(Rect r, const std::string& title) {
   canvas_.roundRectGlow(Rect{r.x, r.y + 8, r.w, r.h}, 22, 22, rgb(0x062457, 0.30f));
   canvas_.roundRect(r, 22, rgb(0x2C7AD6, 0.93f), rgb(0x1A4A99, 0.95f));
@@ -1234,27 +1530,27 @@ void App::drawHome() {
     }
   }
 
-  // The big buttons.
+  // The big buttons (the column ends with the disc card, at 616).
   const bool ok = disc_.ok();
-  if (button(kIdPlay, Rect{620, 298, 420, 100}, "Play", Style::Green, Icon::Play, ok, kFontButtonBig,
-             "One player \xC2\xB7 start the game"))
-    launch(false);
-  if (button(kIdCoop, Rect{620, 414, 420, 82}, "Co-op", Style::Blue, Icon::People, ok, kFontButtonBig,
+  const std::string hint = haveDisc_ ? "Choose a working disc to play" : "Choose your disc first, then press Play";
+  if (button(kIdPlay, Rect{620, 298, 420, 92}, "Play", Style::Green, Icon::Play, ok, kFontButtonBig,
+             ok ? "One player \xC2\xB7 start the game" : hint))
+    launch(Mode::Play);
+  if (button(kIdCoop, Rect{620, 402, 420, 70}, "Co-op", Style::Blue, Icon::People, ok, kFontButtonBig,
              pads_.size() >= 2 ? "Two players \xC2\xB7 2 controllers ready" : "Two players \xC2\xB7 split screen or two windows")) {
     sfx_play(Sfx::Click);
     setPage(Page::Coop, kIdCoopStart);
   }
-  if (button(kIdOptions, Rect{620, 512, 204, 58}, "Options", Style::Blue, Icon::Gear)) {
+  if (button(kIdNet, Rect{620, 484, 420, 70}, "Network play", Style::Blue, Icon::Network, ok, kFontButtonBig,
+             "Two PCs \xC2\xB7 host a game or join a friend's")) {
+    sfx_play(Sfx::Click);
+    setPage(Page::Net, kIdNetHost);
+  }
+  if (button(kIdOptions, Rect{620, 566, 204, 50}, "Options", Style::Blue, Icon::Gear)) {
     sfx_play(Sfx::Click);
     setPage(Page::Options, kIdSetting0);
   }
-  if (button(kIdQuit, Rect{836, 512, 204, 58}, "Quit", Style::Ghost, Icon::Power)) quit_ = true;
-  if (!ok) {
-    const std::string hint = haveDisc_ ? "Choose a working disc to play" : "Choose your disc first, then press Play";
-    const float w = canvas_.textWidth(kFontSmall, hint) + 36;
-    canvas_.roundRect(Rect{830 - w * 0.5f, 582, w, 30}, 15, rgb(0x0E3A7A, 0.55f), rgb(0x0E3A7A, 0.65f));
-    canvas_.textMid(kFontSmall, 830, 597, hint, rgb(0xFFFFFF), Align::Center);
-  }
+  if (button(kIdQuit, Rect{836, 566, 204, 50}, "Quit", Style::Ghost, Icon::Power)) quit_ = true;
 }
 
 void App::drawCoop() {
@@ -1324,7 +1620,7 @@ void App::drawCoop() {
 
   if (button(kIdCoopBack, Rect{60, 580, 170, 52}, "Back", Style::Ghost, Icon::Back)) back();
   if (button(kIdCoopStart, Rect{760, 576, 280, 60}, "Start co-op", Style::Green, Icon::Play, disc_.ok(), kFontButton))
-    launch(true);
+    launch(Mode::Coop);
 }
 
 void App::drawOptions() {
@@ -1365,6 +1661,96 @@ void App::drawOptions() {
   }
 }
 
+void App::drawNet() {
+  drawHeader("Network play", "Two PCs, one household: player 1 hosts, player 2 joins. Each PC shows its own Sim.");
+  if (lanAge_ > 10.0f) refreshLan();  // (cheap; picks up a cable plugged in while the page is open)
+  const int port = netPort();
+  const std::string portText = port ? std::to_string(port) : std::string("?");
+
+  // Host.
+  const Rect host{60, 120, 490, 446};
+  panel(host, "HOST A GAME \xC2\xB7 YOU ARE PLAYER 1");
+  canvas_.textWrapped(kFontBody, host.x + 24, host.y + 46, host.w - 48, "Your friend connects to this PC. Tell them this address:",
+                      rgb(0xE4F2FF), 1.05f, 2);
+  const Rect card{host.x + 22, host.y + 78, host.w - 44, 96};
+  canvas_.roundRect(card, 16, rgb(0x0E3A7A, 0.55f), rgb(0x0E3A7A, 0.7f));
+  canvas_.roundRectStroke(card, 16, 1.2f, rgb(0xFFFFFF, 0.3f));
+  if (lan_.empty()) {
+    canvas_.text(kFontButtonBig, card.x + 20, card.y + 46, "No network found", rgb(0xFFFFFF));
+    canvas_.text(kFontSmall, card.x + 21, card.y + 72, "Connect this PC to your home network (cable or Wi-Fi).", rgb(0xFFE7A8));
+  } else {
+    const LanAddress& a = lan_.front();
+    canvas_.textShadow(kFontTitle, card.x + 20, card.y + 50, a.address, rgb(0xFFFFFF), rgb(0x061A3D, 0.6f), Align::Left, 2.0f);
+    std::string under = a.adapter.empty() ? std::string("This PC on your network") : a.adapter;
+    canvas_.text(kFontSmall, card.x + 21, card.y + 76, canvas_.ellipsize(kFontSmall, under, card.w - 190), rgb(0xCFE6FF));
+  }
+  // The port, on the card's right.
+  {
+    const Rect pr{card.x + card.w - 128, card.y + 18, 110, 60};
+    canvas_.roundRect(pr, 12, rgb(0xFFFFFF, 0.14f), rgb(0xFFFFFF, 0.08f));
+    canvas_.text(kFontLabel, pr.cx(), pr.y + 20, "PORT", rgb(0xCFEBFF), Align::Center);
+    canvas_.text(kFontButton, pr.cx(), pr.y + 46, portText, port ? rgb(0xFFFFFF) : rgb(0xFFB25A), Align::Center);
+  }
+  float y = card.y + card.h + 12;
+  if (lan_.size() > 1) {
+    canvas_.text(kFontSmall, host.x + 26, y + 17, "Other addresses:", rgb(0xCFE6FF));
+    float x = host.x + 26 + canvas_.textWidth(kFontSmall, "Other addresses:") + 10, w = 0;
+    for (size_t i = 1; i < lan_.size(); ++i) {
+      const std::string t = lan_[i].address;
+      if (x + canvas_.textWidth(kFontLabel, t) + 22 > host.x + host.w - 22) break;
+      chip(x, y, t, rgb(0x0E3A7A, 0.55f), rgb(0xFFFFFF), &w);
+      x += w + 6;
+    }
+    y += 34;
+  }
+  const std::string tips =
+      "\xE2\x80\xA2 Same home network: that's all your friend needs.\n"
+      "\xE2\x80\xA2 Windows asks whether simmy.exe may use networks: allow it on private networks.\n"
+      "\xE2\x80\xA2 Over the internet: forward TCP port " + portText +
+      " on your router to this PC and give your friend your public address.";
+  canvas_.textWrapped(kFontSmall, host.x + 26, y + 4, host.w - 52, tips, rgb(0xDCEEFF), 1.12f, 7);
+  if (button(kIdNetHost, Rect{host.x + 22, host.y + host.h - 80, host.w - 44, 60}, "Host a game", Style::Green, Icon::Network,
+             disc_.ok(), kFontButton))
+    launch(Mode::Host);
+
+  // Join.
+  const Rect join{570, 120, 470, 446};
+  panel(join, "JOIN A GAME \xC2\xB7 YOU ARE PLAYER 2");
+  canvas_.textWrapped(kFontBody, join.x + 24, join.y + 46, join.w - 48, "Type the address your friend's launcher shows:",
+                      rgb(0xE4F2FF), 1.05f, 2);
+  textField(kIdNetAddr, Rect{join.x + 22, join.y + 78, join.w - 44, 56}, netAddr_, "e.g. 192.168.1.20", kFontButtonBig);
+  if (!netMessage_.empty()) {
+    canvas_.circleGradient(Vec2{join.x + 34, join.y + 151}, 8, rgb(0xFFC170), rgb(0xE85E1C));
+    canvas_.textMid(kFontLabel, join.x + 34, join.y + 151, "!", rgb(0xFFFFFF), Align::Center);
+    canvas_.textMid(kFontSmall, join.x + 48, join.y + 151, canvas_.ellipsize(kFontSmall, netMessage_, join.w - 74), rgb(0xFFE7A8));
+  } else {
+    canvas_.textMid(kFontSmall, join.x + 26, join.y + 151,
+                    "Type it, or use the keys below. Add :port if your friend changed it.", rgb(0xCFE6FF, 0.9f));
+  }
+  // The keys (controllers; the mouse too).
+  const float kx = join.x + 22, ky = join.y + 170, kw = (join.w - 44 - 3 * 10) / 4.0f, kh = 40, kg = 8;
+  for (int i = 0; i < kNetKeyCount; ++i) {
+    const NetKey& k = kNetKeys[i];
+    const Rect r{kx + static_cast<float>(k.col) * (kw + 10), ky + static_cast<float>(k.row) * (kh + kg),
+                 kw * static_cast<float>(k.span) + 10.0f * static_cast<float>(k.span - 1), kh};
+    const bool erase = k.text[0] == '\b';
+    if (button(kIdNetKey0 + i, r, k.label, Style::Ghost, erase ? Icon::Erase : Icon::None, true, kFontButton)) {
+      if (editField_ == kIdNetPort && (k.text[0] == '.' || k.text[0] == ':')) editField_ = kIdNetAddr;
+      netType(k.text);
+    }
+  }
+  if (button(kIdNetJoin, Rect{join.x + 22, join.y + join.h - 80, join.w - 44, 60}, "Join game", Style::Green, Icon::Play,
+             disc_.ok(), kFontButton))
+    launch(Mode::Join);
+
+  // Back, and the port.
+  if (button(kIdNetBack, Rect{60, 580, 170, 52}, "Back", Style::Ghost, Icon::Back)) back();
+  canvas_.textShadow(kFontLabel, 262, 611, "PORT", rgb(0xCFEBFF), rgb(0x0B2F6B, 0.5f));
+  textField(kIdNetPort, Rect{304, 582, 118, 48}, netPortText_, "27450", kFontButton);
+  canvas_.textWrapped(kFontSmall, 436, 588, 300, "Both PCs use the same port. 27450 unless you need another.",
+                      rgb(0xFFFFFF, 0.92f), 1.05f, 2);
+}
+
 void App::drawPlaying() {
   const float spin = time_ * 2.4f;
   draw_plumbob(canvas_, kW * 0.5f, 210 + std::sin(time_ * 2.0f) * 6, 170, spin, 1.0f, true);
@@ -1375,13 +1761,19 @@ void App::drawPlaying() {
   float w = 0;
   const float cw = canvas_.textWidth(kFontLabel, runningMode_) + 22;
   chip(kW * 0.5f - cw * 0.5f, 486, runningMode_, rgb(0x0E3A7A, 0.55f), rgb(0xFFFFFF), &w);
-  static const char* const kTips[] = {
-      "Reticulating splines\xE2\x80\xA6",       "Polishing the plumbob\xE2\x80\xA6",    "Fluffing the sofa cushions\xE2\x80\xA6",
-      "Teaching the toddlers Simlish\xE2\x80\xA6", "Watering the neighbourhood\xE2\x80\xA6", "Tuning the stereo to Simlish pop\xE2\x80\xA6"};
-  const int tip = static_cast<int>(time_ / 3.2f) % 6;
-  const float phase = std::fmod(time_, 3.2f);
-  const float a = std::min(1.0f, std::min(phase / 0.4f, (3.2f - phase) / 0.4f));
-  canvas_.text(kFontSmall, kW * 0.5f, 548, kTips[tip], rgb(0xFFFFFF, 0.85f * a), Align::Center);
+  if (!netInfo_.empty()) {
+    // Network play: the address to give the friend (hosting) or the one being joined.
+    canvas_.textShadow(kFontButton, kW * 0.5f, 542, netInfo_, rgb(0xFFFFFF), rgb(0x0B2F6B, 0.55f), Align::Center, 1.5f);
+    canvas_.textShadow(kFontSmall, kW * 0.5f, 568, netInfo2_, rgb(0xFFFFFF, 0.9f), rgb(0x0B2F6B, 0.5f), Align::Center);
+  } else {
+    static const char* const kTips[] = {
+        "Reticulating splines\xE2\x80\xA6",       "Polishing the plumbob\xE2\x80\xA6",    "Fluffing the sofa cushions\xE2\x80\xA6",
+        "Teaching the toddlers Simlish\xE2\x80\xA6", "Watering the neighbourhood\xE2\x80\xA6", "Tuning the stereo to Simlish pop\xE2\x80\xA6"};
+    const int tip = static_cast<int>(time_ / 3.2f) % 6;
+    const float phase = std::fmod(time_, 3.2f);
+    const float a = std::min(1.0f, std::min(phase / 0.4f, (3.2f - phase) / 0.4f));
+    canvas_.text(kFontSmall, kW * 0.5f, 548, kTips[tip], rgb(0xFFFFFF, 0.85f * a), Align::Center);
+  }
   if (button(kIdForceQuit, Rect{kW * 0.5f - 85, 588, 170, 46}, "Force quit", Style::Ghost, Icon::Stop, game_.running(),
              kFontHeading)) {
     forceQuit_ = true;
@@ -1392,7 +1784,8 @@ void App::drawPlaying() {
 void App::drawError() {
   if (!error_.open) return;
   canvas_.rect(Rect{0, 0, kW, kH}, rgb(0x04122E, 0.55f), rgb(0x04122E, 0.65f));
-  const Rect r{kW * 0.5f - 330, 130, 660, 420};
+  const bool tall = !error_.detail.empty();  // network play's reasons can run to several lines
+  const Rect r{kW * 0.5f - 330, tall ? 88.0f : 130.0f, 660, tall ? 504.0f : 420.0f};
   canvas_.roundRectGlow(Rect{r.x, r.y + 10, r.w, r.h}, 26, 30, rgb(0x000814, 0.45f));
   canvas_.roundRect(r, 26, rgb(0x2C7AD6), rgb(0x18418A));
   canvas_.roundRect(Rect{r.x + 3, r.y + 3, r.w - 6, 60}, 23, rgb(0xFFFFFF, 0.16f), rgb(0xFFFFFF, 0.0f));
@@ -1404,7 +1797,15 @@ void App::drawError() {
   canvas_.textMid(kFontTitle, badge.x, badge.y, "!", rgb(0xFFFFFF), Align::Center);
   canvas_.text(kFontTitle, r.x + 112, r.y + 66, canvas_.ellipsize(kFontTitle, error_.title, r.w - 140), rgb(0xFFFFFF));
   const float bodyH = canvas_.textWrapped(kFontBody, r.x + 36, r.y + 110, r.w - 72, error_.body, rgb(0xE8F4FF), 1.1f, 5);
-  if (!error_.excerpt.empty()) {
+  if (!error_.detail.empty()) {
+    // Network play's reason, in the game's words, wrapped.
+    const Rect box{r.x + 30, r.y + 122 + bodyH, r.w - 60, r.h - 214 - bodyH};
+    if (box.h > 30) {
+      canvas_.roundRect(box, 12, rgb(0x061A3D, 0.6f), rgb(0x061A3D, 0.7f));
+      const int maxLines = std::max(1, static_cast<int>((box.h - 16) / 20.0f));
+      canvas_.textWrapped(kFontSmall, box.x + 16, box.y + 8, box.w - 32, error_.detail, rgb(0xDCEBFF), 1.12f, maxLines);
+    }
+  } else if (!error_.excerpt.empty()) {
     const Rect box{r.x + 30, r.y + 122 + bodyH, r.w - 60, r.h - 214 - bodyH};
     if (box.h > 30) {
       canvas_.roundRect(box, 12, rgb(0x061A3D, 0.6f), rgb(0x061A3D, 0.7f));
@@ -1422,14 +1823,17 @@ void App::drawError() {
   }
   const bool saved = blocked_;
   blocked_ = false;
-  if (error_.offerFolder && button(kIdErrorFolder, Rect{r.x + 30, r.y + r.h - 78, 250, 52}, "Open log folder", Style::Blue, Icon::Folder)) {
+  const std::string folderLabel = error_.folderLabel.empty() ? std::string("Open log folder") : error_.folderLabel;
+  const float folderW = std::max(250.0f, canvas_.textWidth(kFontButton, folderLabel) + 90);
+  if (error_.offerFolder && button(kIdErrorFolder, Rect{r.x + 30, r.y + r.h - 78, folderW, 52}, folderLabel, Style::Blue, Icon::Folder)) {
     sfx_play(Sfx::Click);
-    open_folder(baseDir_);
+    open_folder(error_.folder.empty() ? baseDir_ : error_.folder);
   }
   if (button(kIdErrorOk, Rect{r.x + r.w - 190, r.y + r.h - 78, 160, 52}, "OK", Style::Green, Icon::None)) {
     error_.open = false;
     sfx_play(Sfx::Back);
     focus_ = page_ == Page::Home ? kIdPlay : focus_;
+    if (page_ == Page::Net) focus_ = runMode_ == Mode::Host ? kIdNetHost : kIdNetJoin;
   }
   blocked_ = saved;
 }
@@ -1472,9 +1876,11 @@ void App::drawHints() {
     const char* what;
     Color color;
   };
-  const Hint hints[2] = {{pad ? "A" : "Enter", "Select", rgb(0x3FB43A)}, {pad ? "B" : "Esc", "Back", rgb(0xD84A4A)}};
+  const Hint hints[3] = {{pad ? "A" : "Enter", "Select", rgb(0x3FB43A)}, {pad ? "B" : "Esc", "Back", rgb(0xD84A4A)},
+                         {pad ? "X" : "Bksp", "Erase", rgb(0x3E7FE0)}};
   float x = kW - 62;
-  for (int i = page_ == Page::Home ? 0 : 1; i >= 0; --i) {
+  const int last = page_ == Page::Home ? 0 : page_ == Page::Net && !error_.open ? 2 : 1;
+  for (int i = last; i >= 0; --i) {
     const Hint& h = hints[i];
     const float tw = canvas_.textWidth(kFontSmall, h.what);
     x -= tw;
@@ -1491,6 +1897,15 @@ void App::drawHints() {
 void App::frame(float dt) {
   time_ += dt;
   pageTime_ += dt;
+  lanAge_ += dt;
+  // Network play: keyboard text goes to the address / port field while the page is open.
+  const bool wantText = page_ == Page::Net && !error_.open && window_;
+  if (wantText != textInput_) {
+    if (wantText) SDL_StartTextInput(window_);
+    else if (window_) SDL_StopTextInput(window_);
+    textInput_ = wantText;
+  }
+  activatedBy_ = pendingActivatedBy_;
   toast_.time += dt;
   flashTime_ -= dt;
   activated_ = pendingActivate_;
@@ -1517,6 +1932,7 @@ void App::frame(float dt) {
   case Page::Home: drawHome(); break;
   case Page::Coop: drawCoop(); break;
   case Page::Options: drawOptions(); break;
+  case Page::Net: drawNet(); break;
   case Page::Playing: drawPlaying(); break;
   }
   canvas_.pop();
@@ -1587,10 +2003,24 @@ int App::run() {
   }
   focus_ = disc_.ok() ? kIdPlay : kIdChooseDisc;
 
+  if (opt_.netAddrSet) netAddr_ = opt_.netAddr;
+  if (opt_.page == "net" || opt_.page == "hosting" || opt_.page == "joining") refreshLan();
   if (opt_.page == "coop") setPage(Page::Coop, kIdCoopStart);
   else if (opt_.page == "options") setPage(Page::Options, kIdSetting0);
+  else if (opt_.page == "net") setPage(Page::Net, opt_.netAddrSet ? kIdNetAddr : kIdNetHost);
   else if (opt_.page == "playing") {
     runningMode_ = std::string("Co-op \xC2\xB7 Two windows");
+    setPage(Page::Playing, kIdForceQuit);
+  } else if (opt_.page == "hosting" || opt_.page == "joining") {
+    // The Playing page as a network launch leaves it (the game itself is not started).
+    const bool hosting = opt_.page == "hosting";
+    runMode_ = hosting ? Mode::Host : Mode::Join;
+    runningMode_ = hosting ? "Network play \xC2\xB7 Hosting \xC2\xB7 Player 1" : "Network play \xC2\xB7 Joining \xC2\xB7 Player 2";
+    netInfo_ = hosting ? (lan_.empty() ? std::string("Tell your friend this PC's address") : "Tell your friend: " + lan_.front().address) +
+                             "  \xC2\xB7  port " + netPortText_
+                       : "Joining " + (netAddr_.empty() ? std::string("192.168.1.20") : netAddr_) + "  \xC2\xB7  port " + netPortText_;
+    netInfo2_ = hosting ? "The game shows \xE2\x80\x9CWaiting for player 2 to join\xE2\x80\x9D until your friend presses Join."
+                        : "The game keeps trying for a minute, so it doesn't matter who starts first.";
     setPage(Page::Playing, kIdForceQuit);
   } else if (opt_.page == "error") {
     showError("Uh-oh! Something went wrong",
@@ -1598,6 +2028,13 @@ int App::run() {
               "The logs (game_log.txt, game_out.txt, simmy_crash.txt) are in the launcher's folder; they help a lot when reporting the problem.",
               "SIMMY crash: exception 0xC0000005 (access violation) at 0x00007FF6A1B2C3D4\nsimmy.exe+0x12C3D4  EAnimController::Update\nsimmy.exe+0x0A1F00  ESimsCam::Tick\nsimmy.exe+0x004410  ENgcEngine::Idle\n",
               true);
+  }
+  if (!opt_.showStatus.empty()) {
+    // As after a network session that ended this way (tests and screenshots).
+    runMode_ = Mode::Host;
+    setPage(Page::Net, kIdNetHost);
+    refreshLan();
+    reportNetStatus(opt_.showStatus, 0, false);
   }
   if (opt_.focus) focus_ = opt_.focus;
   if (opt_.mouseX >= 0) mx_ = opt_.mouseX, my_ = opt_.mouseY, mouseMoved_ = true;
@@ -1622,7 +2059,19 @@ int App::run() {
     if (game_.running() && minimized_ && window_) continue;
     frame(dt);
     ++frames;
-    if (autoLaunchFrame_ > 0 && --autoLaunchFrame_ == 0) launch(opt_.autoLaunch == "coop");
+    if (autoLaunchFrame_ > 0 && --autoLaunchFrame_ == 0) {
+      const std::string& a = opt_.autoLaunch;
+      if (a == "host" || a.rfind("join:", 0) == 0) {
+        // Network play from the page, as if Host a game / Join game was pressed (join:<address>).
+        refreshLan();
+        if (a != "host") netAddr_ = a.substr(5);
+        setPage(Page::Net, a == "host" ? kIdNetHost : kIdNetJoin);
+        launch(a == "host" ? Mode::Host : Mode::Join);
+        if (!game_.running() && afterGameFrames_ < 0) afterGameFrames_ = 0;  // refused before starting: the message
+      } else {
+        launch(a == "coop" ? Mode::Coop : Mode::Play);
+      }
+    }
     if (afterGameFrames_ >= 0 && !opt_.autoLaunch.empty()) ++afterGameFrames_;
     const bool autoDone = !opt_.autoLaunch.empty() && afterGameFrames_ >= 40;
     if ((test && opt_.autoLaunch.empty() && frames >= opt_.frames) || (autoDone && test)) {
@@ -1701,6 +2150,8 @@ int main(int argc, char** argv) {
     else if (a == "--write-icon") o.writeIcon = next();
     else if (a == "--choose") o.choose = next();
     else if (a == "--set") o.sets.push_back(next());
+    else if (a == "--net-addr") o.netAddr = next(), o.netAddrSet = true;
+    else if (a == "--show-status") o.showStatus = next();
   }
   if (!o.writeIcon.empty()) return launcher::WriteIcons(o.writeIcon);
   launcher::App app(o);

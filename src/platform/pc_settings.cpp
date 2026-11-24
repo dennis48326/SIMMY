@@ -757,7 +757,8 @@ std::string settings_value_string(const GraphicsSettings& g, const char* rawKey)
 }
 
 bool settings_fire_code_limit() {
-  if (const char* e = std::getenv("SIMMY_FIRE_CODE_LIMIT"); e && *e) {  // show_pc_objects.bat, tests
+  // (PC mod: network play: in a session the host's value, already in graphics_settings, on both PCs.)
+  if (const char* e = std::getenv("SIMMY_FIRE_CODE_LIMIT"); e && *e && !net_session()) {  // show_pc_objects.bat, tests
     GraphicsSettings tmp;
     ApplyValue(tmp, "firecodelimit", e);
     return tmp.fireCodeLimit;
