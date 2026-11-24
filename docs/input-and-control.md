@@ -127,7 +127,8 @@ Internals:
    events (released on focus loss, ignored while Alt/GUI is held) become a `PADStatus`; `p1_input=auto`
    ORs it with the first controller (the keyboard's stick wins when deflected), `keyboard_mouse` makes
    port 1 the keyboard alone (aurora's port 1 cleared: controllers start at port 2), `controller` makes
-   nothing. aurora's own keyboard bindings are cleared at startup. `[keys]` in simmy.ini rebinds.
+   nothing (the F1 menu's Controls page switches it live: `auto` <-> `controller` at once, `keyboard_mouse` after a
+   restart because the pad ports are set up at start, `kbm_p1_input_at_start`). aurora's own keyboard bindings are cleared at startup. `[keys]` in simmy.ini rebinds.
 2. **Mouse buttons/wheel = pad presses**: left = A, right click = B, wheel = d-pad up/down where the camera
    does not take the C stick (menus), else zoom.
 3. **`KbmTick`** ([`platform.hpp`](../include/simmy/platform.hpp)): what a pad cannot give, once a frame:

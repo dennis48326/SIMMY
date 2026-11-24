@@ -172,6 +172,7 @@ const KbmTick& kbm_tick_for_player(int player);
 // (not `player`'s own sim); its point under the ray goes to (x, y). False: the floor is first. Reads only.
 bool kbm_pick(int player, const float eye[3], const float dir[3], float floorZ, float& x, float& y);
 int kbm_p1_input();         // 0 auto, 1 controller, 2 keyboard_mouse (p1_input=)
+int kbm_p1_input_at_start();  // p1_input when the game started (keyboard_mouse's pad ports are set then)
 
 // ---- Co-op split screen (pc_splitscreen.cpp) ----
 // `--split=gc|4x3|wide|windows` (split= in simmy.ini, SIMMY_SPLIT): how two-player live mode's two

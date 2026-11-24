@@ -432,7 +432,7 @@ int EGlobal::TryAutoMapPlayer(int player) {
     return _pCtrlMan->GetPlayerMapped(static_cast<unsigned int>(player));
   // PC p1_input=keyboard_mouse (pc_kbm.cpp): the keyboard is pad 1 and is player 1's, whichever pad pressed;
   // the controllers (from pad 2 on) are for player 2.
-  const bool keyboardP1 = simmy::kbm_p1_input() == 2;
+  const bool keyboardP1 = simmy::kbm_p1_input_at_start() == 2;  // as the pad ports were set up at start
   for (unsigned int i = 0; i < 4; ++i) {
     EController* pad = _pCtrlMan->GetController(i);
     if (!pad || !pad->GetCmdResult(5, pad->GetBtnPressedMask(0xffffffffu), pad->GetBtnDownMask(0xffffffffu), false))

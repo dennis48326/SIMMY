@@ -595,6 +595,22 @@ void GraphicsPage() {
 void ControlsPage() {
   Overlay& o = O();
   const float font = ImGui::GetFontSize();
+  // Keyboard and mouse on / off (p1_input). Off and On switch at once; "On, no controller" moves the
+  // controllers to the next pad port, which the game sets up when it starts.
+  if (BeginRows("controlsopt", font * 11.5f)) {
+    const GraphicsSettings& g = graphics_settings();
+    Choice c;
+    c.add("On", "auto");
+    c.add("Off", "controller");
+    c.add("On, no controller", "keyboard_mouse");
+    const std::string cur = settings_value_string(g, "p1input");
+    const bool restart = (g.p1Input == 2) != (kbm_p1_input_at_start() == 2);
+    int pick;
+    if ((pick = ChoiceRow("Keyboard and mouse", restart ? "(restart to apply)" : "", kNote, c, c.find(cur))) >= 0)
+      Pick("p1input", c.values[static_cast<size_t>(pick)]);
+    ImGui::EndTable();
+  }
+  ImGui::Spacing();
   if (BeginRows("controls", font * 15.0f)) {
     auto row = [](const char* what, const char* keys) {
       ImGui::TableNextRow();
@@ -626,7 +642,7 @@ void ControlsPage() {
       ImGui::TextUnformatted(keys.c_str());
     };
     if (graphics_settings().p1Input == 1) {
-      row("Keyboard and mouse", "off (p1_input = controller)");
+      row("Keyboard and mouse", "off (switch it on above)");
     } else {
       for (int a = 0; a < kbm_action_count(); ++a) row(kbm_action_label(a), kbm_binding_text(a));
       row("Classic cursor", "move the mouse over the room");
@@ -640,15 +656,28 @@ void ControlsPage() {
   ImGui::PushTextWrapPos(0.0f);
   ImGui::TextColored(kNote,
                      "Controllers use the GameCube layout (A, B, X, Y, Z, Start, L, R, both sticks and the D-pad). "
-                     "Keys can be changed in the [keys] section of simmy.ini; p1_input chooses keyboard and mouse, "
-                     "a controller, or both for player 1. While this menu is open the game is paused and gets no input.");
+                     "Keys can be changed in the [keys] section of simmy.ini. Keyboard and mouse: On works next to a "
+                     "controller; Off leaves player 1 to controllers; On, no controller makes the keyboard player 1's "
+                     "alone (the first controller is player 2's). While this menu is open the game is paused and gets no input.");
   ImGui::PopTextWrapPos();
   ImGui::Spacing();
+  if (ImGui::Button("Save to simmy.ini")) {
+    std::string message;
+    settings_save(message);
+    SetStatus(message);
+  }
+  ImGui::SameLine();
   if (o.focusFirst) {
     ImGui::SetKeyboardFocusHere();
     o.focusFirst = false;
   }
   if (ImGui::Button("Close")) Close();
+  if (o.statusFrames > 0) {
+    --o.statusFrames;
+    ImGui::PushTextWrapPos(0.0f);
+    ImGui::TextColored(kNote, "%s", o.status.c_str());
+    ImGui::PopTextWrapPos();
+  }
 }
 
 void QuitPage() {

@@ -207,10 +207,11 @@ std::vector<Setting> MakeSettings() {
       {{"auto", "Automatic"}, {"vulkan", "Vulkan"}, {"opengl", "OpenGL"}, {"opengles", "OpenGL ES"}}, 0);
 #endif
   // Game, controls and launcher.
-  add("p1_input", "Player 1 controls",
-      "Both: keyboard + mouse and a controller. Keyboard + mouse: your first controller is player 2's in co-op.",
+  add("p1_input", "Keyboard and mouse",
+      "Off: controllers only. On, no controller: the keyboard is player 1's and your first controller is "
+      "player 2's in co-op. Also in the game's F1 menu.",
       2, false,
-      {{"auto", "Both"}, {"keyboard_mouse", "Keyboard + mouse"}, {"controller", "Controller"}},
+      {{"auto", "On"}, {"controller", "Off"}, {"keyboard_mouse", "On, no controller"}},
       0);
   add("mouse_edge_pan", "Edge scrolling",
       "With the mouse cursor control, pushing the mouse against a screen edge moves the camera.", 2, false,

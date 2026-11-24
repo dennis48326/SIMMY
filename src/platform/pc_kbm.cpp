@@ -679,10 +679,13 @@ bool TestObjectPos(const std::string& what, float out[3]) {
 
 // ---- the interface ------------------------------------------------------------------------------------
 
+static int g_p1InputAtStart = -1;  // p1_input when kbm_init ran (the game's start)
+
 void kbm_init() {
   LoadBindings();  // (warns about unknown [keys] names at start)
   const char* modes[] = {"auto (keyboard + mouse and controller)", "controller", "keyboard_mouse"};
   const int m = graphics_settings().p1Input;
+  g_p1InputAtStart = m;
   std::fprintf(stderr, "[kbm] player 1: %s\n", modes[m >= 0 && m <= 2 ? m : 0]);
 }
 
@@ -695,6 +698,7 @@ void kbm_handle_event(const SDL_Event& e) {
 }
 
 int kbm_p1_input() { return graphics_settings().p1Input; }
+int kbm_p1_input_at_start() { return g_p1InputAtStart >= 0 ? g_p1InputAtStart : graphics_settings().p1Input; }
 
 const KbmTick& kbm_tick() { return g_tick; }
 KbmTick& kbm_tick_for_det() { return g_tick; }
@@ -732,13 +736,21 @@ void kbm_pads(PADStatus* pads) {
   if (!s_testParsed) s_testParsed = true, ParseTest();
   RunTest();
   const GraphicsSettings& gs = graphics_settings();
-  const int mode = gs.p1Input;
+  // Off (controller) applies at once; whether the keyboard is player 1's alone (keyboard_mouse) stays as the game
+  // started, because the pad ports were set up for it then (pc_main.cpp).
+  const int mode = gs.p1Input == 1 ? 1 : (kbm_p1_input_at_start() == 2 ? 2 : 0);
   // Taken every frame (also when unused), so that edges never pile up.
   const float wheel = g_wheel, dragX = g_dragX, dragY = g_dragY, motion = g_motion;
   const bool lPressed = g_lPressed, rClick = g_rReleasedClick;
   g_wheel = g_dragX = g_dragY = 0.0f;
   g_lPressed = g_rReleasedClick = false;
-  if (mode == 1) return;  // controller only
+  if (mode == 1) {  // controller only (keyboard and mouse off; can be switched in the F1 menu while playing)
+    g_aHold = g_aWait = g_bHold = 0;
+    g_aActive = false;
+    g_wheelSteps = g_wheelPress = g_wheelGap = 0;
+    SetCursorHidden(false);
+    return;
+  }
   if (overlay_is_open()) {
     // The options have the keyboard and the mouse; nothing reaches the game (the pads are neutralised
     // by overlay_filter_pads, held keys stay latched until released).

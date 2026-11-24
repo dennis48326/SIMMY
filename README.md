@@ -327,7 +327,9 @@ Test switches: `SIMMY_KBM_TEST="<frame>:<action>;..."` (synthetic keys and mouse
 `SIMMY_KBM_NOPICK=1` (the cursor goes to the floor only, never onto an object's box).
 Not done with the mouse: build and buy mode's cursors (placing objects, walls, floors) still move with
 W A S D / the stick as on the GameCube (clicks are A / B there; in the catalogues the wheel moves the selection).
-SimmyLauncher's Options page has *Player 1 controls* (`p1_input`) and *Edge scrolling*.
+SimmyLauncher's Options page has *Keyboard and mouse* (`p1_input`: On = `auto`, Off = `controller`, On, no controller =
+`keyboard_mouse`) and *Edge scrolling*. The same *Keyboard and mouse* switch is on the F1 menu's Controls page while you
+play (On and Off apply at once; *On, no controller* after a restart; *Save to simmy.ini* keeps it).
 
 Verified so far with Clang 18 on Linux. The first MSVC build may need small fixes in the generated
 code; send me the errors.
