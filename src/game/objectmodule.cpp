@@ -892,6 +892,23 @@ void ObjectModuleImpl::KillQueueFlush() {
 
 int ObjIsInWorld(cXObjectImpl* o);  // 800DCB50 (objectplace.cpp)
 
+// PC: cXPersonImpl::IsSelectableByPlayer counts every person who is a neighbour as the family's (a
+// simplification there), which would make the grim reaper (an NPC neighbour, on the lot for good once
+// made), service NPCs and visitors "family members awake". On GC (8012954C) a neighbour counts only as
+// a member of the player's family (its neighbour's family; in two-player games the house's), else by
+// person data 0x4B's player bits; a neighbour with no family (an NPC) never. That rule, here only, and
+// only while the speed controls run (network play, SIMMY_SPEED_CONTROLS: their x30 with the family asleep
+// or away needs it), so one-PC play (dialogs, the intro camera) is unchanged.
+bool PcSpeedControlsOn();  // hudtarget.cpp
+static bool PcOfTheHousesFamily(cXPersonImpl* person) {
+  Neighbor* n = person->m_neighbor;
+  if (!n) return true;  // (then IsSelectableByPlayer went by person data 0x4B)
+  FamilyImpl* family = n->GetFamily();
+  if (!family) return false;
+  if (Globs_pHouse && family == Globs_pHouse->m_family) return true;
+  return (person->GetPersonData(0x4b) & 3) != 0;
+}
+
 // 800F69BC
 // A person on the lot whose object data 0x22 is clear, awake (cXPersonImpl::IsSleeping), in the world
 // and selectable by a player. (The intro camera waits for one.) PC: the module's people are found by id
@@ -901,7 +918,9 @@ RET_UNKNOWN ObjectModuleImpl::IsFamilyMemberAwakeAndVisible() {
     cXObject* object = GetObjectFromID(static_cast<short>(id));
     auto* person = object ? dynamic_cast<cXPersonImpl*>(object->GetObjectImplementation()) : nullptr;
     if (!person) continue;
-    if (person->m_data[0x22] == 0 && !person->IsSleeping() && ObjIsInWorld(person) && person->IsSelectableByPlayer(-1)) return 1;
+    if (person->m_data[0x22] == 0 && !person->IsSleeping() && ObjIsInWorld(person) && person->IsSelectableByPlayer(-1) &&
+        (!PcSpeedControlsOn() || PcOfTheHousesFamily(person)))
+      return 1;
   }
   return 0;
 }

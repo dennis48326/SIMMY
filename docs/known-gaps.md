@@ -90,8 +90,9 @@ summary and the deliberate GC behaviour.
   disc), E2E/EyeToy, slot-B import, HDTV layouts, MUWrapper/DlgWrapper, the dev cheat file and debug menu
   (`ECheats`) and author mode (the pristine reset is ported, `SIMMY_PRISTINE_SAVE`). The players'
   button-code cheats are ported ([ui.md](ui.md) "Button-code cheats").
-- `HUDTarget`: `ActionQueueHUD` (the PC queue widget is `ACTTarget` via H2D: same behaviour) and
-  `AttachControllers` (a filter for commands nothing reads on PC).
+- `HUDTarget`: `ActionQueueHUD` (the PC queue widget is `ACTTarget` via H2D: same behaviour). The speed
+  controls (`AttachControllers`' L/R filters, `UpdateSpeedControls`) are ported but on only in network
+  play and with `SIMMY_SPEED_CONTROLS=1` ([simulation.md](simulation.md) "Speed controls").
 - `O2TTarget`: the screen-position wizard (`UseOptionsScreenAdjustXY`; the PC scales the picture itself).
 - CAS: representation shaders (EyeToy), the generating sound, saved grandparents (dev-tool data only),
   the tweak tool's lights (dev), the costume-number/`PrintUnlocks` dev prints. Clothing

@@ -213,6 +213,7 @@ Development only: the launcher removes all of them except `SIMMY_INI` from the g
 | Variable | Effect |
 |---|---|
 | `SIMMY_FIXED_DT=1` | One retrace of game time per frame |
+| `SIMMY_SPEED_CONTROLS=1` | The GameCube's speed controls (L pause, R held by every player x5, x30 with the family asleep or away) outside network play too (always on in a session; [simulation.md](simulation.md) "Speed controls") |
 | `SIMMY_SIM_SPEED=<n>[@<house>]`, `SIMMY_SIM_SPEED_JOB=<n>` | Simulator speed once a house is up / once player 1 has a job |
 | `SIMMY_SIM_TRACE=1` | Simulator dispatches, motives, routes, careers; the motive lines also give the seven skills' points (`skills ck me ch bo lo cr cl`: cooking, mechanical, charisma, body, logic, creativity, cleaning, 0..1000) and the lot's funds (skill objects: skill gained, a painting or rocket sold); `[prop]` lines: the props (models) a sim wears and takes off |
 | `SIMMY_TRACE_IDS=98,126` | Also trace those objects |

@@ -19,6 +19,12 @@ PCTTarget* PCTTarget::s_placing = nullptr;
 int g_unlockAllCheat = 0;     // DAT_8047618C
 int g_freeBuildBuyCheat = 0;  // DAT_80476188
 int g_catalogFileNames = 0;   // DAT_80476190
+// DAT_80476254: the catalogue camera's mode while buy/build (or GC's inventory) is up: 9 the catalogue,
+// 8 placing or a tool, 0 none. HUDTarget::UpdateSpeedControls does nothing while it is set.
+int& PcCatalogueCameraMode() {
+  static int mode = 0;
+  return mode;
+}
 
 namespace {
 UIScreenManager* ScreenManager() { return static_cast<UIScreenManager*>(_globals.m_uiScreenManager); }
@@ -368,7 +374,7 @@ int PCTTarget__cCellInfo::GetDesc(unsigned short* out) const {
 PCTTarget::PCTTarget(PCTTarget__ePCTMode mode, int player) : m_player(player), m_mode(mode) {
   m_actionMenu = GetActionMenu(static_cast<unsigned int>(player));
   if (m_actionMenu) m_actionMenu->BackOutMenu();
-  // GC: DAT_80476254 = 9 (the camera's catalogue mode, see setup_interactor_camera).
+  PcCatalogueCameraMode() = 9;  // DAT_80476254: the camera's catalogue mode (see setup_interactor_camera)
   AttachTables("PCTTarget");
   UIUpdateTable::InstallEntry(0x4b, [this] { Update(); }, m_name, this);
   UIDrawTable::InstallEntry(0x19, [this](ERC* rc) { Draw(rc); }, m_name, this);
@@ -453,7 +459,7 @@ PCTTarget::~PCTTarget() {
     if (m_filters[1]) v->PopAptButtonFilter(1, m_filters[1]);
   }
   m_filters[0] = m_filters[1] = 0;
-  // GC: DAT_80476254 = 0.
+  PcCatalogueCameraMode() = 0;  // DAT_80476254
   for (short index : m_seenNew) m_unlocks.SetRecentlyUnlocked(IGoalUnlock__UnlockType{5}, index, false);
   if (m_fireOver && _gd.m_h2dTarget && 0.95 < GetFireCodeValue(true))
     SIMMY_STUB("PCTTarget::~PCTTarget: the fire (H2DTarget +0x98)", 0x801D3334);
@@ -1187,6 +1193,7 @@ int PCTTarget::CreateGrabObjectMenu(const std::vector<cXObjectImpl*>& objects) {
 // Placing (or a tool): the player's camera to its free mode, out of the camera director's hands; back in
 // the catalogue: the catalogue camera (mode 2). GC: DAT_80476254 = 8 / 9.
 void PCTTarget::setup_interactor_camera(bool catalogue) {
+  PcCatalogueCameraMode() = catalogue ? 9 : 8;
   ESimsCam* cam = _gd.m_players[m_player & 1].m_cam;
   if (!cam) return;
   if (catalogue) {

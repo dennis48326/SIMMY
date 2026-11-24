@@ -2,6 +2,7 @@
 // (game/targets_s2c.cpp): the live-mode HUD. See hudtarget.hpp.
 #include "simmy/types_gen.hpp"
 #include "simmy/unported_globals.hpp"
+#include "simmy/platform.hpp"
 
 #include <cctype>
 #include <cmath>
@@ -122,13 +123,43 @@ HUDTarget::~HUDTarget() {
   m_h2d = nullptr;
 }
 
-// 80186C48
-// GC: a priority-100 filter on each player's pad (EController::AddFilter "HUDTarget::AttachControllers").
-void HUDTarget::AttachControllers() {
-  SIMMY_STUB("HUDTarget::AttachControllers: the HUD's controller filters", 0x80186C48);
+// PC: the speed controls (AttachControllers' filters, UpdateSpeedControls) run in network play (PC mod)
+// and with SIMMY_SPEED_CONTROLS=1; otherwise they stay off as before (one-PC play, and the SIMMY_DET
+// reference replays, which were recorded without them and press L and R).
+bool PcSpeedControlsOn() {
+  static const bool env = [] {
+    const char* e = std::getenv("SIMMY_SPEED_CONTROLS");
+    return e && *e && *e != '0';
+  }();
+  return env || simmy::net_session();
 }
+
+// 80186C48
+// A priority-100 filter on each player's pad that takes the speed controls' commands 0x22 (L: pause)
+// and 0x23 (R: fast forward) (UpdateSpeedControls reads them through it). GC: also each player's
+// action queue HUD (ActionQueueHUD::AttachController, +0x108 / +0x424; not ported).
+void HUDTarget::AttachControllers() {
+  if (!PcSpeedControlsOn()) return;
+  for (int player = 0; player < (TwoPlayers() ? 2 : 1); ++player) {
+    EController* pad = _pCtrlMan ? _pCtrlMan->GetPlayerController(static_cast<unsigned int>(player)) : nullptr;
+    if (!pad) continue;
+    m_filters[player] = pad->AddFilter(0, const_cast<char*>("HUDTarget::AttachControllers"), 100);
+    pad->AddCmdToFilter(m_filters[player], 0x22);
+    pad->AddCmdToFilter(m_filters[player], 0x23);
+  }
+}
+
 // 80186D2C
-void HUDTarget::ReleaseControllers() {}
+void HUDTarget::ReleaseControllers() {
+  for (int player = 0; player < 2; ++player) {
+    if (!m_filters[player]) continue;
+    if (EController* pad = _pCtrlMan ? _pCtrlMan->GetController(static_cast<unsigned int>(
+                                           _pCtrlMan->GetPlayerControllerIndex(static_cast<unsigned int>(player))))
+                                     : nullptr)
+      pad->RemoveFilter(m_filters[player]);
+    m_filters[player] = 0;
+  }
+}
 
 // 80186DD4
 void HUDTarget::IncPause(bool sound) { H2DTarget::IncPause(sound); }
@@ -409,10 +440,14 @@ void HUDTarget::Update() {
   UpdateTutorialLocks();
   if (!ShouldHUDBeVisible(0)) {
     if (m_hudState == 2) HideHUD();
+    // The HUD going away ends what the speed controls chose: their pause, a fast forward.
     if (m_speedPaused) {
       if (m_speedPaused == 0xfc) ReleasePause(false);
+      m_speedPrevButtons = m_speedButtons;
+      m_speedButtons = 0;
+      m_speedPrev = m_speedPaused;
       m_speedPaused = 0;
-      // GC: Globs::pSimulator vtable 0x40 (speed 0)
+      if (Globs_pSimulator) Globs_pSimulator->SetSpeed(SimSpeed{0});  // vtable 0x44
     }
     return;
   }
@@ -445,9 +480,82 @@ void HUDTarget::UpdateClock() {
 void HUDTarget::UpdateActivePlayer(int, bool) {}
 
 // 801887AC
-// GC: the speed buttons (pause, play, fast) set the simulator's speed and show the pause or fast
-// forward icon (H2DTarget::DisplayPaused/DisplayFastForward). Not ported with the simulator.
-void HUDTarget::UpdateSpeedControls() {}
+// The speed controls, once a frame while the HUD is up. Pads, through the HUD's filters (so not while a
+// menu or dialog above it takes them): L (command 0x22) held by either player pauses; R (0x23) held by
+// every player (both in a two-player game) runs the game five times as fast (speed -2). With no
+// family member awake and on the lot (all asleep or away, ObjectModule::IsFamilyMemberAwakeAndVisible)
+// the game runs thirty times as fast (speed -3) by itself. With the options' +0x10 set (no options
+// screen sets it), R toggles the x5 instead (a press by either player). Simulator global 0x26 (trees),
+// when not negative, overrides it all: 0 paused, 1 normal, 2 x5. A change sets the simulator's speed
+// (or pauses through H2DTarget::IncPause), plays its sound, and the pause / fast-forward icon shows
+// on player 1's mood widget while it lasts. Nothing here while the catalogue camera is up (buy and
+// build, DAT_80476254) or in author mode (DAT_80475C74).
+// PC mod: network play: the pads are the session's (both PCs read both players' agreed input), so both
+// PCs change speed on the same tick; the speed and the simulator's state are in the out-of-step hash.
+int& PcCatalogueCameraMode();  // pcttarget.cpp: DAT_80476254
+void HUDTarget::UpdateSpeedControls() {
+  if (!PcSpeedControlsOn()) return;
+  if (PcCatalogueCameraMode() != 0 || _gd.m_fieldF0 != 0) return;  // DAT_80476254, DAT_80475C74
+  if (!Globs_pSimulator || !_pCtrlMan) return;
+  auto padOf = [](int player) {
+    return _pCtrlMan->GetController(static_cast<unsigned int>(_pCtrlMan->GetPlayerControllerIndex(static_cast<unsigned int>(player))));
+  };
+  auto cmdDown = [](EController* pad, unsigned int filter, unsigned int command) {
+    return pad && pad->GetCmdResult(command, pad->GetBtnDownMask(filter), pad->GetBtnDownMask(filter), false) != 0;
+  };
+  EController* pad1 = padOf(0);
+  EController* pad2 = padOf(1);
+  m_speedPrevButtons = m_speedButtons;
+  m_speedButtons &= 0x10;
+  if (cmdDown(pad1, m_filters[0], 0x22)) m_speedButtons |= 1;
+  if (cmdDown(pad1, m_filters[0], 0x23)) m_speedButtons |= 2;
+  if (!TwoPlayers()) {
+    m_speedButtons |= 8;
+  } else {
+    if (cmdDown(pad2, m_filters[1], 0x22)) m_speedButtons |= 4;
+    if (cmdDown(pad2, m_filters[1], 0x23)) m_speedButtons |= 8;
+  }
+  auto* options = static_cast<OptionsRecon*>(_globals.m_optionsRecon);  // DAT_80475F14
+  const bool toggle = options && options->m_opt10 != 0;
+  // Toggle mode: a new press of R by player 1 (bit 2) or of player 2's (bit 8) flips the latch.
+  if (toggle && (((m_speedButtons & 2) && !(m_speedPrevButtons & 2)) || ((m_speedButtons & 8) && !(m_speedPrevButtons & 8))))
+    m_speedButtons ^= 0x10;
+  m_speedPrev = m_speedPaused;
+  const int forced = Globs_pSimulator->GetGlobal(0x26);  // vtable 0x34
+  if (forced < 0) {
+    const bool awake = Globs_pObjectModule && Globs_pObjectModule->IsFamilyMemberAwakeAndVisible();  // vtable 0xBC
+    m_speedPaused = awake ? 0 : 0xfd;
+    if (m_speedButtons & 5) m_speedPaused = 0xfc;
+    else if (awake && (toggle ? (m_speedButtons & 0x10) != 0 : (m_speedButtons & 10) == 10)) m_speedPaused = 0xfe;
+  } else if (forced == 0) {
+    m_speedPaused = 0xfc;
+  } else if (forced == 1) {
+    m_speedPaused = 0;
+  } else if (forced == 2) {
+    m_speedPaused = 0xfe;
+  }
+  if (m_h2d) {  // GC: DAT_80475BCC
+    if (m_speedPaused == 0xfc) m_h2d->DisplayPaused();
+    else if (m_speedPaused == 0xfd || m_speedPaused == 0xfe) m_h2d->DisplayFastForward();
+  }
+  if (m_speedPrev == m_speedPaused) return;
+  unsigned int sound = 0;
+  if (m_speedPaused == 0xfc) {
+    sound = 0x5d6996bb;
+    IncPause(false);
+  } else {
+    if (m_speedPrev == 0xfc) ReleasePause(false);
+    if (m_speedPaused == 0xfd || m_speedPaused == 0xfe) sound = 0xb367f797;
+    else if (m_speedPaused == 0) sound = m_speedPrev == 0xfe ? 0xacfad483 : 0xe1327588;
+    Globs_pSimulator->SetSpeed(SimSpeed{static_cast<int>(static_cast<signed char>(m_speedPaused))});  // vtable 0x44
+  }
+  // PC development aid: SIMMY_SIM_TRACE=1 logs each change.
+  static const bool trace = std::getenv("SIMMY_SIM_TRACE") != nullptr;
+  if (trace)
+    std::printf("[speed] tick %d: speed controls %d -> %d (buttons %02x, global 0x26 %d)\n", Globs_pSimulator->m_ticks,
+                static_cast<signed char>(m_speedPrev), static_cast<signed char>(m_speedPaused), m_speedButtons, forced);
+  if (sound) UIAUDIO::Instance()->PlaySound(sound);
+}
 
 // 80188BF4
 void HUDTarget::AddMenu(int player, cXObjectImpl* object, const std::u16string& name, unsigned int shaderId, ERShader* shader) {

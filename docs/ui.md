@@ -94,7 +94,10 @@ targets `m_mod`, `m_csm`, `m_mot`, `m_skl`, `m_waf`, `m_act`, `m_int` (arrays of
 per-frame order (side panels every sixth update), and handles the d-pad side panels (left motives, up
 skills, right wants and fears, down closes), Start (`H2D_PAUSE`: sets `PlayerNumber`,
 `Player1FirstName`... from the **selected** sim's neighbour; refused while the player's camera director letterboxes a shot, `+0x234`, e.g. the lot's intro camera, as on GC), B cancel (`UpdateCancelButton`),
-`SelectedPersonChanged`, `NewWantFearIcon`, `SetMoodMeterValue`. The hourglass (`CXM_hourglass_swf`) shows
+`SelectedPersonChanged`, `NewWantFearIcon`, `SetMoodMeterValue`. The speed controls (L pause, R held by
+both players x5, x30 with the family asleep or away; `UpdateSpeedControls`, filters from
+`AttachControllers`) are described in [simulation.md](simulation.md) "Speed controls"; their icons are
+player 1's MOD widget's (`H2DTarget::DisplayPaused` / `DisplayFastForward`, shown 6 frames per call). The hourglass (`CXM_hourglass_swf`) shows
 while the CXM list is closed and the selected sim waits (`GetIdleState() == 3`) or routes
 (`CSMTarget::Update` 801A6E00).
 

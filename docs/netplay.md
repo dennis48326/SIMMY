@@ -174,6 +174,23 @@ and compare the hash files. Test switches:
 (with `--game-exe` a wrapper that adds `--headless` and the pad scripts, `SIMMY_LAUNCHER_KEEP_ENV=1`
 to pass them through); `--show-status <file>` shows the message for a saved `net_status.txt`.
 
+## Fast forward and pause in a session
+
+As on the GameCube: **both players hold R** to run the game five times as fast (one player alone does
+nothing), either player's **L** pauses while held, and when every sim of the family is asleep or away
+(work, school) the game runs thirty times as fast by itself. Both PCs read both players' agreed pads, so
+they change speed on the same tick. The fast-forward icon is player 1's mood widget's, at the right edge
+of the shared frame: it shows in the joining PC's window (the right half) and not in the host's; the
+clock and the sims speed up in both. Both PCs need a build with the speed controls (build eh and
+earlier had none: R did nothing on either PC, which is why the host saw normal speed; the hash shows the
+two PCs never differed). Outside network play the speed controls stay off unless `SIMMY_SPEED_CONTROLS=1`
+(see [simulation.md](simulation.md) "Speed controls").
+
+Test: `ff.sh` / `ffshot.sh` style pairs (two headless or offscreen instances, `SIMMY_PAD_SEQ` with
+`r/1200` on both pads, `SIMMY_SIM_TRACE=1`): both logs show `[speed] tick 567: speed controls 0 -> -2`,
+`speed x5.0`, and identical hash files, with `SIMMY_NET_LAG=40 SIMMY_NET_JITTER=20`, the full mod set and
+the host on `p1_input = controller`.
+
 ## Limits
 
 - Free will (autonomy) stays on: the whole simulation is deterministic, autonomy included, and the

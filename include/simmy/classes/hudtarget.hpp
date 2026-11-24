@@ -103,7 +103,13 @@ struct HUDTarget : UIObjectBase {
   unsigned char m_hudState = 0;         // +0xE8 0 hidden, 1 hiding, 2 shown (HUD_state)
   unsigned char m_playerState[2] = {};  // +0xE9 per player, the same (HUD_playerState)
   int m_tutorial[2] = {};               // +0xEC tutorial stage (GetTutorialLocks)
-  unsigned char m_speedPaused = 0;      // +0xF7 the speed controls paused the game
+  // The speed controls (UpdateSpeedControls): this frame's and last frame's buttons (bits: 1 player 1
+  // pause (L), 2 player 1 fast (R), 4 player 2 pause, 8 player 2 fast or no player 2, 0x10 the toggle
+  // mode's latch), and the speed they chose (0 normal, 0xFE x5, 0xFD x30, 0xFC paused) last frame / now.
+  unsigned char m_speedPrevButtons = 0;  // +0xF4
+  unsigned char m_speedButtons = 0;      // +0xF5
+  unsigned char m_speedPrev = 0;         // +0xF6
+  unsigned char m_speedPaused = 0;       // +0xF7 the speed the controls chose (0xFC: they paused the game)
   unsigned char m_quit = 0;             // +0x100 1 quit requested, 2+ going
   int m_activePlayer = 0;               // +0x104 the job HUD's player
   int m_pauseCount = 0;                 // (GC: IncPause/ReleasePause go to H2DTarget)
@@ -111,7 +117,7 @@ struct HUDTarget : UIObjectBase {
   short m_baseRep[2] = {};              // +0x8A8
   short m_rep[2] = {};                  // +0x8AC
   H2DTarget* m_h2d = nullptr;           // +0x8B4
-  unsigned int m_filters[2] = {};       // AttachControllers' controller filters
+  unsigned int m_filters[2] = {};       // +0xF8 / +0xFC AttachControllers' controller filters (L and R)
 };
 
 // The mood widget ("MOD", screens 0x34/0x35): mood meter, the d-pad's side panel icons, time and

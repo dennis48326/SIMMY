@@ -24,6 +24,26 @@ the pause menu set it through `H2DTarget::IncPause/ReleasePause`). Simulator sta
 globals" (0x30 shorts, scope 6 in trees; names in [`simulator.hpp`](../include/simmy/classes/simulator.hpp)
 `enum Global`): clock, funds, speed, free will. `SIMMY_SIM_TRACE=1` prints the dispatches.
 
+**Speed controls** (`HUDTarget::UpdateSpeedControls` 801887AC, [`hudtarget.cpp`](../src/game/hudtarget.cpp);
+once a frame while the HUD is up, not in buy/build): **L** (controller command 0x22) held by either player
+pauses; **R** (command 0x23) held by **every** player (both in a two-player game) runs the game x5 (speed
+-2); with **no family member awake and on the lot** (all asleep or away at work:
+`ObjectModule::IsFamilyMemberAwakeAndVisible` 800F69BC) it runs x30 (speed -3) by itself, no button
+needed. The options' +0x10 (no options screen sets it) makes R a toggle instead. Global 0x26 (trees)
+overrides when not negative: 0 paused, 1 normal, 2 x5. A change calls `SetSpeed` (or `IncPause`), plays
+its UI sound and shows player 1's pause / fast-forward icon (`MOD_pause_swf` / `MOD_fastforward_swf`); the
+HUD going away (a dialog, the pause menu) sets speed 0. The pads are read through the HUD's priority-100
+filters (`AttachControllers`: L and R), so a menu above them hides them. **PC:** on in network play (the
+pads are the session's: both PCs change speed on the same tick; speed, multiplier and accumulator are in
+the hash) and with `SIMMY_SPEED_CONTROLS=1`; off otherwise, as before (one-PC play keeps its behaviour
+and the det reference replays, recorded without them, stay valid: they press L). `SIMMY_SIM_TRACE=1`
+logs each change (`[speed] tick N: speed controls 0 -> -2 (buttons 0a, ...)`).
+While the speed controls run, `IsFamilyMemberAwakeAndVisible` counts a person with a neighbour only when
+that neighbour is in the house's family (else by person data 0x4B's player bits; an NPC neighbour without
+a family never), as on GC: the port's `IsSelectableByPlayer` treats every neighbour as the family's, which
+made the grim reaper (on the lot for good once made), service NPCs and visitors keep the family "awake"
+(no x30 ever). Its other callers (modal dialogs, the intro camera) keep the old rule outside network play.
+
 Free will: `ELiveMode::Update` (8008E4C0) calls `cXObject::SetFreeWill` (800DB954) every frame after the
 simulation with the options' Free Will (`OptionsRecon` +0, the pause menu's Other Options), unless global
 0x27 (set by generic sim call 0x15; -1 at reset) overrides it. `SetFreeWill` keeps it in
