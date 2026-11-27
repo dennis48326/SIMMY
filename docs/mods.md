@@ -64,8 +64,11 @@ the user's mod folder; it refuses to write inside the source tree.
 
 ## Using it
 
-On Windows the quick way is `tools\windows\convert_pc_object.bat` (copy it next to `build_simmy.bat`).
-Its PC install and disc paths are set at the top of the file.
+On Windows the quick way is `convert_pc_object.bat`, next to `build_simmy.bat` in the repo's top folder.
+It reads your PC game from a folder named `The Sims 2 Ultimate Collection` next to it (or one folder
+up; set `SIMMY_PC` for another place) and the GameCube disc chosen in SimmyLauncher (or `SIMMY_ISO`),
+and writes into `build\RelWithDebInfo\mods`. The PC folder and the build folder are ignored by git,
+so neither the game files nor the converted output can end up in a commit.
 
 | | |
 |---|---|

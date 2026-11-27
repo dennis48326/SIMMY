@@ -7,3 +7,6 @@ __pycache__/
 DATA/
 simmy.ini
 *.gci
+# Your PC game (read by convert_pc_object.bat) and anything converted from it never go in the repo.
+The Sims 2 Ultimate Collection/
+mods/

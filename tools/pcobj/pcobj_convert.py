@@ -1832,9 +1832,13 @@ def main():
                 print(f'{g:08X}  {lst[0].pack.code:4s}  {o.name}  "{nm or ""}"  fn 0x{o.w(W_FUNCSORT):x}')
         return
     if a.out:
-        out_real = os.path.realpath(a.out)
-        here = os.path.realpath(os.path.join(os.path.dirname(__file__), '..', '..'))
-        if out_real == here or out_real.startswith(here + os.sep):
+        out_real = os.path.normcase(os.path.realpath(a.out))
+        here = os.path.normcase(os.path.realpath(os.path.join(os.path.dirname(__file__), '..', '..')))
+        # The build folder (build\RelWithDebInfo\mods when building a repo download in place) is
+        # ignored by git, so it may hold the output; the rest of the tree may not.
+        in_tree = out_real == here or out_real.startswith(here + os.sep)
+        in_build = any(out_real.startswith(os.path.join(here, d) + os.sep) for d in ('build', 'out'))
+        if in_tree and not in_build:
             raise SystemExit('refusing to write converted PC game data into the source tree')
     cats = []
     covers = []  # wall / floor coverings (pcwall.py)

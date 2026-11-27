@@ -93,14 +93,38 @@ rem its doors show a similar GameCube door instead. They ARE in the default run 
 rem twenty seconds and 22 MB.
 rem Takes about four minutes for everything of all packs on two cores (progress per object, with the
 rem percentage and the time so far).
-setlocal EnableDelayedExpansion
-set "PC=Q:\Claude\SIMMY\The Sims 2 Ultimate Collection"
-set "ISO=E:\Roms\Gamecube\Sims 2, The (USA).iso"
-rem Put this file next to build_simmy.bat (where run_net_host.bat is), or next to simmy.exe.
+setlocal
+rem Your PC game: a folder named "The Sims 2 Ultimate Collection" next to this file (the folder with
+rem the base game and the packs in it). Also found one folder up. Set SIMMY_PC to use another folder.
+rem Only read from: nothing from it is copied anywhere but the mods folder on this PC.
+set "PC=%SIMMY_PC%"
+if not defined PC if exist "%~dp0The Sims 2 Ultimate Collection\" set "PC=%~dp0The Sims 2 Ultimate Collection"
+if not defined PC if exist "%~dp0..\The Sims 2 Ultimate Collection\" set "PC=%~dp0..\The Sims 2 Ultimate Collection"
+if not defined PC (
+  echo Cannot find your PC game. Put its folder, named "The Sims 2 Ultimate Collection", next to this file:
+  echo   "%~dp0The Sims 2 Ultimate Collection"
+  echo or set SIMMY_PC to the folder.
+  pause
+  exit /b 1
+)
+rem Put this file next to build_simmy.bat (in the repo it is already there), or next to simmy.exe.
 set "BIN=%~dp0build\RelWithDebInfo"
-rem In the repo this script sits in tools\windows; the build is two folders up.
-if not exist "%BIN%\simmy.exe" if exist "%~dp0..\..\build\RelWithDebInfo\simmy.exe" set "BIN=%~dp0..\..\build\RelWithDebInfo"
 if exist "%~dp0simmy.exe" set "BIN=%~dp0"
+rem The GameCube disc: the one chosen in SimmyLauncher (iso= in simmy.ini next to simmy.exe), or
+rem SIMMY_ISO. simmy.ini is UTF-8: read it with the UTF-8 code page so paths with accents survive.
+set "ISO=%SIMMY_ISO%"
+for /f "tokens=2 delims=:." %%c in ('chcp') do set "OLDCP=%%c"
+chcp 65001 >nul
+if not defined ISO if exist "%BIN%\simmy.ini" for /f "usebackq tokens=1,* delims==" %%a in (`findstr /r /i /c:"^ *iso *=" "%BIN%\simmy.ini"`) do set "ISO=%%b"
+chcp %OLDCP% >nul
+if defined ISO for /f "tokens=* delims= " %%x in ("%ISO%") do set "ISO=%%x"
+if /i not "%~1"=="list" if not defined ISO (
+  echo No GameCube disc chosen yet. Run build_simmy.bat, choose your disc in SimmyLauncher, then run this again
+  echo ^(or set SIMMY_ISO to the disc image^).
+  pause
+  exit /b 1
+)
+setlocal EnableDelayedExpansion
 set "TOOL=%~dp0port\tools\pcobj\pcobj_convert.py"
 if not exist "%TOOL%" set "TOOL=%~dp0tools\pcobj\pcobj_convert.py"
 if not exist "%TOOL%" set "TOOL=%~dp0..\pcobj\pcobj_convert.py"
