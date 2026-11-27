@@ -206,6 +206,35 @@ simmy.exe through the Windows firewall on the host (private networks). Each PC s
 view; the host's memory card is used (the joining PC plays on a copy). TCP port 27450; `[net]` in
 simmy.ini. Details, and what to send if the PCs ever go out of step: [docs/netplay.md](docs/netplay.md).
 
+### PC objects (PC mod)
+
+`convert_pc_object.bat` converts the furniture, wallpapers, floors, fences and doors of **your own copy**
+of The Sims 2 for PC (base game and every expansion and stuff pack installed under it) so they show up in
+buy and build mode next to the GameCube's own. Nothing comes from EA or anywhere else, and the converted
+files stay on your PC: the PC game's files are EA's and are never part of this repo.
+
+1. Build the game with `build_simmy.bat` and choose your GameCube disc in SimmyLauncher once (the
+   converter reads the GameCube objects from that disc).
+2. Copy your PC game folder into the repo's top folder as **`The Sims 2 Ultimate Collection`** (the
+   folder that holds the base game and the packs). One folder up works too, and `SIMMY_PC` can point
+   anywhere else. Git ignores that folder.
+3. Install Python 3 (python.org; tick *Add to PATH*). The first run installs numpy and Pillow.
+4. Run `convert_pc_object.bat`. Everything takes about four to five minutes and 400 MB and goes into
+   `build\RelWithDebInfo\mods`, which the game loads by itself.
+
+| Command | Converts |
+|---|---|
+| `convert_pc_object.bat` | everything: every buy-mode object, wall and floor covering, fence and door |
+| `convert_pc_object.bat seating appliances` | only those buy-mode categories (`decorative`, `surfaces`, `seating`, `appliances`, `lighting`, `plumbing`, `electronics`, `hobbies`, `storage`, `kids`, `misc`) |
+| `convert_pc_object.bat walls floors` / `fences` / `doors` | only those build-mode items |
+| `convert_pc_object.bat list ficus` | nothing; lists the PC objects whose name contains "ficus" |
+| `convert_pc_object.bat "No-Fuss Ficus"` | one object, by name or GUID |
+
+Converting again replaces what it wrote before. To remove something, delete its folder in `mods`; saves
+stay loadable, and anything placed from it turns into a similar GameCube object. For network play both
+PCs need the same mods. What each kind of object becomes in the game, and what is left out:
+[docs/mods.md](docs/mods.md).
+
 ## Graphics settings
 
 Put a `simmy.ini` next to `simmy.exe` (the build copies the commented `simmy.ini.example` there once;
