@@ -17,6 +17,8 @@ if "%HOST%"=="" set /p "HOST=The host PC's address (e.g. 192.168.1.20): "
 if "%HOST%"=="" exit /b 1
 rem Put this file next to build_simmy.bat (where run_simmy_coop.bat is), or next to simmy.exe.
 set "BIN=%~dp0build\RelWithDebInfo"
+rem In the repo this script sits in tools\windows; the build is two folders up.
+if not exist "%BIN%\simmy.exe" if exist "%~dp0..\..\build\RelWithDebInfo\simmy.exe" set "BIN=%~dp0..\..\build\RelWithDebInfo"
 if exist "%~dp0simmy.exe" set "BIN=%~dp0"
 cd /d "%BIN%"
 rem Without the disc image at ISO, simmy.exe uses iso= from simmy.ini (what SimmyLauncher chose).

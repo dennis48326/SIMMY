@@ -22,6 +22,8 @@ set "ISO=E:\Roms\Gamecube\Sims 2, The (USA).iso"
 if not "%~1"=="" set "ISO=%~1"
 rem Put this file next to build_simmy.bat (where convert_pc_object.bat is), or next to simmy.exe.
 set "BIN=%~dp0build\RelWithDebInfo"
+rem In the repo this script sits in tools\windows; the build is two folders up.
+if not exist "%BIN%\simmy.exe" if exist "%~dp0..\..\build\RelWithDebInfo\simmy.exe" set "BIN=%~dp0..\..\build\RelWithDebInfo"
 if exist "%~dp0simmy.exe" set "BIN=%~dp0"
 if not exist "%BIN%\simmy.exe" (echo Cannot find simmy.exe in "%BIN%" - run build_simmy.bat first & pause & exit /b 1)
 if not exist "%BIN%\mods" (echo No mods folder in "%BIN%" - run convert_pc_object.bat first & pause & exit /b 1)

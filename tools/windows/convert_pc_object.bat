@@ -98,6 +98,8 @@ set "PC=Q:\Claude\SIMMY\The Sims 2 Ultimate Collection"
 set "ISO=E:\Roms\Gamecube\Sims 2, The (USA).iso"
 rem Put this file next to build_simmy.bat (where run_net_host.bat is), or next to simmy.exe.
 set "BIN=%~dp0build\RelWithDebInfo"
+rem In the repo this script sits in tools\windows; the build is two folders up.
+if not exist "%BIN%\simmy.exe" if exist "%~dp0..\..\build\RelWithDebInfo\simmy.exe" set "BIN=%~dp0..\..\build\RelWithDebInfo"
 if exist "%~dp0simmy.exe" set "BIN=%~dp0"
 set "TOOL=%~dp0port\tools\pcobj\pcobj_convert.py"
 if not exist "%TOOL%" set "TOOL=%~dp0tools\pcobj\pcobj_convert.py"

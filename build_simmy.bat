@@ -1,5 +1,6 @@
 @echo off
-rem Builds the SIMMY PC port: unpacks simmy_port.zip next to this script, configures with CMake
+rem Builds the SIMMY PC port from the repo files next to this script (a GitHub download or clone),
+rem or else from simmy_port.zip next to it. Configures with CMake
 rem (newest Visual Studio, x64), builds simmy.exe and SimmyLauncher.exe, runs the renderer test and
 rem starts the launcher. Everything is logged to build_log.txt in this folder.
 setlocal
@@ -35,14 +36,34 @@ python --version >> "%LOG%" 2>&1
 where py >> "%LOG%" 2>&1
 "%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property displayName >> "%LOG%" 2>&1
 
-echo === unpack === >> "%LOG%"
+echo === source === >> "%LOG%"
 rem A previous test run that is still open (or stuck) keeps simmy.exe locked.
 taskkill /f /im simmy.exe >nul 2>&1
 rem An open launcher keeps SimmyLauncher.exe locked the same way.
 taskkill /f /im SimmyLauncher.exe >nul 2>&1
+rem Where the source is:
+rem  1. A download or clone of the GitHub repo has CMakeLists.txt next to this script: build that.
+rem  2. Otherwise unpack simmy_port.zip next to this script (it holds a port folder) and build that.
+rem  3. No zip but a port folder from an earlier unpack: build that.
+if exist "%~dp0CMakeLists.txt" if exist "%~dp0src\" (
+  set "SRC=%~dp0."
+  echo Source: the repo files next to this script >> "%LOG%"
+  goto :srcok
+)
+if not exist "%~dp0simmy_port.zip" if exist "%SRC%\CMakeLists.txt" (
+  echo Source: the existing port folder, no simmy_port.zip found >> "%LOG%"
+  goto :srcok
+)
+if not exist "%~dp0simmy_port.zip" (
+  echo NO SOURCE: put build_simmy.bat in the repo folder, or next to simmy_port.zip >> "%LOG%"
+  echo No source found. Put build_simmy.bat in the downloaded repo folder, next to CMakeLists.txt, or next to simmy_port.zip.
+  goto :done
+)
+echo Source: simmy_port.zip >> "%LOG%"
 if exist "%SRC%" rmdir /s /q "%SRC%"
 tar -xf simmy_port.zip >> "%LOG%" 2>&1
 if not exist "%SRC%\CMakeLists.txt" (echo UNPACK FAILED >> "%LOG%" & goto :done)
+:srcok
 
 echo === configure === >> "%LOG%"
 echo Configuring (first time downloads aurora, Dawn and SDL; this can take a while)...

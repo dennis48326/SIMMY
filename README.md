@@ -100,8 +100,9 @@ Every other function is a generated stub that logs on first call, so the log is 
 ## Building on Windows
 
 Needs Visual Studio 2022 or newer (with "Desktop development with C++"; VS 2026 works), CMake 3.25+,
-Python 3 and Git. The easy way is `build_simmy.bat` next to `simmy_port.zip`: it finds Visual Studio
-and CMake (installing CMake with pip if needed), unpacks, builds the game and its launcher, copies the
+Python 3 and Git. The easy way: download or clone this repo and run `build_simmy.bat` in its top folder
+(it also works next to a `simmy_port.zip`, which it unpacks first). It finds Visual Studio and CMake
+(installing CMake with pip if needed), builds into `build\`, builds the game and its launcher, copies the
 runtime DLLs, runs the render test (with the disc chosen in the launcher; skipped until one is chosen)
 and starts the launcher, writing `build_log.txt` and `render_test.bmp`. By hand:
 
